@@ -1,0 +1,32 @@
+.language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lang-btn {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  transition: opacity 0.2s;
+}
+
+.lang-btn:hover {
+  opacity: 0.7;
+}
+
+.lang-btn.active {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.lang-separator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+
+

@@ -1,0 +1,12 @@
+.user-role-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-role-error {
+  color: #dc3545;
+  font-size: 12px;
+  margin-top: 0.25rem;
+}
+

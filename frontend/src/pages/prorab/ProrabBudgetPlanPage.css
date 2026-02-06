@@ -1,0 +1,32 @@
+.prorab-budget-plan-page {
+  padding: 24px;
+}
+
+.prorab-budget-plan-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.prorab-budget-plan-page .add-line-form {
+  background-color: #f9f9f9;
+}
+
+.prorab-budget-plan-page .empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #666;
+}
+
+.prorab-budget-plan-page .loading {
+  padding: 24px;
+  text-align: center;
+}
+
+.prorab-budget-plan-page .error {
+  padding: 24px;
+  color: #dc3545;
+}
+
+

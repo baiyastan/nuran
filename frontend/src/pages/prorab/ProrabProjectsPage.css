@@ -1,0 +1,33 @@
+.prorab-projects-page {
+  padding: 1.5rem;
+}
+
+.prorab-projects-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.prorab-projects-page .page-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.prorab-projects-page .loading,
+.prorab-projects-page .error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.prorab-projects-page .empty-state {
+  padding: 3rem;
+  text-align: center;
+  color: #666;
+}
+
+
+
+
+

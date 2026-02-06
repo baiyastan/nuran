@@ -1,0 +1,28 @@
+.plan-items-page {
+  max-width: 1200px;
+}
+
+.create-form-container {
+  margin-bottom: 20px;
+}
+
+.select-plan {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.select-plan h3 {
+  margin: 0 0 16px 0;
+  color: #333;
+}
+
+.select-plan select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
