@@ -12,17 +12,17 @@ import LandingRedirect from './LandingRedirect'
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'))
 const ProjectsPage = lazy(() => import('@/pages/projects/ProjectsPage'))
-const PlanPeriodsPage = lazy(() => import('@/pages/plan-periods/PlanPeriodsPage'))
-const PlanPeriodDetailsPage = lazy(() => import('@/pages/plan-periods/PlanPeriodDetailsPage'))
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'))
 const CategoriesPage = lazy(() => import('@/pages/admin/CategoriesPage'))
-const ProrabProjectsPage = lazy(() => import('@/pages/prorab/ProrabProjectsPage'))
-const ProrabPlanPeriodsPage = lazy(() => import('@/pages/prorab/ProrabPlanPeriodsPage'))
-const ProrabPlanRedirect = lazy(() => import('@/pages/prorab/ProrabPlanRedirect'))
-const ProrabBudgetPlanPage = lazy(() => import('@/pages/prorab/ProrabBudgetPlanPage'))
-const ProrabBudgetReportPage = lazy(() => import('@/pages/prorab/ProrabBudgetReportPage'))
-const SubmittedProjectPlansPage = lazy(() => import('@/pages/admin/SubmittedProjectPlansPage'))
+const IncomeSourcesPage = lazy(() => import('@/pages/admin/IncomeSourcesPage'))
 const BudgetReportPage = lazy(() => import('@/pages/admin/BudgetReportPage'))
+const SubmittedProjectPlansPage = lazy(() => import('@/pages/admin/SubmittedProjectPlansPage'))
+const MonthManagementPage = lazy(() => import('@/pages/admin/MonthManagementPage'))
+const PlanSetupPage = lazy(() => import('@/pages/planSetup/PlanSetupPage'))
+const FinancePeriodsPage = lazy(() => import('@/pages/admin/FinancePeriodsPage'))
+const FinancePeriodDetailsPage = lazy(() => import('@/pages/finance-periods/FinancePeriodDetailsPage'))
+const ExpensesPage = lazy(() => import('@/pages/expenses/ExpensesPage'))
+const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
 
 export const router = createBrowserRouter([
   {
@@ -48,16 +48,36 @@ export const router = createBrowserRouter([
             element: <LandingRedirect />,
           },
           {
-            path: 'plan-periods',
+            path: 'expenses',
             element: <RequireRole allowedRoles={['admin', 'director']} />,
             children: [
               {
                 index: true,
-                element: <PlanPeriodsPage />,
+                element: <ExpensesPage />,
+              },
+            ],
+          },
+          {
+            path: 'finance-periods',
+            element: <RequireRole allowedRoles={['admin', 'director', 'foreman']} />,
+            children: [
+              {
+                index: true,
+                element: <FinancePeriodsPage />,
               },
               {
                 path: ':id',
-                element: <PlanPeriodDetailsPage />,
+                element: <FinancePeriodDetailsPage />,
+              },
+            ],
+          },
+          {
+            path: 'reports',
+            element: <RequireRole allowedRoles={['admin', 'director']} />,
+            children: [
+              {
+                index: true,
+                element: <ReportsPage />,
               },
             ],
           },
@@ -88,6 +108,10 @@ export const router = createBrowserRouter([
                 element: <CategoriesPage />,
               },
               {
+                path: 'income-sources',
+                element: <IncomeSourcesPage />,
+              },
+              {
                 path: 'submitted-plans',
                 element: <SubmittedProjectPlansPage />,
               },
@@ -95,35 +119,29 @@ export const router = createBrowserRouter([
                 path: 'budget-report',
                 element: <BudgetReportPage />,
               },
+              {
+                path: 'months',
+                element: <MonthManagementPage />,
+              },
+            ],
+          },
+          {
+            path: 'plan-setup',
+            element: <RequireRole allowedRoles={['admin', 'director']} />,
+            children: [
+              {
+                index: true,
+                element: <PlanSetupPage />,
+              },
             ],
           },
           {
             path: 'prorab',
-            element: <RequireRole allowedRoles={['foreman']} />,
+            element: <RequireRole allowedRoles={['admin', 'director']} />,
             children: [
               {
                 index: true,
-                element: <Navigate to="/prorab/projects" replace />,
-              },
-              {
-                path: 'projects',
-                element: <ProrabProjectsPage />,
-              },
-              {
-                path: 'projects/:id/plan-periods',
-                element: <ProrabPlanPeriodsPage />,
-              },
-              {
-                path: 'projects/:projectId/budget/:periodId',
-                element: <ProrabBudgetPlanPage />,
-              },
-              {
-                path: 'projects/:projectId/budget/:periodId/report',
-                element: <ProrabBudgetReportPage />,
-              },
-              {
-                path: 'plan-periods/:periodId/plan',
-                element: <ProrabPlanRedirect />,
+                element: <Navigate to="/plan-setup" replace />,
               },
             ],
           },
