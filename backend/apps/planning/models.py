@@ -3,6 +3,8 @@ Planning models.
 """
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
+from decimal import Decimal
 from apps.projects.models import Project
 
 
@@ -14,18 +16,40 @@ class PlanPeriod(models.Model):
         ('submitted', 'Submitted'),
         ('approved', 'Approved'),
         ('locked', 'Locked'),
-        ('open', 'Open'),
-        ('closed', 'Closed'),
+        ('open', 'Open'),  # Legacy alias for 'draft'
     ]
     
+    FUND_KIND_CHOICES = [
+        ('project', 'Project'),
+        ('office', 'Office'),
+        ('charity', 'Charity'),
+    ]
+    
+    fund_kind = models.CharField(
+        max_length=20,
+        choices=FUND_KIND_CHOICES,
+        default='office',
+        help_text='Type of fund: project, office, or charity'
+    )
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
-        related_name='plan_periods'
+        related_name='plan_periods',
+        null=True,
+        blank=True,
+        help_text='Project (required if fund_kind=project, null otherwise)'
     )
     period = models.CharField(
         max_length=7,
         help_text='Format: YYYY-MM (e.g., 2024-01)'
+    )
+    month_period = models.ForeignKey(
+        'budgeting.MonthPeriod',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='plan_periods',
+        help_text='Link to canonical MonthPeriod for this period'
     )
     status = models.CharField(
         max_length=20,
@@ -54,14 +78,49 @@ class PlanPeriod(models.Model):
     
     class Meta:
         ordering = ['-period', '-created_at']
-        unique_together = [['project', 'period']]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'period'],
+                condition=models.Q(fund_kind='project'),
+                name='planning_unique_project_period'
+            ),
+            models.UniqueConstraint(
+                fields=['fund_kind', 'period'],
+                condition=models.Q(fund_kind__in=['office', 'charity']),
+                name='planning_unique_office_charity_period'
+            ),
+        ]
         indexes = [
             models.Index(fields=['project', 'period']),
             models.Index(fields=['status']),
+            models.Index(fields=['fund_kind', 'period']),
         ]
     
+    def clean(self):
+        """Validate fund_kind and project relationship."""
+        from django.core.exceptions import ValidationError
+        
+        if self.fund_kind == 'project':
+            if not self.project:
+                raise ValidationError("Project is required when fund_kind is 'project'")
+        elif self.fund_kind in ('office', 'charity'):
+            if self.project:
+                raise ValidationError(f"Project must be null when fund_kind is '{self.fund_kind}'")
+    
+    def save(self, *args, **kwargs):
+        """Override save to call clean()."""
+        # Normalize legacy 'open' status to 'draft'
+        if self.status == 'open':
+            self.status = 'draft'
+        # If project is provided but fund_kind is default 'office', set to 'project'
+        if self.project and self.fund_kind == 'office':
+            self.fund_kind = 'project'
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
     def __str__(self):
-        return f"{self.project.name} - {self.period} ({self.status})"
+        project_str = f" - {self.project.name}" if self.project else ""
+        return f"{self.period} ({self.fund_kind}){project_str} - {self.status}"
 
 
 class PlanItem(models.Model):
@@ -73,9 +132,16 @@ class PlanItem(models.Model):
         related_name='plan_items'
     )
     title = models.CharField(max_length=255)
-    category = models.CharField(max_length=100, blank=True)
-    qty = models.DecimalField(max_digits=12, decimal_places=2)
-    unit = models.CharField(max_length=50)
+    category = models.ForeignKey(
+        'budgeting.ExpenseCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='plan_items',
+        help_text='Expense category (optional)'
+    )
+    qty = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    unit = models.CharField(max_length=50, null=True, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     note = models.TextField(blank=True)
     created_by = models.ForeignKey(
@@ -197,11 +263,11 @@ class ProrabPlanItem(models.Model):
 class ActualExpense(models.Model):
     """Actual expense model - admin records spending against prorab plans."""
     
-    project = models.ForeignKey(
-        'projects.Project',
+    finance_period = models.ForeignKey(
+        'finance.FinancePeriod',
         on_delete=models.CASCADE,
         related_name='actual_expenses',
-        help_text='Project (can be Office project)'
+        help_text='Finance period (required)'
     )
     period = models.ForeignKey(
         PlanPeriod,
@@ -264,11 +330,107 @@ class ActualExpense(models.Model):
     class Meta:
         ordering = ['-spent_at', '-created_at']
         indexes = [
-            models.Index(fields=['project', 'spent_at']),
+            models.Index(fields=['finance_period', 'spent_at']),
             models.Index(fields=['prorab_plan', 'spent_at']),
             models.Index(fields=['period', 'spent_at']),
         ]
     
+    def clean(self):
+        """Validate category if provided."""
+        from django.core.exceptions import ValidationError
+        from apps.expenses.base import validate_expense_category
+        
+        # Validate category if provided (category is nullable)
+        if self.category:
+            try:
+                # No plan scope validation for ActualExpense (it's project-based)
+                validate_expense_category(self.category, plan_scope=None)
+            except ValidationError as e:
+                # Merge validation errors
+                errors = {}
+                if hasattr(e, 'error_dict'):
+                    errors.update(e.error_dict)
+                elif hasattr(e, 'message_dict'):
+                    errors.update(e.message_dict)
+                else:
+                    if isinstance(e.messages, list):
+                        errors['category'] = e.messages
+                    else:
+                        errors['category'] = [str(e)]
+                
+                if errors:
+                    raise ValidationError(errors)
+    
     def __str__(self):
-        return f"{self.name} - {self.amount} ({self.project.name})"
+        project_name = self.finance_period.project.name if self.finance_period and self.finance_period.project else "-"
+        return f"{self.name} - {self.amount} ({project_name})"
+
+
+class Expense(models.Model):
+    """Expense model - expenses linked to plan periods."""
+    
+    plan_period = models.ForeignKey(
+        PlanPeriod,
+        on_delete=models.CASCADE,
+        related_name='expenses',
+        help_text='Plan period this expense belongs to'
+    )
+    plan_item = models.ForeignKey(
+        PlanItem,
+        on_delete=models.CASCADE,
+        related_name='expenses',
+        null=False,
+        blank=False,
+        help_text='Plan item this expense is linked to'
+    )
+    spent_at = models.DateField(
+        help_text='Date when expense was incurred'
+    )
+    category = models.ForeignKey(
+        'budgeting.ExpenseCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expenses',
+        help_text='Expense category (optional)'
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text='Amount in KGS'
+    )
+    comment = models.TextField(
+        blank=False,
+        help_text='Comment is required'
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_expenses',
+        help_text='User who created this expense'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finance_actual_expense = models.OneToOneField(
+        ActualExpense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='planning_expense',
+        help_text='Linked Finance ActualExpense (synced automatically)'
+    )
+    
+    class Meta:
+        ordering = ['-spent_at', '-created_at']
+        indexes = [
+            models.Index(fields=['plan_period', 'spent_at']),
+            models.Index(fields=['plan_item', 'spent_at']),
+            models.Index(fields=['spent_at']),
+            models.Index(fields=['category']),
+        ]
+    
+    def __str__(self):
+        return f"Expense - {self.amount} ({self.spent_at})"
 

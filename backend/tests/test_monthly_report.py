@@ -6,8 +6,10 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from decimal import Decimal
 from apps.budgeting.models import BudgetPlan, BudgetLine, ExpenseCategory, MonthPeriod
-from apps.planning.models import ActualExpense, PlanPeriod, ProrabPlan, ProrabPlanItem
+from apps.expenses.models import ActualExpense as ExpenseActualExpense
 from apps.projects.models import Project
+from apps.finance.models import FinancePeriod
+from apps.finance.constants import MONTH_REQUIRED_MSG
 
 User = get_user_model()
 
@@ -96,24 +98,44 @@ def api_client(admin_user):
 
 
 @pytest.fixture
-def budget_plan_office(db, month_period, root_category_office):
+def budget_plan_office(db, month_period):
     """Create BudgetPlan for office."""
     return BudgetPlan.objects.create(
         period=month_period,
-        root_category=root_category_office,
         scope='OFFICE',
         project=None
     )
 
 
 @pytest.fixture
-def budget_plan_project(db, month_period, root_category_project, project):
-    """Create BudgetPlan for project."""
+def budget_plan_project(db, month_period):
+    """Create BudgetPlan for PROJECT scope (project optional)."""
     return BudgetPlan.objects.create(
         period=month_period,
-        root_category=root_category_project,
         scope='PROJECT',
-        project=project
+        project=None
+    )
+
+
+@pytest.fixture
+def finance_period_office(db, month_period, admin_user):
+    """Create FinancePeriod for office."""
+    return FinancePeriod.objects.create(
+        month_period=month_period,
+        fund_kind='office',
+        project=None,
+        created_by=admin_user
+    )
+
+
+@pytest.fixture
+def finance_period_project(db, month_period, project, admin_user):
+    """Create FinancePeriod for project."""
+    return FinancePeriod.objects.create(
+        month_period=month_period,
+        fund_kind='project',
+        project=project,
+        created_by=admin_user
     )
 
 
@@ -122,38 +144,59 @@ class TestMonthlyReportAPI:
     
     def test_monthly_report_requires_month(self, api_client):
         """Test that month parameter is required."""
-        response = api_client.get('/api/reports/monthly/')
-        
+        response = api_client.get('/api/v1/reports/monthly/?scope=OFFICE')
         assert response.status_code == 400
-        assert 'month' in response.data['error'].lower()
+        assert 'month' in response.data
+        assert 'required' in response.data['month'].lower()
+
+    def test_monthly_report_requires_scope(self, api_client):
+        """Test that scope parameter is required."""
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01')
+        assert response.status_code == 400
+        assert 'scope' in response.data
+        assert 'required' in response.data['scope'].lower()
     
     def test_monthly_report_invalid_format(self, api_client):
         """Test that month must be in YYYY-MM format."""
-        response = api_client.get('/api/reports/monthly/?month=2024/01')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024/01&scope=OFFICE')
         
         assert response.status_code == 400
-        assert 'format' in response.data['error'].lower()
+        assert 'month' in response.data
+        assert 'format' in response.data['month'].lower()
     
-    def test_monthly_report_empty_data(self, api_client):
-        """Test monthly report with no data."""
-        response = api_client.get('/api/reports/monthly/?month=2024-01')
+    def test_monthly_report_empty_data(self, api_client, db):
+        """Test monthly report with no data. MonthPeriod must exist (e.g. 2024-01)."""
+        MonthPeriod.objects.get_or_create(month='2024-01', defaults={'status': 'OPEN'})
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         
         assert response.status_code == 200
         assert response.data['month'] == '2024-01'
+        assert response.data['scope'] == 'OFFICE'
         assert response.data['rows'] == []
         assert response.data['totals']['planned'] == 0.0
         assert response.data['totals']['actual'] == 0.0
+
+    def test_monthly_report_missing_month_period_returns_400_and_does_not_create_monthperiod(self, api_client, db):
+        """Monthly report for a non-existent month should return 400 and not create MonthPeriod."""
+        month_value = '2099-12'
+        assert MonthPeriod.objects.filter(month=month_value).count() == 0
+
+        response = api_client.get(f'/api/v1/reports/monthly/?month={month_value}&scope=OFFICE')
+
+        assert response.status_code == 400
+        assert response.data['month'] == MONTH_REQUIRED_MSG
+        # Still no MonthPeriod implicitly created
+        assert MonthPeriod.objects.filter(month=month_value).count() == 0
     
     def test_monthly_report_with_budget_lines(self, api_client, budget_plan_office, subcategory_office):
         """Test monthly report aggregates planned from BudgetLine."""
-        # Create BudgetLine
         BudgetLine.objects.create(
             plan=budget_plan_office,
             category=subcategory_office,
             amount_planned=Decimal('1000.00')
         )
         
-        response = api_client.get('/api/reports/monthly/?month=2024-01')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         
         assert response.status_code == 200
         assert len(response.data['rows']) == 1
@@ -162,20 +205,19 @@ class TestMonthlyReportAPI:
         assert response.data['rows'][0]['actual'] == 0.0
         assert response.data['totals']['planned'] == 1000.0
     
-    def test_monthly_report_with_actual_expenses(self, api_client, project, subcategory_office, admin_user):
-        """Test monthly report aggregates actual from ActualExpense."""
-        # Create ActualExpense
-        ActualExpense.objects.create(
-            project=project,
+    def test_monthly_report_with_actual_expenses(self, api_client, month_period, subcategory_office, admin_user):
+        """Test monthly report aggregates actual from apps.expenses ActualExpense (month_period + scope)."""
+        ExpenseActualExpense.objects.create(
+            month_period=month_period,
+            scope='OFFICE',
             category=subcategory_office,
-            name='Test Expense',
             amount=Decimal('500.00'),
             spent_at='2024-01-15',
             comment='Test comment',
             created_by=admin_user
         )
         
-        response = api_client.get('/api/reports/monthly/?month=2024-01')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         
         assert response.status_code == 200
         assert len(response.data['rows']) == 1
@@ -184,108 +226,73 @@ class TestMonthlyReportAPI:
         assert response.data['rows'][0]['actual'] == 500.0
         assert response.data['totals']['actual'] == 500.0
     
-    def test_monthly_report_calculates_delta_and_percent(self, api_client, budget_plan_office, subcategory_office, project, admin_user):
+    def test_monthly_report_calculates_delta_and_percent(self, api_client, budget_plan_office, subcategory_office, month_period, admin_user):
         """Test monthly report calculates delta and percent correctly."""
-        # Create BudgetLine
         BudgetLine.objects.create(
             plan=budget_plan_office,
             category=subcategory_office,
             amount_planned=Decimal('1000.00')
         )
         
-        # Create ActualExpense
-        ActualExpense.objects.create(
-            project=project,
+        ExpenseActualExpense.objects.create(
+            month_period=month_period,
+            scope='OFFICE',
             category=subcategory_office,
-            name='Test Expense',
             amount=Decimal('750.00'),
             spent_at='2024-01-15',
             comment='Test comment',
             created_by=admin_user
         )
         
-        response = api_client.get('/api/reports/monthly/?month=2024-01')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         
         assert response.status_code == 200
         row = response.data['rows'][0]
         assert row['planned'] == 1000.0
         assert row['actual'] == 750.0
         assert row['delta'] == -250.0
-        assert row['percent'] == -25.0  # -250 / 1000 * 100
+        assert row['percent'] == 75.0  # 750/1000*100
     
-    def test_monthly_report_filter_by_project(self, api_client, budget_plan_project, subcategory_project, project, admin_user):
-        """Test filtering monthly report by project."""
-        # Create BudgetLine
+    def test_monthly_report_scope_project(self, api_client, budget_plan_project, subcategory_project, month_period, admin_user):
+        """Test monthly report with scope=PROJECT uses BudgetPlan and ExpenseActualExpense by month + scope."""
         BudgetLine.objects.create(
             plan=budget_plan_project,
             category=subcategory_project,
             amount_planned=Decimal('2000.00')
         )
         
-        # Create ActualExpense for this project
-        ActualExpense.objects.create(
-            project=project,
+        ExpenseActualExpense.objects.create(
+            month_period=month_period,
+            scope='PROJECT',
             category=subcategory_project,
-            name='Test Expense',
             amount=Decimal('1500.00'),
             spent_at='2024-01-15',
             comment='Test comment',
             created_by=admin_user
         )
         
-        response = api_client.get(f'/api/reports/monthly/?month=2024-01&project={project.id}')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
         
         assert response.status_code == 200
+        assert response.data['scope'] == 'PROJECT'
         assert len(response.data['rows']) == 1
         assert response.data['rows'][0]['category_id'] == subcategory_project.id
-        assert response.data['project_id'] == project.id
+        assert response.data['rows'][0]['planned'] == 2000.0
+        assert response.data['rows'][0]['actual'] == 1500.0
     
-    def test_monthly_report_filter_by_root_category(self, api_client, budget_plan_office, subcategory_office, root_category_office):
-        """Test filtering monthly report by root_category."""
-        # Create BudgetLine
+    def test_monthly_report_with_root_category(self, api_client, budget_plan_office, subcategory_office):
+        """Test monthly report returns planned by category for the given scope."""
         BudgetLine.objects.create(
             plan=budget_plan_office,
             category=subcategory_office,
             amount_planned=Decimal('1000.00')
         )
         
-        response = api_client.get(f'/api/reports/monthly/?month=2024-01&root_category={root_category_office.id}')
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         
         assert response.status_code == 200
         assert len(response.data['rows']) == 1
-        assert response.data['root_category_id'] == root_category_office.id
-    
-    def test_monthly_report_with_prorab_plan_items(self, api_client, month_period, project, admin_user, subcategory_project):
-        """Test monthly report includes ProrabPlanItem planned amounts when project filter is used."""
-        # Create PlanPeriod
-        plan_period = PlanPeriod.objects.create(
-            project=project,
-            period='2024-01',
-            status='open',
-            created_by=admin_user
-        )
-        
-        # Create ProrabPlan
-        prorab_plan = ProrabPlan.objects.create(
-            period=plan_period,
-            prorab=admin_user,
-            status='approved'
-        )
-        
-        # Create ProrabPlanItem
-        ProrabPlanItem.objects.create(
-            plan=prorab_plan,
-            category=subcategory_project,
-            name='Test Material',
-            amount=Decimal('500.00'),
-            created_by=admin_user
-        )
-        
-        response = api_client.get(f'/api/reports/monthly/?month=2024-01&project={project.id}')
-        
-        assert response.status_code == 200
-        # Should include planned from ProrabPlanItem
-        # Note: This test may need adjustment based on actual implementation
-        assert response.data['totals']['planned'] >= 500.0
+        assert response.data['rows'][0]['category_name'] == subcategory_office.name
+        assert response.data['plan_id'] is not None
 
 

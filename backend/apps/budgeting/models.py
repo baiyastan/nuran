@@ -2,7 +2,6 @@
 Budgeting models.
 """
 from django.db import models
-from django.db.models import Q
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.utils import timezone
@@ -112,16 +111,39 @@ class MonthPeriod(models.Model):
     def __str__(self):
         return self.month
 
+    def clean(self):
+        import re
+        from django.core.exceptions import ValidationError
+        errors = {}
+        if self.month and not re.match(r'^\d{4}-\d{2}$', self.month.strip()):
+            errors['month'] = 'Month must be YYYY-MM (e.g. 2024-01).'
+        if self.status not in ('OPEN', 'LOCKED'):
+            errors['status'] = 'Status must be OPEN or LOCKED.'
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 class BudgetPlan(models.Model):
-    """Budget plan model."""
+    """Budget plan model - one per (period, scope).
     
+    Identity note:
+    - BudgetPlan is uniquely identified by (period, scope) for all scopes.
+    - The project field is legacy/optional metadata and MUST remain NULL;
+      it is not part of the uniqueness key.
+    - See Meta.constraints.unique_period_scope and API create logic in
+      apps.budgeting.api.views.BudgetPlanViewSet.create.
+    """
+
     SCOPE_CHOICES = [
         ('OFFICE', 'Office'),
         ('PROJECT', 'Project'),
         ('CHARITY', 'Charity'),
     ]
-    
+
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
         ('OPEN', 'Open'),
@@ -129,24 +151,16 @@ class BudgetPlan(models.Model):
         ('APPROVED', 'Approved'),
         ('CLOSED', 'Closed'),
     ]
-    
+
     period = models.ForeignKey(
         MonthPeriod,
         on_delete=models.CASCADE,
         related_name='budget_plans'
     )
-    root_category = models.ForeignKey(
-        ExpenseCategory,
-        on_delete=models.PROTECT,
-        null=False,
-        blank=False,
-        related_name='root_budget_plans',
-        help_text='Root category (must have parent=None)'
-    )
     scope = models.CharField(
         max_length=20,
         choices=SCOPE_CHOICES,
-        help_text='OFFICE or PROJECT (must match root_category.scope)'
+        help_text='OFFICE, PROJECT, or CHARITY'
     )
     project = models.ForeignKey(
         Project,
@@ -154,7 +168,7 @@ class BudgetPlan(models.Model):
         null=True,
         blank=True,
         related_name='budget_plans',
-        help_text='Required when scope=PROJECT'
+        help_text='Optional; not used for plan key (all scopes keyed by period + scope only)'
     )
     status = models.CharField(
         max_length=20,
@@ -175,62 +189,29 @@ class BudgetPlan(models.Model):
     
     class Meta:
         ordering = ['-period__month', '-created_at']
-        # Unique constraint: one plan per project per month for PROJECT scope
-        # For OFFICE/CHARITY scopes: one plan per period (per scope)
+        # One plan per (period, scope) for all scopes; project is not part of the key
         constraints = [
             models.UniqueConstraint(
-                fields=['period', 'project'],
-                condition=Q(scope='PROJECT'),
-                name='unique_project_period'
-            ),
-            models.UniqueConstraint(
                 fields=['period', 'scope'],
-                condition=Q(scope__in=['OFFICE', 'CHARITY']),
-                name='unique_office_charity_period'
+                name='unique_period_scope'
             ),
         ]
         indexes = [
             models.Index(fields=['period', 'scope', 'project']),
             models.Index(fields=['status']),
-            models.Index(fields=['period', 'root_category', 'project']),
         ]
-    
+
     def __str__(self):
-        project_name = self.project.name if self.project else 'Office'
-        return f"{self.period.month} - {self.scope} - {project_name} ({self.status})"
-    
+        return f"{self.period.month} - {self.scope} ({self.status})"
+
     def clean(self):
-        """Validate root_category, scope, and project consistency."""
+        """Validate project is always null (not part of identity)."""
         from django.core.exceptions import ValidationError
         errors = {}
-        
-        # Validate root_category is a root (parent must be NULL)
-        if self.root_category and self.root_category.parent is not None:
-            errors['root_category'] = 'Root category must have parent=None (must be a root category)'
-        
-        # Map root_category.scope to BudgetPlan.scope
-        scope_mapping = {
-            'office': 'OFFICE',
-            'project': 'PROJECT',
-            'charity': 'CHARITY'
-        }
-        expected_scope = scope_mapping.get(self.root_category.scope if self.root_category else None)
-        
-        # Validate scope matches root_category.scope
-        if self.root_category and expected_scope and self.scope != expected_scope:
-            errors['scope'] = f'Scope must be {expected_scope} to match root_category.scope={self.root_category.scope}'
-        
-        # Validate project based on root_category.scope
-        if self.root_category:
-            if self.root_category.scope in ('office', 'charity') and self.project is not None:
-                errors['project'] = f'Project must be NULL when root_category.scope is "{self.root_category.scope}"'
-            elif self.root_category.scope == 'project' and self.project is None:
-                errors['project'] = 'Project is required when root_category.scope is "project"'
-        
-        # Legacy validation: project required when scope=PROJECT (for backward compatibility)
-        if self.scope == 'PROJECT' and not self.project:
-            errors['project'] = 'Project is required when scope is PROJECT'
-        
+        # BudgetPlan is uniquely identified by (period, scope) for all scopes.
+        # Project is a legacy/optional field and must remain NULL.
+        if self.project is not None:
+            errors['project'] = f'Project must be NULL when scope is {self.scope}'
         if errors:
             raise ValidationError(errors)
 
@@ -344,30 +325,27 @@ class BudgetExpense(models.Model):
     def clean(self):
         """Validate category and plan status."""
         from django.core.exceptions import ValidationError
+        from apps.expenses.base import validate_expense_category
+        
         errors = {}
         
-        # Validate category is leaf
-        if self.category and not self.category.is_leaf():
-            errors['category'] = 'Category must be a leaf category (no children).'
-        
-        # Validate category is active
-        if self.category and not self.category.is_active:
-            errors['category'] = 'Category must be active.'
-        
-        # Validate category kind is EXPENSE
-        if self.category and self.category.kind != 'EXPENSE':
-            errors['category'] = f'Category kind must be EXPENSE. Current kind: {self.category.kind}'
-        
-        # Validate category scope matches plan scope
-        if self.category and self.plan:
-            scope_mapping = {
-                'office': 'OFFICE',
-                'project': 'PROJECT',
-                'charity': 'CHARITY'
-            }
-            expected_scope = scope_mapping.get(self.category.scope)
-            if expected_scope and self.plan.scope != expected_scope:
-                errors['category'] = f'Category scope "{self.category.scope}" does not match plan scope "{self.plan.scope}".'
+        # Use shared category validation
+        if self.category:
+            try:
+                plan_scope = self.plan.scope if self.plan else None
+                validate_expense_category(self.category, plan_scope)
+            except ValidationError as e:
+                # Merge validation errors
+                if hasattr(e, 'error_dict'):
+                    errors.update(e.error_dict)
+                elif hasattr(e, 'message_dict'):
+                    errors.update(e.message_dict)
+                else:
+                    # Single message or list of messages
+                    if isinstance(e.messages, list):
+                        errors['category'] = e.messages
+                    else:
+                        errors['category'] = [str(e)]
         
         # Validate plan status is APPROVED (for write operations)
         # Note: This will be checked in serializer for API operations

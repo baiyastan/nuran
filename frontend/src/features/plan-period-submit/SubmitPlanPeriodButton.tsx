@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSubmitPlanPeriodMutation } from '@/shared/api/planPeriodsApi'
 import { Button } from '@/shared/ui/Button/Button'
+import { getErrorMessage } from '@/shared/lib/utils'
 
 interface SubmitPlanPeriodButtonProps {
   planPeriodId: number
@@ -18,8 +19,8 @@ export function SubmitPlanPeriodButton({ planPeriodId }: SubmitPlanPeriodButtonP
     setError(null)
     try {
       await submitPlanPeriod(planPeriodId).unwrap()
-    } catch (err: any) {
-      setError(err.data?.detail || err.message || 'Failed to submit plan period')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Failed to submit plan period')
     }
   }
 

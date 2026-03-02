@@ -1,4 +1,4 @@
-import { api } from '@/shared/api/base'
+import { axiosInstance as api } from '@/shared/api/axiosInstance'
 import { PlanItem } from './model'
 
 export interface PlanItemListParams {

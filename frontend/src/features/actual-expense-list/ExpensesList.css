@@ -1,0 +1,29 @@
+.expenses-list {
+  padding: 0;
+}
+
+.expenses-list .list-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.expenses-list .loading,
+.expenses-list .error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.expenses-list .empty-state {
+  padding: 2rem;
+  text-align: center;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.expenses-list .empty-state p {
+  margin-bottom: 1rem;
+  color: #666;
+}
+
+

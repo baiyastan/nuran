@@ -24,8 +24,9 @@
 }
 
 .lang-separator {
-  color: rgba(255, 255, 255, 0.5);
+  color: #ccc;
   font-size: 14px;
+  user-select: none;
 }
 
 

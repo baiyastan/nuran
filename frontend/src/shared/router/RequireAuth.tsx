@@ -1,19 +1,26 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { useAuthBootstrap } from '@/shared/hooks/useAuthBootstrap'
-import { useMeQuery } from '@/shared/api/authApi'
+import { useAppDispatch } from '@/app/hooks'
+import { logout } from '@/features/auth/authSlice'
 
 function RequireAuth() {
-  const { isAuthenticated } = useAuth()
-  
-  // Trigger me query early to ensure it starts as soon as RequireAuth mounts
-  useMeQuery()
-  
-  // Bootstrap auth only on protected routes (handles refresh token logic)
-  useAuthBootstrap()
+  const { isAuthenticated, isLoadingMe, role } = useAuth()
+  const { bootstrapping } = useAuthBootstrap()
+  const dispatch = useAppDispatch()
 
-  if (!isAuthenticated) {
+  const invalidSession = isAuthenticated && !role
+
+  useEffect(() => {
+    if (invalidSession) dispatch(logout())
+  }, [invalidSession, dispatch])
+
+  if (bootstrapping || (isAuthenticated && isLoadingMe)) {
+    return <div className="loading">Loading...</div>
+  }
+
+  if (!isAuthenticated || invalidSession) {
     return <Navigate to="/login" replace />
   }
 
@@ -25,6 +32,3 @@ function RequireAuth() {
 }
 
 export default RequireAuth
-
-
-

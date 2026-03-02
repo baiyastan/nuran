@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useListBudgetPlansQuery,
@@ -29,6 +29,7 @@ function BudgetReportPage() {
   const { t } = useTranslation()
   const { role } = useAuth()
   const [filters, setFilters] = useState<BudgetPlanListParams>({
+    month: new Date().toISOString().slice(0, 7),
     scope: 'PROJECT',
     status: 'APPROVED',
   })
@@ -42,12 +43,23 @@ function BudgetReportPage() {
     error: null,
   })
 
-  const { data: plansData, isLoading: plansLoading } = useListBudgetPlansQuery(filters)
+  const {
+    data: plansData,
+    isLoading: plansLoading,
+    isFetching: isFetchingPlans,
+  } = useListBudgetPlansQuery(filters, {
+    refetchOnMountOrArgChange: true,
+  })
   const { data: projectsData } = useListProjectsQuery()
-  const { data: reportData, isLoading: reportLoading, refetch: refetchReport } = useGetBudgetPlanReportQuery(
-    selectedPlanId!,
-    { skip: !selectedPlanId }
-  )
+  const {
+    data: reportData,
+    isLoading: reportLoading,
+    isFetching: isFetchingReport,
+    refetch: refetchReport,
+  } = useGetBudgetPlanReportQuery(selectedPlanId!, {
+    skip: !selectedPlanId,
+    refetchOnMountOrArgChange: true,
+  })
   const { data: categoriesData } = useListExpenseCategoriesQuery({
     is_active: true,
     kind: 'EXPENSE',
@@ -55,15 +67,18 @@ function BudgetReportPage() {
   const [createExpense, { isLoading: isCreating }] = useCreateBudgetExpenseMutation()
   const [updateExpense, { isLoading: isUpdating }] = useUpdateBudgetExpenseMutation()
 
-  const selectedPlan = plansData?.results.find((p) => p.id === selectedPlanId) || null
+  // Handle both {results: []} and [] response shapes
+  const plans = Array.isArray(plansData) ? plansData : plansData?.results || []
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId) || null
   const canEdit = role === 'admin' && selectedPlan?.status === 'APPROVED'
 
-  // Filter leaf categories
-  const leafCategories = categoriesData?.results.filter((cat) => {
+  // Filter leaf categories - handle both response shapes
+  const categories = Array.isArray(categoriesData) ? categoriesData : categoriesData?.results || []
+  const leafCategories = categories.filter((cat) => {
     if (!cat.parent_id) return false // Must have parent
     // Check if it's a leaf (no active children)
-    return !categoriesData.results.some((c) => c.parent_id === cat.id && c.is_active)
-  }) || []
+    return !categories.some((c) => c.parent_id === cat.id && c.is_active)
+  })
 
   const handlePlanSelect = (planId: number) => {
     setSelectedPlanId(planId)
@@ -115,7 +130,7 @@ function BudgetReportPage() {
         error: null,
       })
       refetchReport()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setExpenseForm((prev) => ({
         ...prev,
         error: getErrorMessage(err),
@@ -131,14 +146,28 @@ function BudgetReportPage() {
     { key: 'percent', label: t('budgetReport.columns.percent') },
   ]
 
-  const reportTableData =
-    reportData?.rows.map((row) => ({
-      category: row.category_name,
-      planned: formatKGS(parseFloat(row.planned)),
-      spent: formatKGS(parseFloat(row.spent)),
-      balance: formatKGS(parseFloat(row.balance)),
-      percent: row.percent !== null ? `${row.percent.toFixed(2)}%` : '-',
-    })) || []
+  const reportTableData = reportData?.rows
+    ? reportData.rows.map((row) => ({
+        category: row.category_name,
+        planned: formatKGS(row.planned ?? 0),
+        spent: formatKGS(row.spent ?? 0),
+        balance: formatKGS(row.balance ?? 0),
+        percent: row.percent !== null ? `${row.percent.toFixed(2)}%` : '-',
+      }))
+    : []
+
+  useEffect(() => {
+    // When month filter changes, clear selection and local form state to avoid mixing months
+    setSelectedPlanId(null)
+    setExpenseForm({
+      id: null,
+      category: '',
+      amount_spent: '',
+      spent_at: new Date().toISOString().split('T')[0],
+      comment: '',
+      error: null,
+    })
+  }, [filters.month])
 
   return (
     <div className="budget-report-page">
@@ -156,7 +185,7 @@ function BudgetReportPage() {
             onChange={(e) =>
               setFilters((prev) => ({
                 ...prev,
-                month: e.target.value || undefined,
+                month: (e.target.value || prev.month) as string,
               }))
             }
           />
@@ -175,7 +204,7 @@ function BudgetReportPage() {
             }
           >
             <option value="">-</option>
-            {projectsData?.results.map((project) => (
+            {(Array.isArray(projectsData) ? projectsData : projectsData?.results || []).map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -202,15 +231,15 @@ function BudgetReportPage() {
         </div>
       </div>
 
-      {plansLoading ? (
+      {plansLoading || isFetchingPlans ? (
         <div className="loading">{t('budgetReport.loading')}</div>
-      ) : !plansData?.results.length ? (
+      ) : plans.length === 0 ? (
         <div className="empty-state">{t('budgetReport.noPlansFound')}</div>
       ) : (
         <div className="plans-list">
           <h3>{t('budgetReport.selectPlan')}</h3>
           <div className="plan-cards">
-            {plansData.results.map((plan: BudgetPlan) => (
+            {plans.map((plan: BudgetPlan) => (
               <div
                 key={plan.id}
                 className={`plan-card ${selectedPlanId === plan.id ? 'selected' : ''}`}
@@ -231,13 +260,13 @@ function BudgetReportPage() {
 
       {selectedPlanId && (
         <>
-          {reportLoading ? (
+          {reportLoading || isFetchingReport ? (
             <div className="loading">{t('budgetReport.loading')}</div>
-          ) : reportData ? (
+          ) : reportData && reportData.plan && reportData.totals ? (
             <>
               <div className="report-section">
                 <h3>
-                  {reportData.plan.project_name} - {reportData.plan.period_month}
+                  {reportData.plan.project_name || '-'} - {reportData.plan.period_month || '-'}
                 </h3>
                 {!canEdit && selectedPlan?.status !== 'APPROVED' && (
                   <div className="warning">{t('budgetReport.planNotApproved')}</div>
@@ -246,20 +275,20 @@ function BudgetReportPage() {
                 <div className="report-totals">
                   <div className="total-row">
                     <strong>{t('budgetReport.totals.planned')}:</strong>
-                    <span>{formatKGS(parseFloat(reportData.totals.planned))}</span>
+                    <span>{formatKGS(reportData.totals.planned ?? 0)}</span>
                   </div>
                   <div className="total-row">
                     <strong>{t('budgetReport.totals.spent')}:</strong>
-                    <span>{formatKGS(parseFloat(reportData.totals.spent))}</span>
+                    <span>{formatKGS(reportData.totals.spent ?? 0)}</span>
                   </div>
                   <div className="total-row">
                     <strong>{t('budgetReport.totals.balance')}:</strong>
-                    <span>{formatKGS(parseFloat(reportData.totals.balance))}</span>
+                    <span>{formatKGS(reportData.totals.balance ?? 0)}</span>
                   </div>
                   <div className="total-row">
                     <strong>{t('budgetReport.totals.percent')}:</strong>
                     <span>
-                      {reportData.totals.percent !== null
+                      {reportData.totals.percent !== null && reportData.totals.percent !== undefined
                         ? `${reportData.totals.percent.toFixed(2)}%`
                         : '-'}
                     </span>

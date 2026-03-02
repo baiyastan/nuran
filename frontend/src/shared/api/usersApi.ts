@@ -20,21 +20,21 @@ export const usersApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getUsers: builder.query<UserListResponse, UserListParams | void>({
       query: (params) => ({
-        url: '/auth/users/',
+        url: '/users/',
         params,
       }),
       providesTags: ['Users'],
     }),
     getForemen: builder.query<UserListResponse, void>({
       query: () => ({
-        url: '/auth/users/',
+        url: '/users/',
         params: { role: 'foreman' },
       }),
       providesTags: ['Users'],
     }),
     updateUserRole: builder.mutation<User, { userId: number; role: 'admin' | 'director' | 'foreman' }>({
       query: ({ userId, role }) => ({
-        url: `/auth/users/${userId}/role/`,
+        url: `/users/${userId}/role/`,
         method: 'PATCH',
         data: { role },
       }),

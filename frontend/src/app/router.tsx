@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'finance-periods',
-            element: <RequireRole allowedRoles={['admin', 'director', 'foreman']} />,
+            element: <RequireRole allowedRoles={['admin', 'director']} />,
             children: [
               {
                 index: true,
@@ -73,7 +73,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'reports',
-            element: <RequireRole allowedRoles={['admin', 'director']} />,
+            element: <RequireRole allowedRoles={['admin', 'director', 'foreman']} />,
             children: [
               {
                 index: true,
@@ -127,7 +127,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'plan-setup',
-            element: <RequireRole allowedRoles={['admin', 'director']} />,
+            element: <RequireRole allowedRoles={['admin', 'director', 'foreman']} />,
             children: [
               {
                 index: true,

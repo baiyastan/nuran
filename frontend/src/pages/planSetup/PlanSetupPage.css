@@ -1,0 +1,89 @@
+.plan-setup-page {
+  padding: 24px;
+}
+
+.plan-setup-page.loading {
+  padding: 24px;
+  color: #666;
+}
+
+.plan-setup-page h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.plan-setup-error {
+  padding: 16px 20px;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  background-color: #f8d7da;
+  color: #721c24;
+  max-width: 600px;
+  margin-top: 16px;
+}
+
+.plan-setup-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.plan-setup-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.plan-setup-filters input[type='month'],
+.plan-setup-filters select {
+  padding: 8px 12px;
+  font-size: 14px;
+  min-width: 140px;
+}
+
+.plan-setup-select-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  max-width: 400px;
+}
+
+.plan-setup-select-root select {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.plan-setup-message {
+  margin-top: 16px;
+  color: #666;
+}
+
+.plan-setup-context {
+  margin-bottom: 16px;
+  color: #666;
+  font-size: 14px;
+}
+
+.plan-setup-total {
+  margin-bottom: 16px;
+}
+
+.plan-setup-input {
+  padding: 6px 10px;
+  font-size: 14px;
+  width: 100%;
+  max-width: 200px;
+}
+
+.plan-setup-empty {
+  color: #666;
+  margin: 16px 0;
+}
+
+.plan-setup-actions {
+  margin-top: 24px;
+}

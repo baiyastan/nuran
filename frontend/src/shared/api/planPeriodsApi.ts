@@ -28,7 +28,7 @@ export const planPeriodsApi = baseApi.injectEndpoints({
     }),
     getPlanPeriod: builder.query<PlanPeriod, number>({
       query: (id) => ({ url: `/plan-periods/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'PlanPeriods', id }],
+      providesTags: (_result, _error, id) => [{ type: 'PlanPeriods', id }],
     }),
     createPlanPeriod: builder.mutation<PlanPeriod, Partial<PlanPeriod>>({
       query: (body) => ({
@@ -43,7 +43,7 @@ export const planPeriodsApi = baseApi.injectEndpoints({
         url: `/plan-periods/${id}/submit/`,
         method: 'POST',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
+      invalidatesTags: (_result, _error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
     }),
     approvePlanPeriod: builder.mutation<PlanPeriod, { id: number; comments?: string }>({
       query: ({ id, comments }) => ({
@@ -51,21 +51,21 @@ export const planPeriodsApi = baseApi.injectEndpoints({
         method: 'POST',
         data: comments ? { comments } : {},
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
     }),
     lockPlanPeriod: builder.mutation<PlanPeriod, number>({
       query: (id) => ({
         url: `/plan-periods/${id}/lock/`,
         method: 'POST',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
+      invalidatesTags: (_result, _error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
     }),
     unlockPlanPeriod: builder.mutation<PlanPeriod, number>({
       query: (id) => ({
         url: `/plan-periods/${id}/unlock/`,
         method: 'POST',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
+      invalidatesTags: (_result, _error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
     }),
   }),
 })

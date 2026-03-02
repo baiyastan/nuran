@@ -3,7 +3,7 @@ import { baseApi } from './baseApi'
 export interface ExpenseCategory {
   id: number
   name: string
-  scope: 'project' | 'office'
+  scope: 'project' | 'office' | 'charity'
   parent: number | null
   parent_id: number | null
   is_active: boolean
@@ -13,7 +13,7 @@ export interface ExpenseCategory {
 }
 
 export interface ExpenseCategoryListParams {
-  scope?: 'project' | 'office'
+  scope?: 'project' | 'office' | 'charity'
   parent?: number | null
   is_active?: boolean
   ordering?: string
@@ -28,13 +28,13 @@ export interface ExpenseCategoryListResponse {
 
 export interface CreateExpenseCategoryRequest {
   name: string
-  scope: 'project' | 'office'
+  scope: 'project' | 'office' | 'charity'
   parent?: number | null
 }
 
 export interface UpdateExpenseCategoryRequest {
   name?: string
-  scope?: 'project' | 'office'
+  scope?: 'project' | 'office' | 'charity'
   parent?: number | null
   is_active?: boolean
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLockPlanPeriodMutation } from '@/shared/api/planPeriodsApi'
 import { Button } from '@/shared/ui/Button/Button'
+import { getErrorMessage } from '@/shared/lib/utils'
 
 interface LockPlanPeriodButtonProps {
   planPeriodId: number
@@ -18,8 +19,8 @@ export function LockPlanPeriodButton({ planPeriodId }: LockPlanPeriodButtonProps
     setError(null)
     try {
       await lockPlanPeriod(planPeriodId).unwrap()
-    } catch (err: any) {
-      setError(err.data?.detail || err.message || 'Failed to lock plan period')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Failed to lock plan period')
     }
   }
 

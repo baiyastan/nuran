@@ -5,161 +5,123 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import transaction
 from core.permissions import IsAdmin, IsDirector
 from apps.projects.models import ProjectAssignment
-from apps.planning.models import PlanPeriod
+from apps.finance.services import assert_month_open_for_plans
+from apps.finance.constants import MONTH_REQUIRED_MSG
 from ..models import BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod, BudgetLine, BudgetExpense
-from ..permissions import BudgetPlanPermission, BudgetLinePermission, BudgetExpensePermission
+from ..permissions import BudgetPlanPermission, BudgetLinePermission, BudgetExpensePermission, IsAdminOrReadOnly, ExpenseCategoryPermission
 from .serializers import (
     BudgetPlanSummaryCommentUpdateSerializer, ExpenseCategorySerializer,
-    BudgetPlanSerializer, BudgetLineSerializer, MonthPeriodSerializer, BudgetExpenseSerializer
+    BudgetPlanSerializer, BudgetLineSerializer, MonthPeriodSerializer, BudgetExpenseSerializer,
+    BulkUpsertBudgetLinesSerializer,
 )
 
 
+def parse_month_yyyy_mm(raw: str) -> str:
+    """
+    Parse and validate a YYYY-MM month string.
+    
+    Raises DRF ValidationError with a consistent message on invalid format.
+    """
+    import re
+
+    value = (raw or "").strip()
+    if not re.match(r"^[0-9]{4}-[0-9]{2}$", value):
+        raise ValidationError({"month": "Invalid format. Use YYYY-MM."})
+    return value
+
+
 class BudgetPlanViewSet(viewsets.ModelViewSet):
-    """ViewSet for BudgetPlan - role-based access with submit/approve workflow."""
+    """ViewSet for BudgetPlan - role-based access with submit/approve workflow.
+    
+    Important:
+    - BudgetPlan identity is (period, scope) for all scopes.
+    - The project field MUST always be null and is not part of the key.
+    """
     
     queryset = BudgetPlan.objects.all()
     serializer_class = BudgetPlanSerializer
     permission_classes = [IsAuthenticated, BudgetPlanPermission]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['root_category', 'project', 'status']
-    
+    filterset_fields = ['project', 'status', 'scope']
+
     def get_queryset(self):
         """Get queryset with role-based filtering."""
         queryset = super().get_queryset()
-        queryset = queryset.select_related('period', 'root_category', 'project', 'approved_by')
+        queryset = queryset.select_related('period', 'project', 'approved_by')
         
-        # Role-based filtering
-        user_role = self.request.user.role if self.request.user.is_authenticated else None
-        
-        # Foreman: only see plans for assigned projects
-        if user_role == 'foreman':
-            assigned_project_ids = ProjectAssignment.objects.filter(
-                prorab=self.request.user
-            ).values_list('project_id', flat=True)
-            queryset = queryset.filter(project_id__in=assigned_project_ids)
-        # Admin and Director: see all plans
+        # Foreman: only PROJECT scope plans (permission ensures scope=PROJECT + has assignment)
+        user = getattr(self.request, 'user', None)
+        if user and user.is_authenticated and user.role == 'foreman':
+            queryset = queryset.filter(scope='PROJECT')
         
         # Filter by month (period.month)
         month = self.request.query_params.get('month')
         if month:
-            queryset = queryset.filter(period__month=month)
+            month_normalized = parse_month_yyyy_mm(month)
+            queryset = queryset.filter(period__month=month_normalized)
         
         return queryset
     
     def create(self, request, *args, **kwargs):
-        """Create or get existing BudgetPlan by (period.month, root_category, project)."""
+        """Create or get existing BudgetPlan by (period, scope). Project is optional."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         validated_data = serializer.validated_data
         
-        # Extract period - can be period object or month string
+        # Extract period - can be MonthPeriod instance/PK or month string (YYYY-MM)
         period = validated_data.get('period')
         if isinstance(period, str):
-            # If period is a month string, get or create MonthPeriod
-            period_obj, _ = MonthPeriod.objects.get_or_create(month=period)
+            month_str = parse_month_yyyy_mm(period)
+            try:
+                period_obj = MonthPeriod.objects.get(month=month_str)
+            except MonthPeriod.DoesNotExist:
+                raise ValidationError({'period': [MONTH_REQUIRED_MSG]})
         else:
             period_obj = period
         
-        root_category = validated_data.get('root_category')
+        # Enforce month-level lock semantics for plan-side writes
+        assert_month_open_for_plans(period_obj)
+        
         project = validated_data.get('project')
-        user_role = request.user.role if request.user.is_authenticated else None
+        scope = validated_data.get('scope')
         
-        # Foreman validation - must happen before get_or_create
-        if user_role == 'foreman':
-            # Must be PROJECT scope
-            scope = validated_data.get('scope')
-            if scope != 'PROJECT':
-                return Response(
-                    {'error': 'Foremen can only create project plans.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            # Project must exist and foreman must be assigned
-            if not project:
-                return Response(
-                    {'error': 'Project is required for foreman plan creation.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            if not ProjectAssignment.objects.filter(project=project, prorab=request.user).exists():
-                return Response(
-                    {'error': 'You are not assigned to this project.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            # Check that PlanPeriod exists and is open for this project and month
-            plan_period = PlanPeriod.objects.filter(
-                project=project,
-                period=period_obj.month
-            ).first()
-            
-            if not plan_period:
-                return Response(
-                    {'error': f'Cannot create plan. Month {period_obj.month} has not been opened for this project by admin.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            if plan_period.status != 'open':
-                return Response(
-                    {'error': f'Cannot create plan. Month period status is {plan_period.status}. Period must be open.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            # MonthPeriod must be OPEN
-            if period_obj.status != 'OPEN':
-                return Response(
-                    {'error': f'Cannot create plan. Month period status is {period_obj.status}. Period must be OPEN.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Set status to OPEN for foreman-created plans
-            validated_data['status'] = 'OPEN'
-        
-        # Get or create BudgetPlan
         with transaction.atomic():
+            # BudgetPlan identity is (period, scope) for all scopes.
+            # Project must always be null and is not part of the uniqueness key.
+            if project is not None:
+                raise ValidationError({'project': f'Project must be null when scope is {scope}'})
+            
             budget_plan, created = BudgetPlan.objects.get_or_create(
                 period=period_obj,
-                root_category=root_category,
-                project=project,
+                scope=scope,
                 defaults={
-                    'scope': validated_data.get('scope'),
+                    'project': None,
                     'status': validated_data.get('status', 'DRAFT'),
-                }
+                },
             )
-            
-            # If not created, update fields that can be updated
-            if not created:
-                # Update scope if provided and different
-                if 'scope' in validated_data and budget_plan.scope != validated_data['scope']:
-                    budget_plan.scope = validated_data['scope']
-                    budget_plan.save()
         
         serializer = self.get_serializer(budget_plan)
         headers = self.get_success_headers(serializer.data)
-        
         if created:
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-        else:
-            return Response(serializer.data, status=status.HTTP_200_OK, headers=headers)
+        return Response(serializer.data, status=status.HTTP_200_OK, headers=headers)
     
     def update(self, request, *args, **kwargs):
-        """Update BudgetPlan - foreman can only update when status is OPEN."""
+        """Update BudgetPlan."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Check permissions (handled by permission class, but validate status for foreman)
-        if request.user.role == 'foreman' and instance.status != 'OPEN':
-            return Response(
-                {'error': f'Cannot update plan. Plan status must be OPEN. Current status: {instance.status}'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Enforce month-level lock semantics before any modifications
+        assert_month_open_for_plans(instance.period)
         
+        # Permissions handled by permission class (foreman has no access)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -167,14 +129,19 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     def partial_update(self, request, *args, **kwargs):
-        """Partial update BudgetPlan - foreman can only update when status is OPEN."""
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
+    
+    def perform_destroy(self, instance):
+        """Delete BudgetPlan - blocked when related month is locked or missing."""
+        assert_month_open_for_plans(instance.period)
+        super().perform_destroy(instance)
     
     @action(detail=True, methods=['patch'], url_path='summary-comment')
     def update_summary_comment(self, request, pk=None):
         """Create or update summary comment for a budget plan."""
         budget_plan = self.get_object()
+        assert_month_open_for_plans(budget_plan.period)
         
         serializer = BudgetPlanSummaryCommentUpdateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -204,36 +171,12 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
             'updated_at': summary_comment.updated_at,
         }, status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['post'], url_path='submit')
+    @action(detail=True, methods=['post'], url_path='submit', permission_classes=[IsAuthenticated, IsDirector])
     def submit(self, request, pk=None):
-        """Submit a budget plan (foreman only)."""
+        """Submit a budget plan (admin or director)."""
         budget_plan = self.get_object()
+        assert_month_open_for_plans(budget_plan.period)
         
-        # Check if user is foreman
-        if request.user.role != 'foreman':
-            return Response(
-                {'error': 'Only foremen can submit budget plans.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Check if foreman is assigned to the project
-        if budget_plan.project:
-            if not ProjectAssignment.objects.filter(
-                project=budget_plan.project,
-                prorab=request.user
-            ).exists():
-                return Response(
-                    {'error': 'You are not assigned to this project.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        else:
-            # Office/charity plans: foreman cannot submit
-            return Response(
-                {'error': 'Foremen can only submit project plans.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Validate plan status
         if budget_plan.status != 'OPEN':
             return Response(
                 {'error': f'Plan must be OPEN to submit. Current status: {budget_plan.status}'},
@@ -259,6 +202,7 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
     def approve(self, request, pk=None):
         """Approve a budget plan (admin only)."""
         budget_plan = self.get_object()
+        assert_month_open_for_plans(budget_plan.period)
         
         # Check if user is admin
         if request.user.role != 'admin' and not request.user.is_superuser:
@@ -286,22 +230,29 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='report')
     def report(self, request, pk=None):
         """Get budget plan report with plan/fact/balance/percent."""
-        from django.db.models import Sum, Q
-        from decimal import Decimal
+        from django.db.models import Sum
         
         budget_plan = self.get_object()
         
         # Get all budget lines grouped by category
-        budget_lines = BudgetLine.objects.filter(plan=budget_plan).values('category').annotate(
-            planned=Sum('amount_planned')
+        budget_lines = (
+            BudgetLine.objects.filter(plan=budget_plan)
+            .values('category')
+            .annotate(planned=Sum('amount_planned'))
         )
-        planned_by_category = {item['category']: float(item['planned']) for item in budget_lines}
+        planned_by_category = {
+            item['category']: float(item['planned']) for item in budget_lines
+        }
         
         # Get all budget expenses grouped by category
-        budget_expenses = BudgetExpense.objects.filter(plan=budget_plan).values('category').annotate(
-            spent=Sum('amount_spent')
+        budget_expenses = (
+            BudgetExpense.objects.filter(plan=budget_plan)
+            .values('category')
+            .annotate(spent=Sum('amount_spent'))
         )
-        spent_by_category = {item['category']: float(item['spent']) for item in budget_expenses}
+        spent_by_category = {
+            item['category']: float(item['spent']) for item in budget_expenses
+        }
         
         # Get all unique category IDs
         all_category_ids = set(planned_by_category.keys()) | set(spent_by_category.keys())
@@ -319,20 +270,24 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
             balance = planned - spent
             percent = (spent / planned * 100) if planned > 0 else None
             
-            rows.append({
-                'category_id': category_id,
-                'category_name': category.name,
-                'planned': str(Decimal(str(planned)).quantize(Decimal('0.01'))),
-                'spent': str(Decimal(str(spent)).quantize(Decimal('0.01'))),
-                'balance': str(Decimal(str(balance)).quantize(Decimal('0.01'))),
-                'percent': round(percent, 2) if percent is not None else None,
-            })
+            rows.append(
+                {
+                    'category_id': category_id,
+                    'category_name': category.name,
+                    'planned': round(planned, 2),
+                    'spent': round(spent, 2),
+                    'balance': round(balance, 2),
+                    'percent': round(percent, 2) if percent is not None else None,
+                }
+            )
         
         # Calculate totals
-        total_planned = sum(planned_by_category.values())
-        total_spent = sum(spent_by_category.values())
-        total_balance = total_planned - total_spent
-        total_percent = (total_spent / total_planned * 100) if total_planned > 0 else None
+        total_planned = float(sum(planned_by_category.values()))
+        total_spent = float(sum(spent_by_category.values()))
+        total_balance = float(total_planned - total_spent)
+        total_percent = (
+            (total_spent / total_planned * 100) if total_planned > 0 else None
+        )
         
         return Response({
             'plan': {
@@ -343,9 +298,9 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
             },
             'rows': rows,
             'totals': {
-                'planned': str(Decimal(str(total_planned)).quantize(Decimal('0.01'))),
-                'spent': str(Decimal(str(total_spent)).quantize(Decimal('0.01'))),
-                'balance': str(Decimal(str(total_balance)).quantize(Decimal('0.01'))),
+                'planned': round(total_planned, 2),
+                'spent': round(total_spent, 2),
+                'balance': round(total_balance, 2),
                 'percent': round(total_percent, 2) if total_percent is not None else None,
             },
         }, status=status.HTTP_200_OK)
@@ -365,122 +320,79 @@ class BudgetLineViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         queryset = queryset.select_related('plan', 'plan__project', 'category', 'plan__period')
         
-        # Role-based filtering
-        user_role = self.request.user.role if self.request.user.is_authenticated else None
-        
-        # Foreman: only see lines for assigned projects
-        if user_role == 'foreman':
-            assigned_project_ids = ProjectAssignment.objects.filter(
-                prorab=self.request.user
-            ).values_list('project_id', flat=True)
-            queryset = queryset.filter(plan__project_id__in=assigned_project_ids)
-        # Admin and Director: see all lines
-        
+        # Admin and Director: see all lines (foreman has no access via permission)
         return queryset
-    
+
+    @action(detail=False, methods=['post'], url_path='bulk-upsert')
+    def bulk_upsert(self, request):
+        """Atomic bulk upsert of budget lines for a plan."""
+        serializer = BulkUpsertBudgetLinesSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+        plan = validated_data['plan']
+
+        created = updated = deleted = 0
+        with transaction.atomic():
+            for item in validated_data['items']:
+                category = item['category']
+                amount_planned = item.get('amount_planned')
+                note = item.get('note') or ''
+
+                # Delete-on-zero: empty or 0 -> delete existing line
+                if amount_planned is None or amount_planned == 0:
+                    line = BudgetLine.objects.filter(plan=plan, category=category).first()
+                    if line:
+                        line.delete()
+                        deleted += 1
+                    continue
+
+                line, was_created = BudgetLine.objects.get_or_create(
+                    plan=plan,
+                    category=category,
+                    defaults={'amount_planned': amount_planned, 'note': note},
+                )
+                if was_created:
+                    created += 1
+                else:
+                    line.amount_planned = amount_planned
+                    line.note = note
+                    line.save()
+                    updated += 1
+
+            lines = BudgetLine.objects.filter(plan=plan).select_related(
+                'category', 'plan'
+            ).order_by('category__name')
+            lines_serializer = BudgetLineSerializer(lines, many=True)
+
+        return Response({
+            'plan': plan.id,
+            'updated': updated,
+            'created': created,
+            'deleted': deleted,
+            'lines': lines_serializer.data,
+        }, status=status.HTTP_200_OK)
+
     def perform_create(self, serializer):
-        """Create budget line with validation."""
-        plan = serializer.validated_data.get('plan')
-        user_role = self.request.user.role
-        
-        # Admin: always allowed
-        if user_role == 'admin' or self.request.user.is_superuser:
-            serializer.save()
-            return
-        
-        # Foreman: only if plan.status == OPEN and assigned to project
-        if user_role == 'foreman':
-            if plan.status != 'OPEN':
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({
-                    'plan': f'Cannot add budget line. Plan status must be OPEN. Current status: {plan.status}'
-                })
-            
-            # Check if foreman is assigned to the project
-            if plan.project:
-                if not ProjectAssignment.objects.filter(
-                    project=plan.project,
-                    prorab=self.request.user
-                ).exists():
-                    from rest_framework.exceptions import PermissionDenied
-                    raise PermissionDenied('You are not assigned to this project.')
-            else:
-                # Office/charity plans: foreman cannot create lines
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Foremen can only add lines to project plans.')
-        
+        """Create budget line (permission: admin only)."""
+        plan = serializer.validated_data.get('plan') or getattr(serializer.instance, 'plan', None)
+        if plan:
+            assert_month_open_for_plans(plan.period)
         serializer.save()
     
     def perform_update(self, serializer):
-        """Update budget line - admin always allowed, foreman only when plan status is OPEN."""
-        user_role = self.request.user.role
-        instance = serializer.instance if serializer.instance else self.get_object()
-        plan = instance.plan
-        
-        # Admin: always allowed
-        if user_role == 'admin' or self.request.user.is_superuser:
-            serializer.save()
-            return
-        
-        # Foreman: only if plan.status == OPEN and assigned to project
-        if user_role == 'foreman':
-            if plan.status != 'OPEN':
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied(f'Cannot update budget line. Plan status must be OPEN. Current status: {plan.status}')
-            
-            # Check if foreman is assigned to the project
-            if plan.project:
-                if not ProjectAssignment.objects.filter(
-                    project=plan.project,
-                    prorab=self.request.user
-                ).exists():
-                    from rest_framework.exceptions import PermissionDenied
-                    raise PermissionDenied('You are not assigned to this project.')
-            else:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Foremen can only update lines in project plans.')
-            
-            serializer.save()
-            return
-        
-        # Director and others: not allowed
-        from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied('You do not have permission to update budget lines.')
+        """Update budget line (permission: admin only)."""
+        plan = serializer.validated_data.get('plan') or getattr(serializer.instance, 'plan', None)
+        if plan:
+            assert_month_open_for_plans(plan.period)
+        serializer.save()
     
     def perform_destroy(self, instance):
-        """Delete budget line - admin always allowed, foreman only when plan status is OPEN."""
-        user_role = self.request.user.role
-        plan = instance.plan
-        
-        # Admin: always allowed
-        if user_role == 'admin' or self.request.user.is_superuser:
-            instance.delete()
-            return
-        
-        # Foreman: only if plan.status == OPEN and assigned to project
-        if user_role == 'foreman':
-            if plan.status != 'OPEN':
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied(f'Cannot delete budget line. Plan status must be OPEN. Current status: {plan.status}')
-            
-            # Check if foreman is assigned to the project
-            if plan.project:
-                if not ProjectAssignment.objects.filter(
-                    project=plan.project,
-                    prorab=self.request.user
-                ).exists():
-                    from rest_framework.exceptions import PermissionDenied
-                    raise PermissionDenied('You are not assigned to this project.')
-            else:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Foremen can only delete lines in project plans.')
-            
-            instance.delete()
-            return
-        
-        # Director and others: not allowed
-        from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied('You do not have permission to delete budget lines.')
+        """Delete budget line (permission: admin only)."""
+        assert_month_open_for_plans(instance.plan.period)
+        instance.delete()
 
 
 class BudgetExpenseViewSet(viewsets.ModelViewSet):
@@ -493,20 +405,9 @@ class BudgetExpenseViewSet(viewsets.ModelViewSet):
     filterset_fields = ['plan', 'category']
     
     def get_queryset(self):
-        """Get queryset with role-based filtering."""
+        """Get queryset (foreman has no access via permission)."""
         queryset = super().get_queryset()
         queryset = queryset.select_related('plan', 'plan__project', 'plan__period', 'category', 'created_by')
-        
-        # Role-based filtering
-        user_role = self.request.user.role if self.request.user.is_authenticated else None
-        
-        # Foreman: only see expenses for assigned projects
-        if user_role == 'foreman':
-            assigned_project_ids = ProjectAssignment.objects.filter(
-                prorab=self.request.user
-            ).values_list('project_id', flat=True)
-            queryset = queryset.filter(plan__project_id__in=assigned_project_ids)
-        # Admin and Director: see all expenses
         
         # Filter by project (via plan__project)
         project = self.request.query_params.get('project')
@@ -524,19 +425,25 @@ class BudgetExpenseViewSet(viewsets.ModelViewSet):
         """Create budget expense with auto-set created_by."""
         serializer.save(created_by=self.request.user)
 
+    def perform_update(self, serializer):
+        """Update budget expense - blocked when related month is locked or missing."""
+        plan = serializer.validated_data.get('plan') or getattr(serializer.instance, 'plan', None)
+        if plan:
+            assert_month_open_for_plans(plan.period)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        """Delete budget expense - blocked when related month is locked or missing."""
+        assert_month_open_for_plans(instance.plan.period)
+        instance.delete()
+
 
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     """ViewSet for ExpenseCategory."""
     
     queryset = ExpenseCategory.objects.all()  # Filtering handled in get_queryset()
     serializer_class = ExpenseCategorySerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_permissions(self):
-        """Admin only for create/update/delete, authenticated for read."""
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsAdmin()]
-        return [IsAuthenticated()]
+    permission_classes = [ExpenseCategoryPermission]
     
     def get_queryset(self):
         """Filter categories by scope, parent, is_active, and ordering."""
@@ -597,35 +504,43 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
 
 
 class MonthPeriodViewSet(viewsets.ModelViewSet):
-    """ViewSet for MonthPeriod - admin/director can manage month periods."""
+    """ViewSet for MonthPeriod - admin can manage, director/foreman read-only."""
     
     queryset = MonthPeriod.objects.all()
     serializer_class = MonthPeriodSerializer
-    permission_classes = [IsAuthenticated, IsDirector]
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['month', 'status']
-    lookup_field = 'month'
-    lookup_value_regex = r'[0-9]{4}-[0-9]{2}'  # YYYY-MM format
+    # Use default lookup_field='pk' to support {id} in URLs for actions
     
     def get_queryset(self):
         """Get queryset ordered by month descending."""
         queryset = super().get_queryset()
         return queryset.order_by('-month')
     
-    def get_object(self):
-        """Get object by month string instead of ID."""
-        month = self.kwargs.get('month')
-        if month:
-            obj = MonthPeriod.objects.filter(month=month).first()
-            if not obj:
-                from rest_framework.exceptions import NotFound
-                raise NotFound(f'MonthPeriod with month={month} not found.')
-            self.check_object_permissions(self.request, obj)
-            return obj
-        return super().get_object()
+    @action(detail=True, methods=['post'], url_path='open')
+    def open(self, request, pk=None):
+        """Open a month period (set status to OPEN)."""
+        month_period = self.get_object()
+        
+        if month_period.status == 'OPEN':
+            return Response(
+                {'error': 'Month period status is already OPEN.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        month_period.status = 'OPEN'
+        month_period.save()
+        
+        # Sync FinancePeriod status
+        from apps.finance.services import FinancePeriodService
+        FinancePeriodService.sync_status_from_month_period(month_period)
+        
+        serializer = self.get_serializer(month_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['patch'], url_path='unlock')
-    def unlock(self, request, month=None):
+    @action(detail=True, methods=['post'], url_path='unlock')
+    def unlock(self, request, pk=None):
         """Unlock a month period (set status to OPEN)."""
         month_period = self.get_object()
         
@@ -638,11 +553,15 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
         month_period.status = 'OPEN'
         month_period.save()
         
+        # Sync FinancePeriod status
+        from apps.finance.services import FinancePeriodService
+        FinancePeriodService.sync_status_from_month_period(month_period)
+        
         serializer = self.get_serializer(month_period)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['patch'], url_path='lock')
-    def lock(self, request, month=None):
+    @action(detail=True, methods=['post'], url_path='lock')
+    def lock(self, request, pk=None):
         """Lock a month period (set status to LOCKED)."""
         month_period = self.get_object()
         
@@ -654,6 +573,10 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
         
         month_period.status = 'LOCKED'
         month_period.save()
+        
+        # Sync FinancePeriod status
+        from apps.finance.services import FinancePeriodService
+        FinancePeriodService.sync_status_from_month_period(month_period)
         
         serializer = self.get_serializer(month_period)
         return Response(serializer.data, status=status.HTTP_200_OK)

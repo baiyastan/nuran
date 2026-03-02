@@ -1,0 +1,25 @@
+[
+  {
+    "id": "deploy",
+    "execute-command": "/var/www/nuran/scripts/deploy-trigger.sh",
+    "command-working-directory": "/var/www/nuran",
+    "pass-headers-to-command": true,
+    "pass-arguments-to-command": [
+      { "source": "raw-request-body" }
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "value",
+        "value": "refs/heads/main",
+        "parameter": {
+          "source": "payload",
+          "name": "ref"
+        }
+      }
+    },
+    "incoming-payload-content-type": "application/json",
+    "http-methods": ["POST"],
+    "response-message": "Deploy triggered (branch main only). Check logs if needed.",
+    "include-command-output-in-response": false
+  }
+]

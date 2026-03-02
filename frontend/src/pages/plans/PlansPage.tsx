@@ -10,7 +10,7 @@ import { formatDate } from '@/shared/lib/utils'
 import './PlansPage.css'
 
 export function PlansPage() {
-  const [filters, setFilters] = useState<PlanListParams>({})
+  const [filters] = useState<PlanListParams>({})
   
   const { data, isLoading, error } = useListPlansQuery(filters)
   const [deletePlan] = useDeletePlanMutation()

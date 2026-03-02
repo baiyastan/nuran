@@ -1,0 +1,36 @@
+.income-plan-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-error {
+  color: #dc3545;
+  font-size: 14px;
+  padding: 0.5rem;
+  background: #f8d7da;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.month-period-error {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+}
+
+.month-period-error-message {
+  color: #856404;
+  font-size: 14px;
+  margin-bottom: 0.75rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+

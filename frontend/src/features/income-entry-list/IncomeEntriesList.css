@@ -1,0 +1,28 @@
+.income-entries-list {
+  padding: 0;
+}
+
+.income-entries-list .list-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.income-entries-list .loading,
+.income-entries-list .error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.income-entries-list .empty-state {
+  padding: 2rem;
+  text-align: center;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.income-entries-list .empty-state p {
+  margin-bottom: 1rem;
+  color: #666;
+}
+

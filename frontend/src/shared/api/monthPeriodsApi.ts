@@ -8,12 +8,6 @@ export interface MonthPeriod {
   updated_at: string
 }
 
-export interface MonthPeriodListParams {
-  month?: string
-  status?: string
-  page?: number
-}
-
 export interface MonthPeriodListResponse {
   count: number
   next: string | null
@@ -23,18 +17,27 @@ export interface MonthPeriodListResponse {
 
 export const monthPeriodsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    listMonthPeriods: builder.query<MonthPeriodListResponse, MonthPeriodListParams | void>({
-      query: (params) => ({
+    getMonthPeriod: builder.query<MonthPeriod | null, string>({
+      query: (month) => ({
         url: '/budgets/month-periods/',
-        params,
+        params: { month },
+      }),
+      transformResponse: (response: MonthPeriodListResponse, _meta: unknown, _arg: string) => {
+        // API returns a list, but we want a single item
+        if (response.results && response.results.length > 0) {
+          return response.results[0]
+        }
+        return null // Return null if not found (treated as LOCKED)
+      },
+      providesTags: (_result, _error, month) => [{ type: 'MonthPeriods', id: month }],
+    }),
+    listMonthPeriods: builder.query<MonthPeriodListResponse, void>({
+      query: () => ({
+        url: '/budgets/month-periods/',
       }),
       providesTags: ['MonthPeriods'],
     }),
-    getMonthPeriod: builder.query<MonthPeriod, string>({
-      query: (month) => ({ url: `/budgets/month-periods/${month}/` }),
-      providesTags: (result, error, month) => [{ type: 'MonthPeriods', id: month }],
-    }),
-    createMonthPeriod: builder.mutation<MonthPeriod, { month: string; status?: 'OPEN' | 'LOCKED' }>({
+    createMonthPeriod: builder.mutation<MonthPeriod, { month: string }>({
       query: (body) => ({
         url: '/budgets/month-periods/',
         method: 'POST',
@@ -42,38 +45,44 @@ export const monthPeriodsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['MonthPeriods'],
     }),
-    updateMonthPeriod: builder.mutation<MonthPeriod, { month: string; status: 'OPEN' | 'LOCKED' }>({
-      query: ({ month, ...data }) => ({
-        url: `/budgets/month-periods/${month}/`,
-        method: 'PATCH',
-        data,
+    openMonthPeriod: builder.mutation<MonthPeriod, number>({
+      query: (id) => ({
+        url: `/budgets/month-periods/${id}/open/`,
+        method: 'POST',
       }),
-      invalidatesTags: (result, error, { month }) => [{ type: 'MonthPeriods', id: month }, 'MonthPeriods'],
+      invalidatesTags: (result, _error, _id) => [
+        { type: 'MonthPeriods', id: result?.month },
+        'MonthPeriods',
+      ],
     }),
-    unlockMonthPeriod: builder.mutation<MonthPeriod, string>({
-      query: (month) => ({
-        url: `/budgets/month-periods/${month}/unlock/`,
-        method: 'PATCH',
+    lockMonthPeriod: builder.mutation<MonthPeriod, number>({
+      query: (id) => ({
+        url: `/budgets/month-periods/${id}/lock/`,
+        method: 'POST',
       }),
-      invalidatesTags: (result, error, month) => [{ type: 'MonthPeriods', id: month }, 'MonthPeriods'],
+      invalidatesTags: (result, _error, _id) => [
+        { type: 'MonthPeriods', id: result?.month },
+        'MonthPeriods',
+      ],
     }),
-    lockMonthPeriod: builder.mutation<MonthPeriod, string>({
-      query: (month) => ({
-        url: `/budgets/month-periods/${month}/lock/`,
-        method: 'PATCH',
+    unlockMonthPeriod: builder.mutation<MonthPeriod, number>({
+      query: (id) => ({
+        url: `/budgets/month-periods/${id}/unlock/`,
+        method: 'POST',
       }),
-      invalidatesTags: (result, error, month) => [{ type: 'MonthPeriods', id: month }, 'MonthPeriods'],
+      invalidatesTags: (result, _error, _id) => [
+        { type: 'MonthPeriods', id: result?.month },
+        'MonthPeriods',
+      ],
     }),
   }),
 })
 
 export const {
-  useListMonthPeriodsQuery,
   useGetMonthPeriodQuery,
+  useListMonthPeriodsQuery,
   useCreateMonthPeriodMutation,
-  useUpdateMonthPeriodMutation,
-  useUnlockMonthPeriodMutation,
+  useOpenMonthPeriodMutation,
   useLockMonthPeriodMutation,
+  useUnlockMonthPeriodMutation,
 } = monthPeriodsApi
-
-

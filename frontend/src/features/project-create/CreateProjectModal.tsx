@@ -77,7 +77,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       await createProject(payload).unwrap()
       
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err)
       setApiError(errorMessage || t('projects.form.createError'))
     }

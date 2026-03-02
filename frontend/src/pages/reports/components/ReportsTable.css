@@ -1,0 +1,23 @@
+.table-loading {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+.table-empty-message {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.table-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.row-overspend {
+  background: rgba(220, 38, 38, 0.06);
+}
+
+

@@ -1,0 +1,26 @@
+.edit-finance-period-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.edit-finance-period-form .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-finance-period-form .form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.edit-finance-period-form .form-error {
+  color: #dc3545;
+  padding: 0.75rem;
+  background-color: #f8d7da;
+  border-radius: 4px;
+}
+

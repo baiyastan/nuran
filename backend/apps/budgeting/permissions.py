@@ -2,11 +2,37 @@
 Budgeting permissions.
 """
 from rest_framework import permissions
-from apps.projects.models import ProjectAssignment
+
+from .models import BudgetPlan
+
+
+class IsAdminOrReadOnly(permissions.BasePermission):
+    """Admin can write, others read-only."""
+    
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        
+        # Superuser override
+        if request.user.is_superuser:
+            return True
+        
+        # Admin: full CRUD
+        if request.user.role == 'admin':
+            return True
+        
+        # Director and Foreman: read-only (SAFE_METHODS only)
+        if request.user.role in ('director', 'foreman'):
+            return request.method in permissions.SAFE_METHODS
+        
+        return False
 
 
 class BudgetPlanPermission(permissions.BasePermission):
-    """Permission for BudgetPlan operations."""
+    """Permission for BudgetPlan operations.
+    
+    Foreman: access only for scope=PROJECT. OFFICE/CHARITY remain restricted.
+    """
     
     def has_permission(self, request, view):
         """Check if user has permission for the action."""
@@ -27,14 +53,14 @@ class BudgetPlanPermission(permissions.BasePermission):
         if user_role == 'admin':
             return True
         
-        # Foreman: read access to assigned projects, can create/update when conditions met
+        # Foreman: PROJECT scope only, no assignment required
         if user_role == 'foreman':
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            # Foreman can create/update plans (validated in view)
-            if request.method in ('POST', 'PUT', 'PATCH'):
-                return True
-            # Foreman cannot delete plans
+            if view.action == 'list':
+                return request.query_params.get('scope') == 'PROJECT'
+            if view.action == 'create':
+                return request.data.get('scope') == 'PROJECT'
+            if view.action in ('retrieve', 'update', 'partial_update', 'destroy'):
+                return True  # has_object_permission will restrict
             return False
         
         return False
@@ -58,63 +84,63 @@ class BudgetPlanPermission(permissions.BasePermission):
         if user_role == 'admin':
             return True
         
-        # Foreman: can see and update plans for assigned projects when status is OPEN
+        # Foreman: only PROJECT scope
         if user_role == 'foreman':
-            # Check if foreman is assigned to the project
-            if obj.project:
-                is_assigned = ProjectAssignment.objects.filter(
-                    project=obj.project,
-                    prorab=request.user
-                ).exists()
-                if not is_assigned:
-                    return False
-            else:
-                # Office/charity plans: foreman cannot see them
-                return False
-            
-            # Read operations: allowed if assigned
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            
-            # Update operations: only allowed when plan status is OPEN
-            if request.method in ('PUT', 'PATCH'):
-                return obj.status == 'OPEN'
-            
-            # Delete: not allowed
-            return False
+            return obj.scope == 'PROJECT'
         
         return False
 
 
 class BudgetLinePermission(permissions.BasePermission):
-    """Permission for BudgetLine operations."""
+    """Permission for BudgetLine operations.
+    
+    Foreman: access only when plan.scope == 'PROJECT'.
+    """
+    
+    def _get_plan_id(self, request, view):
+        """Extract plan ID from request (query or body)."""
+        if view.action == 'list':
+            val = request.query_params.get('plan')
+        elif view.action in ('create', 'bulk_upsert'):
+            val = request.data.get('plan')
+        else:
+            return None
+        if val is None:
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
+    
+    def _is_project_plan(self, plan_id):
+        """Check if plan has scope PROJECT."""
+        if plan_id is None:
+            return False
+        scope = BudgetPlan.objects.filter(pk=plan_id).values_list('scope', flat=True).first()
+        return scope == 'PROJECT'
     
     def has_permission(self, request, view):
         """Check if user has permission for the action."""
         if not (request.user and request.user.is_authenticated):
             return False
         
-        # Superuser override
         if request.user.is_superuser:
             return True
         
         user_role = request.user.role
         
-        # Director: read-only access
         if user_role == 'director':
             return request.method in permissions.SAFE_METHODS
         
-        # Admin: full access
         if user_role == 'admin':
             return True
         
-        # Foreman: can create (with conditions checked in view), read assigned projects
         if user_role == 'foreman':
-            if request.method in permissions.SAFE_METHODS:
+            if view.action in ('retrieve', 'update', 'partial_update', 'destroy'):
                 return True
-            if request.method == 'POST':
-                return True  # Will be validated in view
-            # Update/delete: admin only
+            if view.action in ('list', 'create', 'bulk_upsert'):
+                plan_id = self._get_plan_id(request, view)
+                return self._is_project_plan(plan_id)
             return False
         
         return False
@@ -124,42 +150,19 @@ class BudgetLinePermission(permissions.BasePermission):
         if not (request.user and request.user.is_authenticated):
             return False
         
-        # Superuser override
         if request.user.is_superuser:
             return True
         
         user_role = request.user.role
         
-        # Director: read-only
         if user_role == 'director':
             return request.method in permissions.SAFE_METHODS
         
-        # Admin: full access (can edit/delete regardless of plan status)
         if user_role == 'admin':
             return True
         
-        # Foreman: can read and update/delete when plan status is OPEN and assigned
         if user_role == 'foreman':
-            # Check if foreman is assigned to the plan's project
-            if obj.plan.project:
-                is_assigned = ProjectAssignment.objects.filter(
-                    project=obj.plan.project,
-                    prorab=request.user
-                ).exists()
-                if not is_assigned:
-                    return False
-            else:
-                return False
-            
-            # Read operations: allowed if assigned
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            
-            # Update/delete operations: only allowed when plan status is OPEN
-            if request.method in ('PUT', 'PATCH', 'DELETE'):
-                return obj.plan.status == 'OPEN'
-            
-            return False
+            return obj.plan.scope == 'PROJECT'
         
         return False
 
@@ -186,10 +189,7 @@ class BudgetExpensePermission(permissions.BasePermission):
         if user_role == 'admin':
             return True
         
-        # Foreman: read-only, only for assigned project plans
-        if user_role == 'foreman':
-            return request.method in permissions.SAFE_METHODS
-        
+        # Foreman: no access
         return False
     
     def has_object_permission(self, request, view, obj):
@@ -211,22 +211,53 @@ class BudgetExpensePermission(permissions.BasePermission):
         if user_role == 'admin':
             return True
         
-        # Foreman: read-only, only for assigned project plans
-        if user_role == 'foreman':
-            # Check if foreman is assigned to the plan's project
-            if obj.plan.project:
-                is_assigned = ProjectAssignment.objects.filter(
-                    project=obj.plan.project,
-                    prorab=request.user
-                ).exists()
-                if not is_assigned:
-                    return False
-            else:
-                # Office/charity plans: foreman cannot see them
-                return False
-            
-            # Read operations: allowed if assigned
-            return request.method in permissions.SAFE_METHODS
-        
+        # Foreman: no access
         return False
+
+
+class ExpenseCategoryPermission(permissions.BasePermission):
+    """Permission for ExpenseCategory operations.
+    
+    Rules:
+    - admin: FULL ACCESS (GET + POST + PATCH + DELETE)
+    - director: READ ONLY (GET, HEAD, OPTIONS)
+    - foreman: READ ONLY for scope=project (list/retrieve) to select categories for plan lines
+    """
+    
+    def has_permission(self, request, view):
+        # 1) If user is not authenticated → deny
+        if not (request.user and request.user.is_authenticated):
+            return False
+        
+        # Superuser override
+        if request.user.is_superuser:
+            return True
+        
+        user_role = request.user.role
+        
+        # 2) SAFE METHODS (GET, HEAD, OPTIONS): admin, director, or foreman with scope=project
+        if request.method in permissions.SAFE_METHODS:
+            if user_role in ('admin', 'director'):
+                return True
+            if user_role == 'foreman':
+                # List: require scope=project in query
+                if view.action == 'list':
+                    return request.query_params.get('scope') == 'project'
+                # Retrieve: allow; has_object_permission will check obj.scope
+                if view.action == 'retrieve':
+                    return True
+                return False
+        
+        # 3) WRITE METHODS: allow ONLY if role == 'admin'
+        return user_role == 'admin'
+    
+    def has_object_permission(self, request, view, obj):
+        """Foreman can only access categories with scope=project."""
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        if request.user.role == 'foreman':
+            return request.method in permissions.SAFE_METHODS and obj.scope == 'project'
+        return True  # admin/director handled by has_permission
 

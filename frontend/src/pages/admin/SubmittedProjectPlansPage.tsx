@@ -10,7 +10,8 @@ import { useListProjectsQuery } from '@/shared/api/projectsApi'
 import { useListBudgetLinesQuery } from '@/shared/api/budgetingApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
-import { formatCurrency, getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage } from '@/shared/lib/utils'
+import { formatMoneyKGS } from '@/shared/utils/formatMoney'
 import './SubmittedProjectPlansPage.css'
 
 interface ApprovalFormState {
@@ -22,6 +23,7 @@ interface ApprovalFormState {
 function SubmittedProjectPlansPage() {
   const { t } = useTranslation()
   const [filters, setFilters] = useState<BudgetPlanListParams>({
+    month: new Date().toISOString().slice(0, 7),
     scope: 'PROJECT',
     status: 'SUBMITTED',
   })
@@ -31,20 +33,33 @@ function SubmittedProjectPlansPage() {
     error: null,
   })
 
-  const { data, isLoading, error, refetch } = useListBudgetPlansQuery(filters)
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useListBudgetPlansQuery(filters, {
+    refetchOnMountOrArgChange: true,
+  })
   const { data: projectsData } = useListProjectsQuery()
   const [approveBudgetPlan, { isLoading: isApproving }] = useApproveBudgetPlanMutation()
 
   // Fetch all budget lines (we'll filter by plan IDs client-side)
-  const { data: allLinesData } = useListBudgetLinesQuery()
+  const { data: allLinesData } = useListBudgetLinesQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  })
 
   // Calculate totals for each plan
   const finalTotals = useMemo(() => {
     const totals: Record<number, number> = {}
-    const planIds = data?.results.map((p) => p.id) || []
+    // Handle both {results: []} and [] response shapes
+    const plans = Array.isArray(data) ? data : data?.results || []
+    const planIds = plans.map((p) => p.id)
     
     // Filter lines for our plans and calculate totals
-    allLinesData?.results.forEach((line) => {
+    const lines = Array.isArray(allLinesData) ? allLinesData : allLinesData?.results || []
+    lines.forEach((line) => {
       if (planIds.includes(line.plan)) {
         if (!totals[line.plan]) {
           totals[line.plan] = 0
@@ -71,7 +86,7 @@ function SubmittedProjectPlansPage() {
       }).unwrap()
       setApprovalForm({ planId: null, comments: '', error: null })
       refetch()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setApprovalForm((prev) => ({
         ...prev,
         error: getErrorMessage(err),
@@ -100,58 +115,63 @@ function SubmittedProjectPlansPage() {
     { key: 'actions', label: t('submittedPlans.columns.actions') },
   ]
 
-  const tableData =
-    data?.results.map((plan: BudgetPlan) => ({
-      ...plan,
-      project: plan.project_name || '-',
-      month: plan.period_month || '-',
-      totalPlanned: formatCurrency(finalTotals[plan.id] || 0),
-      status: getStatusBadge(plan.status),
-      actions:
-        approvalForm.planId === plan.id ? (
-          <div className="approval-form">
-            {approvalForm.error && (
-              <div className="approval-error">{approvalForm.error}</div>
-            )}
-            <textarea
-              placeholder={t('submittedPlans.approve.commentsPlaceholder')}
-              value={approvalForm.comments}
-              onChange={(e) =>
-                setApprovalForm((prev) => ({
-                  ...prev,
-                  comments: e.target.value,
-                }))
-              }
-              rows={3}
-              className="approval-comments"
-            />
-            <div className="approval-actions">
-              <Button
-                onClick={handleApproveSubmit}
-                disabled={isApproving}
-                variant="primary"
-              >
-                {isApproving
-                  ? t('submittedPlans.buttons.approving')
-                  : t('submittedPlans.buttons.approve')}
-              </Button>
-              <Button
-                onClick={handleApproveCancel}
-                disabled={isApproving}
-                variant="secondary"
-              >
-                {t('submittedPlans.buttons.cancel')}
-              </Button>
-            </div>
+  // Handle both {results: []} and [] response shapes
+  const plans = Array.isArray(data) ? data : data?.results || []
+  const tableData = plans.map((plan: BudgetPlan) => ({
+    ...plan,
+    project: plan.project_name || '-',
+    month: plan.period_month || '-',
+    totalPlanned: formatMoneyKGS(finalTotals[plan.id] || 0),
+    status: getStatusBadge(plan.status),
+    actions:
+      approvalForm.planId === plan.id ? (
+        <div className="approval-form">
+          {approvalForm.error && (
+            <div className="approval-error">{approvalForm.error}</div>
+          )}
+          <textarea
+            placeholder={t('submittedPlans.approve.commentsPlaceholder')}
+            value={approvalForm.comments}
+            onChange={(e) =>
+              setApprovalForm((prev) => ({
+                ...prev,
+                comments: e.target.value,
+              }))
+            }
+            rows={3}
+            className="approval-comments"
+          />
+          <div className="approval-actions">
+            <Button
+              onClick={handleApproveSubmit}
+              disabled={isApproving}
+              variant="primary"
+            >
+              {isApproving
+                ? t('submittedPlans.buttons.approving')
+                : t('submittedPlans.buttons.approve')}
+            </Button>
+            <Button
+              onClick={handleApproveCancel}
+              disabled={isApproving}
+              variant="secondary"
+            >
+              {t('submittedPlans.buttons.cancel')}
+            </Button>
           </div>
-        ) : (
-          <Button onClick={() => handleApprove(plan.id)} variant="primary" size="small">
-            {t('submittedPlans.buttons.approve')}
-          </Button>
-        ),
-    })) || []
+        </div>
+      ) : (
+        <Button onClick={() => handleApprove(plan.id)} variant="primary" size="small">
+          {t('submittedPlans.buttons.approve')}
+        </Button>
+      ),
+  }))
 
-  const errorStatus = (error as any)?.status
+  let errorStatus: number | undefined
+  if (error && typeof error === 'object' && error !== null && 'status' in error) {
+    const status = (error as Record<string, unknown>).status
+    errorStatus = typeof status === 'number' ? status : undefined
+  }
 
   if (error) {
     if (errorStatus === 401) {
@@ -199,7 +219,7 @@ function SubmittedProjectPlansPage() {
             onChange={(e) =>
               setFilters((prev) => ({
                 ...prev,
-                month: e.target.value || undefined,
+                month: (e.target.value || prev.month) as string,
               }))
             }
           />
@@ -218,7 +238,7 @@ function SubmittedProjectPlansPage() {
             }
           >
             <option value="">-</option>
-            {projectsData?.results.map((project) => (
+            {(Array.isArray(projectsData) ? projectsData : projectsData?.results || []).map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -244,9 +264,9 @@ function SubmittedProjectPlansPage() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || isFetching ? (
         <div className="loading">{t('submittedPlans.loading')}</div>
-      ) : !data?.results.length ? (
+      ) : plans.length === 0 ? (
         <div className="empty-state">{t('submittedPlans.emptyState')}</div>
       ) : (
         <Table columns={columns} data={tableData} />

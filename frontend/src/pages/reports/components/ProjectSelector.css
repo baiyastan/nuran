@@ -1,0 +1,27 @@
+.project-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.project-selector label {
+  font-weight: 500;
+}
+
+.required {
+  color: #dc3545;
+}
+
+.project-select {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  min-width: 200px;
+}
+
+.project-selector-loading {
+  padding: 0.5rem;
+  color: #666;
+}
+

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Select } from '@/shared/ui/Select/Select'
 import { Button } from '@/shared/ui/Button/Button'
+import { getErrorMessage } from '@/shared/lib/utils'
 import './UserRoleEditor.css'
 
 interface UserRoleEditorProps {
@@ -32,8 +33,8 @@ export function UserRoleEditor({ userId, currentRole, onSave }: UserRoleEditorPr
 
     try {
       await onSave(userId, selectedRole)
-    } catch (err: any) {
-      setError(err.data?.detail || err.message || t('users.saveError'))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || t('users.saveError'))
     } finally {
       setIsSaving(false)
     }

@@ -7,13 +7,12 @@ from .views import (
     PlanPeriodViewSet, PlanItemViewSet,
     ProrabProjectsViewSet, ProrabPlanPeriodsViewSet,
     ProrabPlanViewSet, ProrabPlanItemViewSet, ProrabPlanSubmitView,
-    ActualExpenseViewSet
 )
 
 router = DefaultRouter()
 router.register(r'plan-periods', PlanPeriodViewSet, basename='plan-period')
 router.register(r'plan-items', PlanItemViewSet, basename='plan-item')
-router.register(r'actual-expenses', ActualExpenseViewSet, basename='actual-expense')
+# Legacy expenses endpoint removed: use /api/v1/actual-expenses/ (apps.expenses) keyed by month + scope
 
 # Prorab endpoints
 prorab_router = DefaultRouter()

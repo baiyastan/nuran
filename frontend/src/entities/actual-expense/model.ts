@@ -1,17 +1,11 @@
 export interface ActualExpense {
   id: number
-  project: number
-  project_name: string
-  period?: number
-  period_period?: string
-  prorab_plan?: number
-  prorab_plan_id?: number
-  prorab_plan_item?: number
-  prorab_plan_item_id?: number
-  category?: number
-  category_id?: number
-  category_name?: string
-  name: string
+  month_period: number
+  month_period_month?: string
+  scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
+  category?: number | null
+  category_id?: number | null
+  category_name?: string | null
   amount: string
   spent_at: string
   comment: string
@@ -35,4 +29,3 @@ export interface ProrabPlanExpense {
   spent_at: string
   created_at: string
 }
-

@@ -25,7 +25,7 @@ export function RegisterForm() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && role) {
-      navigate('/plan-periods')
+      navigate('/')
     }
   }, [isAuthenticated, role, navigate])
 
@@ -49,12 +49,18 @@ export function RegisterForm() {
       // Refresh token is in HttpOnly cookie, not in response
       dispatch(setCredentials({ access: result.access, user: result.user }))
       // Redirect after successful registration
-      navigate('/plan-periods')
-    } catch (err: any) {
-      // Handle password confirmation errors specifically
-      const passwordConfirmError = err.data?.password_confirm?.[0]
-      if (passwordConfirmError) {
-        setError(passwordConfirmError)
+      navigate('/')
+    } catch (err: unknown) {
+      const passwordConfirmError =
+        typeof err === 'object' && err !== null && typeof (err as Record<string, unknown>).data === 'object' && (err as Record<string, unknown>).data !== null
+          ? ((err as Record<string, unknown>).data as Record<string, unknown>).password_confirm
+          : undefined
+      const firstPasswordConfirmMessage =
+        Array.isArray(passwordConfirmError) && typeof passwordConfirmError[0] === 'string'
+          ? passwordConfirmError[0]
+          : undefined
+      if (firstPasswordConfirmMessage) {
+        setError(firstPasswordConfirmMessage)
       } else {
         setError(getErrorMessage(err) || 'Registration failed')
       }

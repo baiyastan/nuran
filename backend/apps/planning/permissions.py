@@ -2,7 +2,52 @@
 Planning permissions.
 """
 from rest_framework import permissions
-from core.permissions import IsAdmin, IsDirector, IsForeman
+from rest_framework.exceptions import PermissionDenied
+from apps.projects.models import ProjectAssignment
+from apps.finance.constants import ADMIN_ONLY_MSG
+
+
+# Helper functions
+def _is_safe(request):
+    """Check if request method is safe (read-only)."""
+    return request.method in permissions.SAFE_METHODS
+
+
+def _deny():
+    """Raise PermissionDenied with admin-only message."""
+    raise PermissionDenied(ADMIN_ONLY_MSG)
+
+
+def _is_admin(user):
+    """Check if user is admin or superuser."""
+    return user.role == 'admin' or getattr(user, 'is_superuser', False)
+
+
+def _is_director(user):
+    """Check if user is director."""
+    return user.role == 'director'
+
+
+def _is_foreman(user):
+    """Check if user is foreman."""
+    return user.role == 'foreman'
+
+
+def _foreman_assigned_to_project(user, project):
+    """Check if foreman is assigned to project."""
+    if not project:
+        return False
+    return ProjectAssignment.objects.filter(
+        project=project,
+        prorab=user
+    ).exists()
+
+
+def _foreman_can_see_actual_expense(user, actual_expense):
+    """Check if foreman can see actual expense (project fund_kind and assigned)."""
+    if not actual_expense.finance_period or actual_expense.finance_period.fund_kind != 'project':
+        return False
+    return _foreman_assigned_to_project(user, actual_expense.finance_period.project)
 
 
 class ActualExpensePermission(permissions.BasePermission):
@@ -12,34 +57,44 @@ class ActualExpensePermission(permissions.BasePermission):
         if not (request.user and request.user.is_authenticated):
             return False
         
-        # Admin and director: full CRUD
-        if request.user.role in ('admin', 'director'):
+        # Admin: full CRUD
+        if _is_admin(request.user):
             return True
         
-        # Prorab: read-only (GET only)
-        if request.user.role == 'foreman':
-            return request.method in permissions.SAFE_METHODS
+        # Director: read-only (SAFE_METHODS only)
+        if _is_director(request.user):
+            if _is_safe(request):
+                return True
+            _deny()
+        
+        # Foreman: read-only (SAFE_METHODS only)
+        if _is_foreman(request.user):
+            if _is_safe(request):
+                return True
+            _deny()
         
         # Others: no access
-        return False
+        _deny()
     
     def has_object_permission(self, request, view, obj):
         """Object-level permission check."""
-        # Admin and director: full access
-        if request.user.role in ('admin', 'director'):
+        # Admin: full access
+        if _is_admin(request.user):
             return True
         
-        # Prorab: can only read expenses linked to their own plans
-        if request.user.role == 'foreman':
-            if request.method in permissions.SAFE_METHODS:
-                # Can only see if expense is linked to their plan
-                if obj.prorab_plan and obj.prorab_plan.prorab == request.user:
-                    # Also check that project is not Office (prorab should not see Office expenses)
-                    if obj.project.name.lower() != 'office':
-                        return True
-            return False
+        # Director: read-only (SAFE_METHODS only)
+        if _is_director(request.user):
+            if _is_safe(request):
+                return True
+            _deny()
         
-        return False
+        # Foreman: read-only (SAFE_METHODS only) AND can only see expenses for projects assigned to that foreman
+        if _is_foreman(request.user):
+            if _is_safe(request):
+                return _foreman_can_see_actual_expense(request.user, obj)
+            _deny()
+        
+        _deny()
 
 
 class PlanPeriodPermission(permissions.BasePermission):
@@ -53,12 +108,33 @@ class PlanPeriodPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Create: foreman, director, admin
-        if request.method == 'POST':
-            return request.user.role in ('foreman', 'director', 'admin')
+        # Action POST (submit/approve/lock): admin only
+        if request.method == 'POST' and hasattr(view, 'action') and view.action in ('submit', 'approve', 'lock', 'unlock'):
+            return _is_admin(request.user)
         
-        # Update/Delete: director, admin only
-        return request.user.role in ('director', 'admin')
+        # Regular POST (create): foreman, admin (director is read-only)
+        if request.method == 'POST':
+            return request.user.role in ('foreman', 'admin')
+        
+        # Update/Delete: foreman (object-level check in viewset), director, admin
+        return request.user.role in ('foreman', 'director', 'admin')
+    
+    def has_object_permission(self, request, view, obj):
+        """Object-level permission check."""
+        # Read operations: all authenticated users
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # Action POST (submit/approve/lock): admin only
+        if request.method == 'POST' and hasattr(view, 'action') and view.action in ('submit', 'approve', 'lock', 'unlock'):
+            return _is_admin(request.user)
+        
+        # Regular POST (create): foreman, admin (director is read-only)
+        if request.method == 'POST':
+            return request.user.role in ('foreman', 'admin')
+        
+        # Update/Delete: foreman (object-level check in viewset), director, admin
+        return request.user.role in ('foreman', 'director', 'admin')
 
 
 class PlanItemPermission(permissions.BasePermission):
@@ -72,13 +148,13 @@ class PlanItemPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Create: foreman, director, admin
+        # Create: foreman, admin (director is read-only)
         if request.method == 'POST':
-            return request.user.role in ('foreman', 'director', 'admin')
+            return request.user.role in ('foreman', 'admin')
         
-        # Update: director, admin only (foreman cannot)
+        # Update: foreman, admin, and director (status-based restrictions enforced in has_object_permission)
         if request.method in ('PUT', 'PATCH'):
-            return request.user.role in ('director', 'admin')
+            return request.user.role in ('foreman', 'admin', 'director')
         
         # Delete: admin only
         if request.method == 'DELETE':
@@ -93,16 +169,22 @@ class PlanItemPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Foreman cannot update/delete (append-only)
-        if request.user.role == 'foreman':
+        # Update: foreman, admin, and director (when plan period status is 'draft' or 'open')
+        if request.method in ('PUT', 'PATCH'):
+            if request.user.role in ('foreman', 'admin'):
+                return True
+            # Director can modify when plan period status is 'draft' or 'open' (legacy alias)
+            if request.user.role == 'director':
+                status = obj.plan_period.status
+                return status in ('draft', 'open')
             return False
         
         # Delete: admin only
         if request.method == 'DELETE':
             return request.user.role == 'admin'
         
-        # Update: director and admin can update
-        return request.user.role in ('director', 'admin')
+        # Other methods: admin only
+        return request.user.role == 'admin'
 
 
 class ProrabPlanPermission(permissions.BasePermission):
@@ -177,4 +259,39 @@ class ProrabPlanPermission(permissions.BasePermission):
             return False
         
         return True
+
+
+class ExpensePermission(permissions.BasePermission):
+    """Permission for Expense operations."""
+    
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        
+        # Admin: full CRUD
+        if _is_admin(request.user):
+            return True
+        
+        # Director: read-only (SAFE_METHODS only)
+        if _is_director(request.user):
+            if _is_safe(request):
+                return True
+            _deny()
+        
+        # Others: no access
+        _deny()
+    
+    def has_object_permission(self, request, view, obj):
+        """Object-level permission check."""
+        # Admin: full access
+        if _is_admin(request.user):
+            return True
+        
+        # Director: read-only (SAFE_METHODS only)
+        if _is_director(request.user):
+            if _is_safe(request):
+                return True
+            _deny()
+        
+        _deny()
 

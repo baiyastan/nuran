@@ -4,7 +4,8 @@ export interface PlanItem {
   plan_period_period: string
   project_name: string
   title: string
-  category: string
+  category: number | null
+  category_name?: string | null
   qty: number
   unit: string
   amount: number
@@ -12,4 +13,10 @@ export interface PlanItem {
   created_by: number
   created_by_username: string
   created_at: string
+  /** Optional: approval workflow (if backend provides) */
+  status?: string
+  approval_stage?: string
+  /** Optional: cost/date for display (if backend provides) */
+  cost?: number
+  date?: string
 }

@@ -9,7 +9,7 @@ import './CreateCategoryModal.css'
 interface CreateCategoryModalProps {
   isOpen: boolean
   onClose: () => void
-  defaultScope?: 'project' | 'office'
+  defaultScope?: 'project' | 'office' | 'charity'
 }
 
 export function CreateCategoryModal({
@@ -17,10 +17,10 @@ export function CreateCategoryModal({
   onClose,
   defaultScope = 'project',
 }: CreateCategoryModalProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['categories', 'common'])
   const [formData, setFormData] = useState({
     name: '',
-    scope: defaultScope as 'project' | 'office',
+    scope: defaultScope as 'project' | 'office' | 'charity',
     parent: null as number | null,
   })
   const [error, setError] = useState('')
@@ -59,7 +59,7 @@ export function CreateCategoryModal({
       }).unwrap()
 
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || 'Failed to create category')
     }
   }
@@ -70,14 +70,14 @@ export function CreateCategoryModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Create Category</h2>
+          <h2>{t('categories.modals.create.title')}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="create-category-form">
           <div className="form-field">
             <label className="input-label">
-              Scope <span style={{ color: '#dc3545' }}>*</span>
+              {t('categories.scope')} <span style={{ color: '#dc3545' }}>*</span>
             </label>
             <select
               className="input"
@@ -91,13 +91,13 @@ export function CreateCategoryModal({
               }
               required
             >
-              <option value="project">Project</option>
-              <option value="office">Office</option>
+              <option value="project">{t('categories.project')}</option>
+              <option value="office">{t('categories.office')}</option>
             </select>
           </div>
 
           <div className="form-field">
-            <label className="input-label">Parent Category (optional)</label>
+            <label className="input-label">{t('categories.parentCategory')}</label>
             <select
               className="input"
               value={formData.parent || ''}
@@ -108,7 +108,7 @@ export function CreateCategoryModal({
                 })
               }
             >
-              <option value="">None (Root Category)</option>
+              <option value="">{t('categories.all')}</option>
               {rootCategories?.results.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
@@ -118,7 +118,7 @@ export function CreateCategoryModal({
           </div>
 
           <Input
-            label="Name"
+            label={t('categories.name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={error}
@@ -129,10 +129,10 @@ export function CreateCategoryModal({
 
           <div className="form-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={isLoading || !formData.name.trim()}>
-              {isLoading ? 'Creating...' : 'Create Category'}
+              {isLoading ? t('categories.modals.create.creating') : t('categories.modals.create.create')}
             </Button>
           </div>
         </form>

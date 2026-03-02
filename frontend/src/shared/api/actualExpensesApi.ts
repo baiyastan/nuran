@@ -1,12 +1,13 @@
 import { baseApi } from './baseApi'
-import { ActualExpense, ProrabPlanSummary, ProrabPlanExpense } from '@/entities/actual-expense/model'
+import { ActualExpense } from '@/entities/actual-expense/model'
+
+export type ActualExpenseScope = 'OFFICE' | 'PROJECT' | 'CHARITY'
 
 export interface ActualExpenseListParams {
-  project?: number
-  period?: number
-  prorab_plan?: number
+  month?: string // YYYY-MM (required for list by month+scope)
+  scope?: ActualExpenseScope
+  category?: number
   spent_at?: string
-  search?: string
   ordering?: string
   page?: number
 }
@@ -18,38 +19,47 @@ export interface ActualExpenseListResponse {
   results: ActualExpense[]
 }
 
+/** Payload for creating an actual expense: month + scope (backend resolves month_period). */
+export interface CreateActualExpensePayload {
+  month: string // YYYY-MM
+  scope: ActualExpenseScope
+  category?: number | null
+  amount: number
+  spent_at: string
+  comment: string
+}
+
 export const actualExpensesApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // Admin endpoints
     listActualExpenses: builder.query<ActualExpenseListResponse, ActualExpenseListParams | void>({
       query: (params) => ({
         url: '/actual-expenses/',
         params,
       }),
-      providesTags: ['ActualExpenses'],
+      providesTags: ['ActualExpenses', 'Report'],
     }),
     getActualExpense: builder.query<ActualExpense, number>({
       query: (id) => ({ url: `/actual-expenses/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'ActualExpenses', id }],
+      providesTags: (_result, _error, id) => [{ type: 'ActualExpenses', id }],
     }),
-    createActualExpense: builder.mutation<ActualExpense, Partial<ActualExpense>>({
+    createActualExpense: builder.mutation<ActualExpense, CreateActualExpensePayload>({
       query: (body) => ({
         url: '/actual-expenses/',
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['ActualExpenses', 'ProrabPlan'],
+      invalidatesTags: ['ActualExpenses', 'Report'],
     }),
-    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<ActualExpense> }>({
+    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<Pick<ActualExpense, 'amount' | 'spent_at' | 'comment' | 'category'>> }>({
       query: ({ id, data }) => ({
         url: `/actual-expenses/${id}/`,
         method: 'PATCH',
         data,
       }),
-      invalidatesTags: (result, error, { id }) => [
+      invalidatesTags: (_result, _error, { id }) => [
         { type: 'ActualExpenses', id },
         'ActualExpenses',
-        'ProrabPlan',
+        'Report',
       ],
     }),
     deleteActualExpense: builder.mutation<void, number>({
@@ -57,18 +67,9 @@ export const actualExpensesApi = baseApi.injectEndpoints({
         url: `/actual-expenses/${id}/`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['ActualExpenses', 'ProrabPlan'],
+      invalidatesTags: ['ActualExpenses', 'Report'],
     }),
-    
-    // Prorab endpoints
-    getProrabPlanSummary: builder.query<ProrabPlanSummary, number>({
-      query: (planId) => ({ url: `/prorab/plans/${planId}/summary/` }),
-      providesTags: (result, error, planId) => [{ type: 'ProrabPlan', id: planId }],
-    }),
-    getProrabPlanExpenses: builder.query<ProrabPlanExpense[], number>({
-      query: (planId) => ({ url: `/prorab/plans/${planId}/expenses/` }),
-      providesTags: (result, error, planId) => [{ type: 'ProrabPlan', id: planId }],
-    }),
+
   }),
 })
 
@@ -78,7 +79,6 @@ export const {
   useCreateActualExpenseMutation,
   useUpdateActualExpenseMutation,
   useDeleteActualExpenseMutation,
-  useGetProrabPlanSummaryQuery,
-  useGetProrabPlanExpensesQuery,
 } = actualExpensesApi
 
+export type { ActualExpense } from '@/entities/actual-expense/model'

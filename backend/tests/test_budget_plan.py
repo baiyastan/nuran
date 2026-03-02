@@ -23,28 +23,6 @@ def admin_user(db):
 
 
 @pytest.fixture
-def root_category_office(db):
-    """Create root category with office scope."""
-    return ExpenseCategory.objects.create(
-        name='Office',
-        scope='office',
-        parent=None,
-        is_active=True
-    )
-
-
-@pytest.fixture
-def root_category_project(db):
-    """Create root category with project scope."""
-    return ExpenseCategory.objects.create(
-        name='Object',
-        scope='project',
-        parent=None,
-        is_active=True
-    )
-
-
-@pytest.fixture
 def month_period(db):
     """Create month period."""
     return MonthPeriod.objects.create(
@@ -74,168 +52,163 @@ def api_client(admin_user):
 
 class TestBudgetPlanModel:
     """Test BudgetPlan model validations."""
-    
-    def test_root_category_must_be_root(self, month_period, root_category_office, project):
-        """Test that root_category must have parent=None."""
-        # Create a subcategory
-        subcategory = ExpenseCategory.objects.create(
-            name='Subcategory',
-            scope='office',
-            parent=root_category_office,
-            is_active=True
-        )
-        
-        # Try to create BudgetPlan with subcategory as root_category
+
+    def test_office_scope_project_must_be_null(self, month_period, project):
+        """Test that project must be NULL when scope is OFFICE."""
         budget_plan = BudgetPlan(
             period=month_period,
-            root_category=subcategory,
-            scope='OFFICE',
-            project=None
-        )
-        
-        with pytest.raises(ValidationError) as exc_info:
-            budget_plan.full_clean()
-        
-        assert 'root_category' in str(exc_info.value)
-    
-    def test_office_scope_project_must_be_null(self, month_period, root_category_office, project):
-        """Test that project must be NULL when root_category.scope is 'office'."""
-        budget_plan = BudgetPlan(
-            period=month_period,
-            root_category=root_category_office,
             scope='OFFICE',
             project=project
         )
-        
         with pytest.raises(ValidationError) as exc_info:
             budget_plan.full_clean()
-        
         assert 'project' in str(exc_info.value)
-    
-    def test_project_scope_project_must_not_be_null(self, month_period, root_category_project):
-        """Test that project is required when root_category.scope is 'project'."""
+
+    def test_charity_scope_project_must_be_null(self, month_period, project):
+        """Test that project must be NULL when scope is CHARITY."""
         budget_plan = BudgetPlan(
             period=month_period,
-            root_category=root_category_project,
+            scope='CHARITY',
+            project=project
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            budget_plan.full_clean()
+        assert 'project' in str(exc_info.value)
+
+    def test_project_scope_project_must_be_null(self, month_period, project):
+        """Test that project must be NULL when scope is PROJECT."""
+        budget_plan = BudgetPlan(
+            period=month_period,
             scope='PROJECT',
-            project=None
+            project=project
         )
-        
         with pytest.raises(ValidationError) as exc_info:
             budget_plan.full_clean()
-        
         assert 'project' in str(exc_info.value)
-    
-    def test_scope_must_match_root_category_scope(self, month_period, root_category_office):
-        """Test that scope must match root_category.scope."""
+
+    def test_valid_budget_plan_office(self, month_period):
+        """Test creating valid BudgetPlan for OFFICE scope."""
         budget_plan = BudgetPlan(
             period=month_period,
-            root_category=root_category_office,
-            scope='PROJECT',  # Wrong scope
-            project=None
-        )
-        
-        with pytest.raises(ValidationError) as exc_info:
-            budget_plan.full_clean()
-        
-        assert 'scope' in str(exc_info.value)
-    
-    def test_valid_budget_plan_office(self, month_period, root_category_office):
-        """Test creating valid BudgetPlan for office scope."""
-        budget_plan = BudgetPlan(
-            period=month_period,
-            root_category=root_category_office,
             scope='OFFICE',
             project=None
         )
         budget_plan.full_clean()
         budget_plan.save()
-        
-        assert budget_plan.root_category == root_category_office
         assert budget_plan.scope == 'OFFICE'
         assert budget_plan.project is None
-    
-    def test_valid_budget_plan_project(self, month_period, root_category_project, project):
-        """Test creating valid BudgetPlan for project scope."""
+
+    def test_valid_budget_plan_project(self, month_period):
+        """Test creating valid BudgetPlan for PROJECT scope (project must be null)."""
         budget_plan = BudgetPlan(
             period=month_period,
-            root_category=root_category_project,
             scope='PROJECT',
-            project=project
+            project=None
         )
         budget_plan.full_clean()
         budget_plan.save()
-        
-        assert budget_plan.root_category == root_category_project
         assert budget_plan.scope == 'PROJECT'
-        assert budget_plan.project == project
+        assert budget_plan.project is None
 
 
 class TestBudgetPlanAPI:
     """Test BudgetPlan API endpoints."""
-    
-    def test_create_budget_plan(self, api_client, month_period, root_category_office):
+
+    def test_create_budget_plan(self, api_client, month_period):
         """Test creating a BudgetPlan via API."""
         data = {
             'period': month_period.id,
-            'root_category': root_category_office.id,
             'scope': 'OFFICE',
             'project': None
         }
-        
-        response = api_client.post('/api/budgets/budgets/', data, format='json')
-        
+        response = api_client.post('/api/v1/budgets/budgets/', data, format='json')
         assert response.status_code == 201
-        assert response.data['root_category'] == root_category_office.id
         assert response.data['scope'] == 'OFFICE'
-    
-    def test_get_or_create_budget_plan(self, api_client, month_period, root_category_office):
+
+    def test_get_or_create_budget_plan(self, api_client, month_period):
         """Test get-or-create behavior."""
         data = {
             'period': month_period.id,
-            'root_category': root_category_office.id,
             'scope': 'OFFICE',
             'project': None
         }
-        
-        # First create
-        response1 = api_client.post('/api/budgets/budgets/', data, format='json')
+        response1 = api_client.post('/api/v1/budgets/budgets/', data, format='json')
         assert response1.status_code == 201
-        
-        # Second create (should return existing)
-        response2 = api_client.post('/api/budgets/budgets/', data, format='json')
+        response2 = api_client.post('/api/v1/budgets/budgets/', data, format='json')
         assert response2.status_code == 200
         assert response2.data['id'] == response1.data['id']
-    
-    def test_filter_by_month(self, api_client, month_period, root_category_office):
+
+    def test_filter_by_month(self, api_client, month_period):
         """Test filtering BudgetPlan by month."""
-        # Create BudgetPlan
         BudgetPlan.objects.create(
             period=month_period,
-            root_category=root_category_office,
             scope='OFFICE',
             project=None
         )
-        
-        response = api_client.get('/api/budgets/budgets/?month=2024-01')
-        
+        response = api_client.get('/api/v1/budgets/budgets/?month=2024-01')
         assert response.status_code == 200
         assert len(response.data['results']) == 1
-    
-    def test_filter_by_root_category(self, api_client, month_period, root_category_office, root_category_project):
-        """Test filtering BudgetPlan by root_category."""
-        # Create BudgetPlans
+
+    def test_filter_by_scope(self, api_client, month_period):
+        """Test filtering BudgetPlan by scope."""
         BudgetPlan.objects.create(
             period=month_period,
-            root_category=root_category_office,
             scope='OFFICE',
             project=None
         )
-        
-        response = api_client.get(f'/api/budgets/budgets/?root_category={root_category_office.id}')
-        
+        BudgetPlan.objects.create(
+            period=month_period,
+            scope='PROJECT',
+            project=None
+        )
+        response = api_client.get('/api/v1/budgets/budgets/?scope=OFFICE')
         assert response.status_code == 200
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['root_category'] == root_category_office.id
+        assert response.data['results'][0]['scope'] == 'OFFICE'
 
+    def test_create_budget_plan_missing_month_period_string_returns_400(self, api_client):
+        """Creating BudgetPlan with non-existent month string should return 400, not 403."""
+        data = {
+            'period': '2099-12',
+            'scope': 'OFFICE',
+            'project': None,
+        }
+        response = api_client.post('/api/v1/budgets/budgets/', data, format='json')
+        assert response.status_code == 400
+        assert 'period' in response.data
+        assert 'month period does not exist' in str(response.data['period'][0]).lower()
 
+    def test_filter_by_month_invalid_format_returns_400(self, api_client):
+        """Filtering by invalid month format should return 400."""
+        response = api_client.get('/api/v1/budgets/budgets/?month=2024/01')
+        assert response.status_code == 400
+        assert 'month' in response.data
+
+    def test_project_scope_requires_project_in_api(self, api_client, month_period):
+        """PROJECT scope via API must reject non-null project."""
+        data = {
+            'period': month_period.id,
+            'scope': 'PROJECT',
+            'project': 123,  # any non-null value should be rejected
+        }
+        response = api_client.post('/api/v1/budgets/budgets/', data, format='json')
+        assert response.status_code == 400
+        assert 'project' in response.data
+
+    def test_project_scope_allows_null_project_and_reuses_existing_plan(self, api_client, month_period):
+        """PROJECT scope via API allows null project and uses (period, scope) identity."""
+        data = {
+            'period': month_period.id,
+            'scope': 'PROJECT',
+            'project': None,
+        }
+        response = api_client.post('/api/v1/budgets/budgets/', data, format='json')
+        assert response.status_code == 201
+        first_id = response.data['id']
+        assert response.data['scope'] == 'PROJECT'
+        assert response.data['project'] is None
+
+        # Second call with same (period, scope) should reuse existing plan, ignoring project field
+        response2 = api_client.post('/api/v1/budgets/budgets/', data, format='json')
+        assert response2.status_code == 200
+        assert response2.data['id'] == first_id

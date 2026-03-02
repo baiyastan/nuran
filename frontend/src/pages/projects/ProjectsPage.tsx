@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useListProjectsQuery,
@@ -12,13 +12,14 @@ import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+import { toast } from '@/shared/ui/Toast/toast'
 import { CreateProjectModal } from '@/features/project-create/CreateProjectModal'
 import { EditProjectModal } from '@/features/project-edit/EditProjectModal'
 import './ProjectsPage.css'
 
 function ProjectsPage() {
   const { t } = useTranslation()
-  const [filters, setFilters] = useState<ProjectListParams>({})
+  const [filters] = useState<ProjectListParams>({})
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null)
@@ -40,14 +41,12 @@ function ProjectsPage() {
     return map
   }, [foremenData])
 
-  const handleView = (projectId: number) => {
-    // For now, just show project details in an alert or navigate to detail page
-    // If detail page doesn't exist, we can show a simple info modal
+  const handleView = useCallback((projectId: number) => {
     const project = data?.results.find((p) => p.id === projectId)
     if (project) {
-      alert(`${t('projects.columns.name')}: ${project.name}\n${t('projects.columns.description')}: ${project.description || '-'}\n${t('projects.columns.status')}: ${project.status}`)
+      toast.info(`${t('projects.columns.name')}: ${project.name}\n${t('projects.columns.description')}: ${project.description || '-'}\n${t('projects.columns.status')}: ${project.status}`)
     }
-  }
+  }, [data?.results, t])
 
   const handleEdit = (project: Project) => {
     setEditingProject(project)
@@ -67,11 +66,11 @@ function ProjectsPage() {
 
     try {
       await deleteProject(deletingProjectId).unwrap()
-      alert(t('projects.deleteSuccess'))
+      toast.success(t('projects.deleteSuccess'))
       setDeletingProjectId(null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err)
-      alert(errorMessage || t('projects.deleteError'))
+      toast.error(errorMessage || t('projects.deleteError'))
     }
   }
 
@@ -130,7 +129,7 @@ function ProjectsPage() {
         ) : null,
       }
     })
-  }, [data, foremanMap, t, canEdit, canDelete, isDeleting])
+  }, [data, foremanMap, t, canEdit, canDelete, isDeleting, handleView])
 
   return (
     <div className="projects-page">

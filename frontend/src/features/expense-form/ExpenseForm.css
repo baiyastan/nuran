@@ -1,0 +1,72 @@
+.expense-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.expense-form h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.875rem;
+}
+
+.form-select,
+.form-textarea {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: white;
+}
+
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.form-textarea {
+  resize: vertical;
+}
+
+.form-readonly-text {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  background: #f5f5f5;
+  color: #666;
+  font-style: italic;
+}
+
+.form-error {
+  color: #dc3545;
+  font-size: 14px;
+  padding: 0.5rem;
+  background: #f8d7da;
+  border-radius: 4px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+

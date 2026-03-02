@@ -40,10 +40,26 @@ export const planItemsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['PlanItems', 'PlanPeriods'],
     }),
+    deletePlanItem: builder.mutation<void, number>({
+      query: (id) => ({
+        url: `/plan-items/${id}/`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['PlanItems', 'PlanPeriods'],
+    }),
+    approvePlanItem: builder.mutation<PlanItem, number>({
+      query: (id) => ({
+        url: `/plan-items/${id}/approve/`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['PlanItems', 'PlanPeriods'],
+    }),
   }),
 })
 
 export const {
   useListPlanItemsQuery,
   useCreatePlanItemMutation,
+  useDeletePlanItemMutation,
+  useApprovePlanItemMutation,
 } = planItemsApi

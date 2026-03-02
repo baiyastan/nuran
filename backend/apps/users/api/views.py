@@ -161,7 +161,7 @@ def register(request):
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for user management (admin only)."""
     
-    queryset = User.objects.all()
+    queryset = User.objects.all().order_by('id')
     serializer_class = UserListSerializer
     permission_classes = [IsAdmin]
     
@@ -171,7 +171,8 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         role = self.request.query_params.get('role')
         if role:
             queryset = queryset.filter(role=role)
-        return queryset
+        # Ensure explicit ordering to prevent pagination warnings
+        return queryset.order_by('id')
     
     def list(self, request, *args, **kwargs):
         """List all users."""

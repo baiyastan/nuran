@@ -164,8 +164,24 @@ class TestPlanItemService:
                 amount=1000.0
             )
     
-    def test_foreman_cannot_modify(self, plan_period, foreman_user):
-        """Test that foreman cannot modify plan items."""
+    def test_foreman_can_modify_in_draft(self, plan_period, foreman_user):
+        """Test that foreman can modify plan items when status is draft."""
+        plan_item = PlanItem.objects.create(
+            plan_period=plan_period,
+            title='Test Item',
+            qty=10.0,
+            unit='kg',
+            amount=1000.0,
+            created_by=foreman_user
+        )
+        
+        assert PlanItemService.can_modify(plan_item, foreman_user) is True
+    
+    def test_foreman_cannot_modify_after_submission(self, plan_period, foreman_user, director_user):
+        """Test that foreman cannot modify plan items after plan is submitted."""
+        # Submit the plan period
+        PlanPeriodService.submit(plan_period, foreman_user)
+        
         plan_item = PlanItem.objects.create(
             plan_period=plan_period,
             title='Test Item',

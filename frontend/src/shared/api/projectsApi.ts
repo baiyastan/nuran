@@ -41,7 +41,7 @@ export const projectsApi = baseApi.injectEndpoints({
     }),
     getProject: builder.query<Project, number>({
       query: (id) => ({ url: `/projects/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'Projects', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Projects', id }],
     }),
     createProject: builder.mutation<Project, CreateProjectRequest>({
       query: (body) => ({
@@ -49,7 +49,7 @@ export const projectsApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Projects', 'ProrabProjects'],
+      invalidatesTags: ['Projects'],
     }),
     updateProject: builder.mutation<Project, { id: number; data: UpdateProjectRequest }>({
       query: ({ id, data }) => ({
@@ -57,10 +57,9 @@ export const projectsApi = baseApi.injectEndpoints({
         method: 'PATCH',
         data,
       }),
-      invalidatesTags: (result, error, { id }) => [
+      invalidatesTags: (_result, _error, { id }) => [
         { type: 'Projects', id },
         'Projects',
-        'ProrabProjects',
       ],
     }),
     deleteProject: builder.mutation<void, number>({
@@ -68,7 +67,7 @@ export const projectsApi = baseApi.injectEndpoints({
         url: `/projects/${id}/`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Projects', 'ProrabProjects'],
+      invalidatesTags: ['Projects'],
     }),
   }),
 })
@@ -80,3 +79,5 @@ export const {
   useUpdateProjectMutation,
   useDeleteProjectMutation,
 } = projectsApi
+
+export type { Project } from '@/entities/project/model'

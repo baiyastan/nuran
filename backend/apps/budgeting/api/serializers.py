@@ -1,8 +1,36 @@
 """
 Budgeting API serializers.
 """
+import re
 from rest_framework import serializers
+from apps.finance.constants import MONTH_REQUIRED_MSG
+from apps.finance.services import assert_month_open_for_plans
 from ..models import BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod, BudgetLine, BudgetExpense
+
+
+class MonthPeriodField(serializers.Field):
+    """Accepts period as pk (int) or month string (YYYY-MM). Returns MonthPeriod instance."""
+
+    def to_internal_value(self, value):
+        if value is None:
+            raise serializers.ValidationError(MONTH_REQUIRED_MSG)
+        if isinstance(value, int):
+            try:
+                return MonthPeriod.objects.get(pk=value)
+            except (MonthPeriod.DoesNotExist, ValueError, TypeError):
+                raise serializers.ValidationError(MONTH_REQUIRED_MSG)
+        if isinstance(value, str):
+            month_str = value.strip()
+            if not re.match(r'^\d{4}-\d{2}$', month_str):
+                raise serializers.ValidationError("Month must be YYYY-MM (e.g. 2024-01).")
+            try:
+                return MonthPeriod.objects.get(month=month_str)
+            except MonthPeriod.DoesNotExist:
+                raise serializers.ValidationError(MONTH_REQUIRED_MSG)
+        raise serializers.ValidationError(MONTH_REQUIRED_MSG)
+
+    def to_representation(self, value):
+        return value.pk if value else None
 
 
 class MonthPeriodSerializer(serializers.ModelSerializer):
@@ -14,6 +42,29 @@ class MonthPeriodSerializer(serializers.ModelSerializer):
             'id', 'month', 'status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    
+    def validate_month(self, value):
+        """Validate month format: YYYY-MM. Normalize YYYY-MM-DD to YYYY-MM."""
+        import re
+        if not value:
+            raise serializers.ValidationError("Month is required.")
+        value = (value or '').strip()
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', value):
+            value = value[:7]
+        if not re.match(r'^\d{4}-\d{2}$', value):
+            raise serializers.ValidationError("Month must be in format YYYY-MM (e.g., 2024-01)")
+        return value
+
+    def validate_status(self, value):
+        """Validate status: must be OPEN or LOCKED (accepts lowercase and normalizes)."""
+        if value is None or value == '':
+            raise serializers.ValidationError("Status must be 'OPEN' or 'LOCKED'")
+        normalized = (value or '').strip().upper()
+        if normalized == 'OPEN':
+            return 'OPEN'
+        if normalized == 'LOCKED':
+            return 'LOCKED'
+        raise serializers.ValidationError("Status must be 'OPEN' or 'LOCKED'")
 
 
 class BudgetPlanSummaryCommentSerializer(serializers.ModelSerializer):
@@ -119,70 +170,32 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
 
 
 class BudgetPlanSerializer(serializers.ModelSerializer):
-    """Serializer for BudgetPlan."""
-    
+    """Serializer for BudgetPlan (keyed by period + scope only)."""
+
+    period = MonthPeriodField()
     period_month = serializers.CharField(source='period.month', read_only=True)
-    root_category_name = serializers.CharField(source='root_category.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
-    
+
     class Meta:
         model = BudgetPlan
         fields = [
-            'id', 'period', 'period_month', 'root_category', 'root_category_name',
-            'scope', 'project', 'project_name', 'status',
+            'id', 'period', 'period_month', 'scope', 'project', 'project_name', 'status',
             'submitted_at', 'approved_by', 'approved_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['status', 'submitted_at', 'approved_by', 'approved_at', 'created_at', 'updated_at']
-    
-    def validate_root_category(self, value):
-        """Validate root_category is a root category (parent=None)."""
-        if not value:
-            raise serializers.ValidationError("Root category is required.")
-        
-        if not value.is_active:
-            raise serializers.ValidationError("Root category must be active.")
-        
-        if value.parent is not None:
-            raise serializers.ValidationError("Root category must have parent=None (must be a root category).")
-        
+
+    def validate_scope(self, value):
+        if value not in ('OFFICE', 'PROJECT', 'CHARITY'):
+            raise serializers.ValidationError("Scope must be OFFICE, PROJECT, or CHARITY.")
         return value
-    
+
     def validate(self, data):
-        """Validate scope, root_category, and project consistency."""
-        root_category = data.get('root_category')
         scope = data.get('scope')
         project = data.get('project')
-        
-        # Map root_category.scope to BudgetPlan.scope
-        scope_mapping = {
-            'office': 'OFFICE',
-            'project': 'PROJECT',
-            'charity': 'CHARITY'
-        }
-        
-        if root_category:
-            expected_scope = scope_mapping.get(root_category.scope)
-            
-            # Validate scope matches root_category.scope
-            if scope and expected_scope and scope != expected_scope:
-                raise serializers.ValidationError({
-                    'scope': f'Scope must be {expected_scope} to match root_category.scope={root_category.scope}'
-                })
-            
-            # Auto-set scope from root_category if not provided
-            if not scope:
-                data['scope'] = expected_scope
-            
-            # Validate project based on root_category.scope
-            if root_category.scope in ('office', 'charity') and project is not None:
-                raise serializers.ValidationError({
-                    'project': f'Project must be NULL when root_category.scope is "{root_category.scope}"'
-                })
-            elif root_category.scope == 'project' and project is None:
-                raise serializers.ValidationError({
-                    'project': 'Project is required when root_category.scope is "project"'
-                })
-        
+        if scope in ('OFFICE', 'CHARITY') and project is not None:
+            raise serializers.ValidationError({
+                'project': f'Project must be NULL when scope is {scope}'
+            })
         return data
 
 
@@ -219,6 +232,9 @@ class BudgetLineSerializer(serializers.ModelSerializer):
         
         if plan:
             errors = {}
+
+            # Enforce MonthPeriod OPEN for all plan-side line writes
+            assert_month_open_for_plans(plan.period)
             
             # Enforce OPEN status for create/update (strict - no admin override for now)
             if plan.status != 'OPEN':
@@ -243,18 +259,73 @@ class BudgetLineSerializer(serializers.ModelSerializer):
                         errors['category'] += ' ' + error_msg
                     else:
                         errors['category'] = error_msg
-                
-                # Validate category kind matches plan's root_category kind
-                if plan.root_category and category.kind != plan.root_category.kind:
-                    error_msg = f'Category kind "{category.kind}" does not match plan root category kind "{plan.root_category.kind}".'
-                    if 'category' in errors:
-                        errors['category'] += ' ' + error_msg
-                    else:
-                        errors['category'] = error_msg
             
             if errors:
                 raise serializers.ValidationError(errors)
         
+        return data
+
+
+class BulkUpsertBudgetLineItemSerializer(serializers.Serializer):
+    """Nested serializer for a single budget line item in bulk upsert."""
+
+    category = serializers.PrimaryKeyRelatedField(queryset=ExpenseCategory.objects.all())
+    amount_planned = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+        min_value=0,
+    )
+    note = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_category(self, value):
+        """Validate category is a leaf category and active."""
+        if not value.is_leaf():
+            raise serializers.ValidationError("Category must be a leaf category (no children).")
+        if not value.is_active:
+            raise serializers.ValidationError("Category must be active.")
+        return value
+
+
+class BulkUpsertBudgetLinesSerializer(serializers.Serializer):
+    """Serializer for bulk upsert of budget lines."""
+
+    plan = serializers.PrimaryKeyRelatedField(
+        queryset=BudgetPlan.objects.all()
+    )
+    items = serializers.ListField(child=BulkUpsertBudgetLineItemSerializer())
+
+    def validate(self, data):
+        plan = data['plan']
+        request = self.context.get('request')
+        user = request.user if request else None
+
+        # Enforce MonthPeriod OPEN for all bulk upserts (no admin bypass)
+        assert_month_open_for_plans(plan.period)
+
+        # Plan status for non-admin: must be OPEN
+        if user and not (getattr(user, 'is_superuser', False) or getattr(user, 'role', None) == 'admin'):
+            if plan.status != 'OPEN':
+                raise serializers.ValidationError({
+                    'plan': f'Plan status must be OPEN for non-admin users. Current status: {plan.status}'
+                })
+
+        scope_mapping = {
+            'office': 'OFFICE',
+            'project': 'PROJECT',
+            'charity': 'CHARITY',
+        }
+
+        for idx, item in enumerate(data['items']):
+            category = item['category']
+            errors = {}
+            expected_scope = scope_mapping.get(category.scope)
+            if expected_scope and plan.scope != expected_scope:
+                errors['category'] = f'Category scope "{category.scope}" does not match plan scope "{plan.scope}".'
+            if errors:
+                raise serializers.ValidationError({'items': {idx: errors}})
+
         return data
 
 
@@ -295,7 +366,10 @@ class BudgetExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'plan': 'Plan is required.'})
         
         errors = {}
-        
+
+        # Enforce MonthPeriod OPEN for plan-side budget expenses
+        assert_month_open_for_plans(plan.period)
+
         # Validate plan status is APPROVED for write operations
         if plan.status != 'APPROVED':
             errors['plan'] = f'Cannot create or modify expenses. Plan status must be APPROVED. Current status: {plan.status}'

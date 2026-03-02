@@ -1,12 +1,20 @@
 import './Table.css'
 
-interface TableProps {
-  columns: { key: string; label: string }[]
-  data: Record<string, any>[]
-  renderCell?: (column: string, value: any, row: Record<string, any>) => React.ReactNode
+export type TableColumn = { key: string; label: string }
+
+export type TableProps<T = Record<string, unknown>> = {
+  columns: TableColumn[]
+  data: T[]
+  renderCell?: (column: string, value: unknown, row: T) => React.ReactNode
+  rowClassNameKey?: string
 }
 
-export function Table({ columns, data, renderCell }: TableProps) {
+export function Table<T extends Record<string, unknown> = Record<string, unknown>>({
+  columns,
+  data,
+  renderCell,
+  rowClassNameKey,
+}: TableProps<T>) {
   return (
     <div className="table-wrapper">
       <table className="table">
@@ -25,21 +33,31 @@ export function Table({ columns, data, renderCell }: TableProps) {
               </td>
             </tr>
           ) : (
-            data.map((row, index) => (
-              <tr key={index}>
-                {columns.map((column) => (
-                  <td key={column.key}>
-                    {renderCell
-                      ? renderCell(column.key, row[column.key], row)
-                      : row[column.key]}
-                  </td>
-                ))}
-              </tr>
-            ))
+            data.map((row, index) => {
+              const rowRecord = row as Record<string, unknown>
+              const rowClassName =
+                rowClassNameKey && typeof rowRecord[rowClassNameKey] === 'string'
+                  ? (rowRecord[rowClassNameKey] as string)
+                  : ''
+
+              return (
+                <tr key={index} className={rowClassName}>
+                  {columns.map((column) => {
+                    const value = rowRecord[column.key]
+                    return (
+                      <td key={column.key}>
+                        {renderCell
+                          ? renderCell(column.key, value, row)
+                          : (value as React.ReactNode)}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })
           )}
         </tbody>
       </table>
     </div>
   )
 }
-

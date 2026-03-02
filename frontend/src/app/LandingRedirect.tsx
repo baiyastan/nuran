@@ -13,13 +13,13 @@ export default function LandingRedirect() {
   }
   
   if (role === 'foreman') {
-    return <Navigate to="/prorab/projects" replace />
+    return <Navigate to="/plan-setup" replace />
   }
   
   if (role === 'admin' || role === 'director') {
-    return <Navigate to="/projects" replace />
+    return <Navigate to="/plan-setup" replace />
   }
   
-  return <Navigate to="/plan-periods" replace />
+  return <Navigate to="/plan-setup" replace />
 }
 

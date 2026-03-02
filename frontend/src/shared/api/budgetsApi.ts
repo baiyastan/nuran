@@ -45,7 +45,7 @@ export const budgetsApi = baseApi.injectEndpoints({
       query: (budgetId) => ({
         url: `/reports/budget/${budgetId}/`,
       }),
-      providesTags: (result, error, budgetId) => [{ type: 'Budget', id: budgetId }],
+      providesTags: (_result, _error, budgetId) => [{ type: 'Budget', id: budgetId }],
     }),
     updateSummaryComment: builder.mutation<
       { id: number; comment_text: string; updated_by: string | null; updated_at: string },
@@ -56,7 +56,7 @@ export const budgetsApi = baseApi.injectEndpoints({
         method: 'PATCH',
         data,
       }),
-      invalidatesTags: (result, error, { budgetId }) => [{ type: 'Budget', id: budgetId }],
+      invalidatesTags: (_result, _error, { budgetId }) => [{ type: 'Budget', id: budgetId }],
     }),
   }),
 })

@@ -37,7 +37,7 @@ export function DeactivateCategoryModal({ isOpen, onClose, category, onSuccess }
 
       onSuccess?.()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || t('categories.modals.deactivate.deactivateError'))
     }
   }

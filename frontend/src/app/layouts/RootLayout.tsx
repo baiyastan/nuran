@@ -1,19 +1,28 @@
-import { Suspense } from 'react'
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Header from '@/widgets/header/Header'
-import Sidebar from '@/widgets/sidebar/Sidebar'
+import Sidebar from '@/shared/ui/Sidebar/Sidebar'
 import '@/widgets/layout/Layout.css'
 
+const SIDEBAR_STORAGE_KEY = 'sidebar_collapsed'
+
 function RootLayout() {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
+  const layoutBodyClass = `layout-body${isSidebarCollapsed ? ' layout-body--sidebar-collapsed' : ''}`
+
   return (
     <div className="layout">
       <Header />
-      <div className="layout-body">
-        <Sidebar />
+      <div className={layoutBodyClass}>
+        <Sidebar onCollapsedChange={setIsSidebarCollapsed} />
         <main className="layout-main">
-          <Suspense fallback={<div className="loading">Loading...</div>}>
-            <Outlet />
-          </Suspense>
+          <Outlet />
         </main>
       </div>
     </div>

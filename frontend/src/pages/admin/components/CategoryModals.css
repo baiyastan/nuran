@@ -1,0 +1,52 @@
+.category-form {
+  padding: 20px;
+}
+
+.form-field {
+  margin-bottom: 20px;
+}
+
+.input-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.form-error {
+  color: #dc3545;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.category-modal-message {
+  margin: 0 0 1rem;
+  color: #555;
+  line-height: 1.5;
+}
+

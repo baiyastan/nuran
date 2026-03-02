@@ -63,18 +63,24 @@ function Header() {
   return (
     <header className="header">
       <div className="header-content">
+        {/* LEFT ZONE: Page Title/Breadcrumb */}
         <div className="header-left">
-          <h1 className="header-title">{t('header.title')}</h1>
           {user && pageTitle && (
-            <span className="header-page-title">{pageTitle}</span>
+            <h1 className="header-page-title">{pageTitle}</h1>
           )}
         </div>
-        <div className="header-actions">
+
+        {/* CENTER ZONE: Empty (reserved for future search) */}
+        <div className="header-center"></div>
+
+        {/* RIGHT ZONE: Language Switch, User Info, Logout */}
+        <div className="header-right">
           {user && (
             <>
               <LanguageSwitcher />
               <span className="header-user">
-                {user.email} ({t('header.userRole', { role: user.role })})
+                <span className="header-user-email">{user.email}</span>
+                <span className="header-user-role">({t('header.userRole', { role: user.role })})</span>
               </span>
               <Button onClick={handleLogout} variant="secondary" size="small">
                 {t('common.logout')}

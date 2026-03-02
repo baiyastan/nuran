@@ -1,0 +1,41 @@
+.report-section {
+  margin-bottom: 3rem;
+}
+
+.report-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0.5rem;
+}
+
+.chart-placeholder {
+  background: #f8f9fa;
+  border: 1px dashed #dee2e6;
+  border-radius: 8px;
+  padding: 3rem;
+  text-align: center;
+  color: #6c757d;
+  margin-bottom: 1.5rem;
+}
+
+.tables-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.table-section {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.table-section h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  color: #333;
+}
+

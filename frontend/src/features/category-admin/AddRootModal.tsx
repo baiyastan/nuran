@@ -51,7 +51,7 @@ export function AddRootModal({ isOpen, onClose, onSuccess }: AddRootModalProps) 
 
       onSuccess?.()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || t('categories.modals.addRoot.createError'))
     }
   }

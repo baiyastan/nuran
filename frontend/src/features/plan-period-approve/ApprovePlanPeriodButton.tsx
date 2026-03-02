@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApprovePlanPeriodMutation } from '@/shared/api/planPeriodsApi'
 import { Button } from '@/shared/ui/Button/Button'
+import { getErrorMessage } from '@/shared/lib/utils'
 
 interface ApprovePlanPeriodButtonProps {
   planPeriodId: number
@@ -18,8 +19,8 @@ export function ApprovePlanPeriodButton({ planPeriodId }: ApprovePlanPeriodButto
       await approvePlanPeriod({ id: planPeriodId, comments: comments || undefined }).unwrap()
       setShowForm(false)
       setComments('')
-    } catch (err: any) {
-      setError(err.data?.detail || err.message || 'Failed to approve plan period')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Failed to approve plan period')
     }
   }
 

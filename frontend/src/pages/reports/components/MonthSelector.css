@@ -1,0 +1,35 @@
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.month-input {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.month-selector-label {
+  font-weight: 500;
+}
+
+.month-status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.month-status-badge.open {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.month-status-badge.locked {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+

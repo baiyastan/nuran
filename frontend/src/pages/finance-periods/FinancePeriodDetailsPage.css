@@ -1,0 +1,175 @@
+.finance-period-details {
+  padding: 1.5rem;
+}
+
+/* Header Section */
+.details-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.details-header__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.details-header__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.details-header__month {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.details-header__fund-kind {
+  font-size: 1rem;
+  color: #6c757d;
+}
+
+.details-header__status {
+  margin-top: 0.25rem;
+}
+
+/* Status Badge */
+.details-badge {
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  display: inline-block;
+}
+
+.details-badge--open {
+  background-color: #198754;
+}
+
+.details-badge--locked {
+  background-color: #dc3545;
+}
+
+.details-badge--closed {
+  background-color: #6c757d;
+}
+
+/* Summary Section */
+.details-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.summary-card {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #e0e0e0;
+}
+
+.summary-card__label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.summary-card__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Table Section */
+.details-table {
+  margin-top: 1.5rem;
+}
+
+/* State Styles */
+.loading,
+.error,
+.empty {
+  padding: 20px;
+  text-align: center;
+}
+
+.error {
+  color: #dc3545;
+}
+
+.empty {
+  color: #6c757d;
+}
+
+/* Period Locked Message */
+.period-locked-message {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.875rem;
+}
+
+/* Table Header */
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.table-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Table Actions */
+.table-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Income Plans Section */
+.income-plans-section {
+  margin-top: 1.5rem;
+}
+
+.income-plans-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.income-plans-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.income-plans-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.income-plans-disabled {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.875rem;
+}
+

@@ -18,7 +18,7 @@ export function EditCategoryModal({ isOpen, onClose, category, onSuccess }: Edit
   const { t } = useTranslation()
   const [formData, setFormData] = useState({
     name: '',
-    scope: 'project' as 'project' | 'office',
+    scope: 'project' as 'project' | 'office' | 'charity',
   })
   const [error, setError] = useState('')
 
@@ -59,7 +59,7 @@ export function EditCategoryModal({ isOpen, onClose, category, onSuccess }: Edit
 
       onSuccess?.()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || t('categories.modals.edit.updateError'))
     }
   }
@@ -93,7 +93,7 @@ export function EditCategoryModal({ isOpen, onClose, category, onSuccess }: Edit
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  scope: e.target.value as 'project' | 'office',
+                  scope: e.target.value as 'project' | 'office' | 'charity',
                 })
               }
             >

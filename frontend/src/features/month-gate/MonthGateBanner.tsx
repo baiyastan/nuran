@@ -13,6 +13,8 @@ export function MonthGateBanner() {
   const { role } = useAuth()
   const isAdmin = role === 'admin'
 
+  // Important: keep this month in sync with MonthManagementPage and the manage link,
+  // so navigating to /admin/months preserves the currently selected month.
   const month = useMemo(() => {
     const fromUrl = searchParams.get('month')
     if (fromUrl && fromUrl.match(/^\d{4}-\d{2}$/)) {
@@ -47,16 +49,11 @@ export function MonthGateBanner() {
     return (
       <div className="month-gate-banner month-gate-banner--warning">
         <span>{t('monthGate.notOpened')}</span>
-        {isAdmin ? (
+        <span>{t('monthGate.bodyNotOpened')}</span>
+        {isAdmin && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}
           </Button>
-        ) : (
-          <span>
-            {t('monthGate.askAdminToOpen', {
-              defaultValue: 'Ask admin to open the month.',
-            })}
-          </span>
         )}
       </div>
     )
@@ -66,11 +63,7 @@ export function MonthGateBanner() {
     return (
       <div className="month-gate-banner month-gate-banner--locked">
         <span>{t('monthGate.locked')}</span>
-        <span>
-          {t('monthGate.lockedPlanningInfo', {
-            defaultValue: 'Planning is read-only; facts are still allowed.',
-          })}
-        </span>
+        <span>{t('monthGate.bodyLocked')}</span>
         {isAdmin && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}
@@ -84,6 +77,7 @@ export function MonthGateBanner() {
     return (
       <div className="month-gate-banner month-gate-banner--open">
         <span>{t('monthGate.open')}</span>
+        <span>{t('monthGate.bodyOpen')}</span>
         {isAdmin && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}

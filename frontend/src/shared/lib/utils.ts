@@ -14,24 +14,25 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-export function formatKGS(value: number | string): string {
+export function formatKGS(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return '—'
   const numValue = typeof value === 'string' ? parseFloat(value) : value
-  if (isNaN(numValue)) return '0,00 сом'
-  return `${new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numValue)} сом`
+  if (Number.isNaN(numValue)) return '—'
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(numValue) + ' сом'
 }
 
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
   let timeout: NodeJS.Timeout | null = null
-  
+
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       timeout = null
       func(...args)
     }
-    
+
     if (timeout) {
       clearTimeout(timeout)
     }
@@ -62,39 +63,41 @@ export function getErrorMessage(error: unknown): string {
 
   // Handle API error objects (Axios/RTK Query format)
   if (typeof error === 'object') {
-    const err = error as any
-    
+    const err = error as Record<string, unknown>
+
     // Try common error message fields
     if (typeof err.message === 'string' && err.message) {
       return err.message
     }
-    
+
     if (typeof err.detail === 'string' && err.detail) {
       return err.detail
     }
-    
+
     if (typeof err.error === 'string' && err.error) {
       return err.error
     }
-    
+
     // Handle nested data object (common in API responses)
-    if (err.data) {
-      if (typeof err.data === 'string') {
-        return err.data
+    const data = err.data
+    if (data !== undefined && data !== null) {
+      if (typeof data === 'string') {
+        return data
       }
-      if (typeof err.data === 'object') {
-        if (typeof err.data.message === 'string' && err.data.message) {
-          return err.data.message
+      if (typeof data === 'object') {
+        const dataObj = data as Record<string, unknown>
+        if (typeof dataObj.message === 'string' && dataObj.message) {
+          return dataObj.message
         }
-        if (typeof err.data.detail === 'string' && err.data.detail) {
-          return err.data.detail
+        if (typeof dataObj.detail === 'string' && dataObj.detail) {
+          return dataObj.detail
         }
-        if (typeof err.data.error === 'string' && err.data.error) {
-          return err.data.error
+        if (typeof dataObj.error === 'string' && dataObj.error) {
+          return dataObj.error
         }
       }
     }
-    
+
     // Handle statusText
     if (typeof err.statusText === 'string' && err.statusText) {
       return err.statusText
@@ -117,4 +120,3 @@ export function getErrorMessage(error: unknown): string {
     return 'An error occurred'
   }
 }
-

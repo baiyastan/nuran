@@ -8,6 +8,8 @@ export default {
     add: 'Кошуу',
     create: 'Түзүү',
     creating: 'Түзүлүүдө...',
+    update: 'Жаңылоо',
+    updating: 'Жаңыланууда...',
     search: 'Издөө',
     filter: 'Чыпкалоо',
     print: 'Басып чыгаруу',
@@ -29,6 +31,7 @@ export default {
       locked: 'Жабык',
       closed: 'Жабылган',
     },
+    notCreated: 'Ачыла элек',
   },
   auth: {
     loginTitle: 'Кирүү',
@@ -55,7 +58,7 @@ export default {
     audit: 'Аудит',
     admin: 'Админ',
     users: 'Колдонуучулар',
-    financePeriods: 'Каркылык мезгилдер',
+    financePeriods: 'Каржылык мезгилдер',
     expenses: 'Чыгымдар',
     incomeSources: 'Киреше булактары',
     reports: 'Отчёттор',
@@ -71,6 +74,8 @@ export default {
     noPermission: 'Бул баракка кирүүгө укугуңуз жок',
     yourRole: 'Сиздин ролуңуз:',
     required: 'Бул талаа талап кылынат',
+    goToPlanSetup: 'План түзүүгө баруу',
+    goToReports: 'Отчётторго баруу',
   },
   planning: {
     plan: 'План',
@@ -135,6 +140,11 @@ export default {
     all: 'Баары',
     children: 'Жаны категориялар',
     active: 'Активдүү',
+    rootOnly: 'Түпкүлүк гана',
+    cannotDeleteHasChildren: 'Өчүрүүгө болбойт: жаны категориялар бар',
+    confirmDelete: '"{{name}}" өчүрүүнү каалайсызбы?',
+    deleteError: 'Категорияны өчүрүүдө ката',
+    loadError: 'Категорияларды жүктөөдө ката',
     modals: {
       create: {
         title: 'Категория түзүү',
@@ -406,7 +416,7 @@ export default {
     tooltip: {
       expensesAfterApproval: 'Чыгымдар план бекитилгенден кийин гана кошулушу мүмкүн.',
     },
-    empty: {
+    emptyState: {
       noPlan: 'Бул ай үчүн айлык план жок',
       title: 'План жок',
       description: 'Бул ай жана тип үчүн айлык план түзүлгөн жок. План түзүү үчүн төмөнкү баскычты басыңыз.',
@@ -421,6 +431,7 @@ export default {
   },
   planPeriodDetails: {
     title: 'План мезгили',
+    monthLockedNoPlanEdit: 'Ай жабык. План саптарын кошуу/өзгөртүүгө болбойт. Чыгым кошуу иштей берет.',
     summary: {
       totalItems: 'Жалпы буюмдар',
       totalAmount: 'Жалпы сумма',
@@ -715,6 +726,17 @@ export default {
       title: 'Каржы мезгилдери табылган жок',
       cta: 'Биринчи каржы мезгилин түзүү',
     },
+    list: {
+      title: 'Каржы мезгилдери',
+    },
+    createOfficePeriod: {
+      button: 'Офис үчүн каржы мезгилин түзүү',
+      creating: 'Түзүлүүдө...',
+      needOpen: 'Finance period түзүү үчүн ай OPEN болуш керек.',
+      noMonth: 'Month period табылган жок. Адегенде айды түзүп/ачып коюңуз.',
+      success: 'Office finance period түзүлдү',
+      error: 'Finance period түзүүдө ката кетти',
+    },
     detailsTab: 'Детали',
     incomeTab: 'Киреше',
     expensesTab: 'Чыгымдар',
@@ -736,6 +758,35 @@ export default {
     },
     monthGateTitle: 'Ай капкасы',
     monthGateLocked: 'Ай жабык. Түзөтүү жокко чыгарылды.',
+    monthGate: {
+      notOpenedBadge: 'АЧЫЛА ЭЛЕК',
+      notOpened: 'Ай ачыла элек. Админден айды ачып берүүсүн сураныңыз.',
+      locked: 'Ай жабык: план өзгөрбөйт (read-only), бирок факт киргизсе болот.',
+    },
+    incomePlan: {
+      addTitle: 'Киреше планы кошуу',
+      editTitle: 'Киреше планын түзөтүү',
+      source: 'Булак',
+      selectSource: 'Булакты тандаңыз...',
+      amount: 'Сумма',
+      addButton: '+ План кошуу',
+      sourceRequired: 'Булак талап кылынат',
+      amountPositive: 'Сумма нөлдөн чоң болушу керек',
+      saveFailed: 'Киреше планын сактоо ишке ашкан жок',
+      createMonthPeriod: 'Ай мезгилин түзүү',
+      creatingMonthPeriod: 'Ай мезгили түзүлүүдө...',
+    },
+    incomeEntry: {
+      addButton: '+ Жазуу кошуу',
+    },
+    income: {
+      common: {
+        source: 'Булак',
+        amount: 'Сумма',
+        date: 'Күнү',
+        comment: 'Комментарий',
+      },
+    },
     summary: {
       incomeTotal: 'Киреше жалпысы',
       expenseTotal: 'Чыгым жалпысы',
@@ -781,7 +832,7 @@ export default {
       message: 'Бул каржы мезгилин жок кылууну каалайсызбы? Бул аракетти кайтаруу мүмкүн эмес.',
       success: 'Каржы мезгили ийгиликтүү жок кылынды',
     },
-    list: {
+    listTitle: {
       title: 'Каржы мезгилдери',
     },
     planVsFact: {
@@ -1207,14 +1258,42 @@ export default {
   monthGate: {
     loading: 'Айдын статусу жүктөлүүдө...',
     error: 'Айдын статусун жүктөө мүмкүн болгон жок.',
-    notOpened: 'Бул ай ачылган эмес.',
-    openButton: 'Айды ачуу',
-    opening: 'Ачылып жатат...',
-    locked: 'Ай жабык.',
-    open: 'Ай ачык.',
+    notOpened: 'Ай ачыла элек',
+    bodyNotOpened: 'Бул айга план жана факт киргизүү үчүн админ айды ачышы керек.',
+    locked: 'Ай жабык',
+    bodyLocked: 'План өзгөрбөйт (read-only), бирок факт киргизүүгө болот.',
+    open: 'Ай ачык',
+    bodyOpen: 'План түзүүгө/өзгөртүүгө болот. Факт киргизүү да болот.',
     manageLink: 'Айларды башкаруу',
-    askAdminToOpen: 'Айды ачуу үчүн админге кайрылыңыз.',
-    lockedPlanningInfo: 'Ай жабык: пландарды түзөтүү мүмкүн эмес, фактикалык маалыматты киргизүүгө уруксат берилет.',
+  },
+  monthManagement: {
+    title: 'Айларды башкаруу',
+    helpText:
+      'Айларды ачуу, жабуу жана кайра ачуу. Ай жабык болсо, пландарды өзгөртүү бүткүл системада чектелет.',
+    status: {
+      notCreated: 'Ачыла элек',
+    },
+    desc: {
+      notOpened: 'Ай ачыла элек.',
+      open: 'Ай ачык.',
+      locked: 'Ай жабык.',
+    },
+    actions: {
+      open: 'Айды ачуу',
+      lock: 'Айды жабуу',
+      unlock: 'Айды кайра ачуу',
+      opening: 'Ачылып жатат…',
+      locking: 'Жабылып жатат…',
+    },
+    loadError: 'Айдын статусун жүктөө мүмкүн болгон жок',
+    toast: {
+      openSuccess: 'Ай ийгиликтүү ачылды',
+      openError: 'Айды ачуу мүмкүн болгон жок',
+      lockSuccess: 'Ай ийгиликтүү жабылды',
+      lockError: 'Айды жабуу мүмкүн болгон жок',
+      unlockSuccess: 'Ай ийгиликтүү кайра ачылды',
+      unlockError: 'Айды кайра ачуу мүмкүн болгон жок',
+    },
   },
 }
 

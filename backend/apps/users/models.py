@@ -63,6 +63,9 @@ class User(AbstractUser):
     
     objects = UserManager()
     
+    class Meta:
+        ordering = ['id']
+    
     def __str__(self):
         return f"{self.email} ({self.role})"
 

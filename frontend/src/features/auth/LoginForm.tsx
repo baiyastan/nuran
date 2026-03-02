@@ -24,7 +24,7 @@ export function LoginForm() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && role) {
-      navigate('/plan-periods')
+      navigate('/')
     }
   }, [isAuthenticated, role, navigate])
 
@@ -40,8 +40,8 @@ export function LoginForm() {
       localStorage.setItem('accessToken', result.access)
       dispatch(setCredentials({ access: result.access, user: result.user }))
       // Redirect after successful login
-      navigate('/plan-periods')
-    } catch (err: any) {
+      navigate('/')
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || 'Login failed')
     }
   }

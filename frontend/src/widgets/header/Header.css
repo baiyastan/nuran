@@ -1,43 +1,121 @@
 .header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   background-color: #fff;
-  border-bottom: 1px solid #ddd;
-  padding: 0 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  height: 56px;
+  box-sizing: border-box;
 }
 
 .header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  height: 60px;
+  height: 56px;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
 }
 
+/* LEFT ZONE: Page Title/Breadcrumb */
 .header-left {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.header-title {
-  margin: 0;
-  color: #333;
-  font-size: 24px;
+  padding-right: 24px;
 }
 
 .header-page-title {
-  font-size: 16px;
-  color: #666;
-  font-weight: 400;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
-.header-actions {
+/* CENTER ZONE: Empty (reserved for future search) */
+.header-center {
+  flex: 0 0 0;
+  min-width: 0;
+}
+
+/* RIGHT ZONE: Language Switch, User Info, Logout */
+.header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .header-user {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: #666;
   font-size: 14px;
+  line-height: 1.4;
+}
+
+.header-user-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.header-user-role {
+  white-space: nowrap;
+  color: #999;
+  font-size: 13px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .header {
+    padding: 0 16px;
+  }
+
+  .header-left {
+    padding-right: 16px;
+  }
+
+  .header-page-title {
+    font-size: 16px;
+  }
+
+  .header-user-email {
+    display: none;
+  }
+
+  .header-user-role {
+    display: none;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 0 12px;
+  }
+
+  .header-left {
+    padding-right: 12px;
+  }
+
+  .header-page-title {
+    font-size: 14px;
+  }
 }
 

@@ -1,0 +1,33 @@
+.income-sources-page {
+  padding: 2rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.loading,
+.error,
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.error {
+  color: #dc3545;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+

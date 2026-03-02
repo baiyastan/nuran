@@ -1,0 +1,98 @@
+version: "3.9"
+
+name: nuran
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      # These must be provided in the root .env file
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/docker/backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DB_ENGINE: postgresql
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: infra/docker/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NGINX_CONF_TARGET: ${NGINX_CONF_TARGET:-http.conf}
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+      - ./docker/nginx.http.conf:/etc/nginx/conf.d/http.conf:ro
+      - ./docker/nginx.ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
+    depends_on:
+      - backend
+
+  webhook:
+    build:
+      context: ..
+      dockerfile: infra/docker/webhook.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/www/nuran:/var/www/nuran
+      - ../scripts/hooks.json:/etc/webhook/hooks.json:ro
+    command: ["-hooks", "/etc/webhook/hooks.json", "-verbose", "-port", "9000"]
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
+volumes:
+  postgres_data:
+  redis_data:
+  letsencrypt:
+  certbot_www:
+

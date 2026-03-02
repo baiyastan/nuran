@@ -55,7 +55,7 @@ export function AddChildModal({ isOpen, onClose, parent, onSuccess }: AddChildMo
 
       onSuccess?.()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getErrorMessage(err) || t('categories.modals.addChild.createError'))
     }
   }

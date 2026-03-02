@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreateActualExpenseMutation } from '@/shared/api/actualExpensesApi'
 import { useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
+import { useAuth } from '@/shared/hooks/useAuth'
 import { Input } from '@/shared/ui/Input/Input'
 import { Button } from '@/shared/ui/Button/Button'
 import { getErrorMessage } from '@/shared/lib/utils'
@@ -9,26 +10,30 @@ import { CreateCategoryModal } from '@/features/expense-category-create/CreateCa
 import './CreateActualExpenseForm.css'
 
 interface CreateActualExpenseFormProps {
-  projectId?: number
-  periodId?: number
+  financePeriodId?: number // Primary: Required for FinancePeriod architecture
+  // Legacy props (deprecated - use financePeriodId instead)
+  projectId?: number // @deprecated - only used if financePeriodId is missing
+  periodId?: number // @deprecated - only used if financePeriodId is missing
   prorabPlanId?: number
   onSuccess?: () => void
   onCancel?: () => void
 }
 
 export function CreateActualExpenseForm({
-  projectId,
-  periodId,
+  financePeriodId,
+  projectId, // Legacy - deprecated
+  periodId, // Legacy - deprecated
   prorabPlanId,
   onSuccess,
   onCancel,
 }: CreateActualExpenseFormProps) {
-  const { t } = useTranslation()
+  const { role } = useAuth()
+  const canManage = role === 'admin'
+  const { t } = useTranslation(['categories', 'common', 'expenses'])
   const [formData, setFormData] = useState({
-    scope: 'project' as 'project' | 'office',
+    scope: 'project' as 'project' | 'office' | 'charity',
     categoryId: null as number | null,
     subcategoryId: null as number | null,
-    name: '',
     amount: '',
     spent_at: new Date().toISOString().split('T')[0],
     comment: '',
@@ -62,8 +67,14 @@ export function CreateActualExpenseForm({
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {}
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required'
+    // Finance period is required - prioritize financePeriodId
+    if (!financePeriodId) {
+      if (projectId || periodId) {
+        // Legacy fallback - warn but allow
+        console.warn('Using deprecated projectId/periodId. Please use financePeriodId instead.')
+      } else {
+        newErrors.financePeriod = 'Finance period is required'
+      }
     }
 
     const amountNum = Number(formData.amount)
@@ -93,42 +104,46 @@ export function CreateActualExpenseForm({
     }
 
     try {
-      const payload: any = {
-        name: formData.name.trim(),
+      if (!financePeriodId) {
+        setApiError('Finance period is required. Please provide financePeriodId.')
+        return
+      }
+
+      const payload: Record<string, unknown> = {
+        finance_period: financePeriodId,
         amount: Number(formData.amount),
         spent_at: formData.spent_at,
         comment: formData.comment.trim(),
       }
 
-      // Add category (use subcategory if selected, otherwise root category)
+      // Category optional (use subcategory if selected, else root category)
       if (formData.subcategoryId) {
         payload.category = formData.subcategoryId
       } else if (formData.categoryId) {
         payload.category = formData.categoryId
       }
 
-      if (projectId) {
-        payload.project = projectId
+      if (projectId || periodId) {
+        console.warn('Using deprecated projectId/periodId. Please migrate to financePeriodId.')
+        if (projectId) payload.project = projectId
+        if (periodId) payload.period = periodId
       }
-      if (periodId) {
-        payload.period = periodId
-      }
+
       if (prorabPlanId) {
         payload.prorab_plan = prorabPlanId
       }
 
-      await createExpense(payload).unwrap()
+      await createExpense(payload as unknown as Parameters<ReturnType<typeof useCreateActualExpenseMutation>[0]>[0]).unwrap()
       onSuccess?.()
       setFormData({
         scope: 'project',
         categoryId: null,
         subcategoryId: null,
-        name: '',
         amount: '',
         spent_at: new Date().toISOString().split('T')[0],
         comment: '',
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err)
       setApiError(errorMessage || 'Failed to create expense')
     }
@@ -136,12 +151,17 @@ export function CreateActualExpenseForm({
 
   const isSubmitDisabled = isLoading || !formData.comment.trim()
 
+  // Hide form for Director and Foreman (admin only)
+  if (!canManage) {
+    return null
+  }
+
   return (
     <>
       <form onSubmit={handleSubmit} className="create-actual-expense-form">
         <div className="form-field">
           <label className="input-label">
-            Scope <span style={{ color: '#dc3545' }}>*</span>
+            {t('categories.scope')} <span style={{ color: '#dc3545' }}>*</span>
           </label>
           <select
             className={`input ${errors.scope ? 'input-error' : ''}`}
@@ -149,15 +169,16 @@ export function CreateActualExpenseForm({
             onChange={(e) =>
               setFormData({
                 ...formData,
-                scope: e.target.value as 'project' | 'office',
+                scope: e.target.value as 'project' | 'office' | 'charity',
                 categoryId: null,
                 subcategoryId: null,
               })
             }
             required
           >
-            <option value="project">Project</option>
-            <option value="office">Office</option>
+            <option value="project">{t('categories.project')}</option>
+            <option value="office">{t('categories.office')}</option>
+            <option value="charity">{t('categories.charity')}</option>
           </select>
           {errors.scope && <span className="input-error-text">{errors.scope}</span>}
         </div>
@@ -165,7 +186,7 @@ export function CreateActualExpenseForm({
         <div className="form-field">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label">
-              Category
+              {t('categories.name')}
             </label>
             <Button
               type="button"
@@ -173,7 +194,7 @@ export function CreateActualExpenseForm({
               size="small"
               onClick={() => setShowCreateCategoryModal(true)}
             >
-              Create Category
+              {t('categories.create')}
             </Button>
           </div>
           <select
@@ -187,7 +208,7 @@ export function CreateActualExpenseForm({
               })
             }
           >
-            <option value="">Select category...</option>
+            <option value="">{t('expenses.form.selectCategory')}</option>
             {rootCategories?.results.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}
@@ -199,7 +220,7 @@ export function CreateActualExpenseForm({
 
         {formData.categoryId && (
           <div className="form-field">
-            <label className="input-label">Subcategory (optional)</label>
+            <label className="input-label">{t('expenses.form.subcategory')}</label>
             <select
               className={`input ${errors.subcategoryId ? 'input-error' : ''}`}
               value={formData.subcategoryId || ''}
@@ -210,7 +231,7 @@ export function CreateActualExpenseForm({
                 })
               }
             >
-              <option value="">None</option>
+              <option value="">{t('expenses.form.none')}</option>
               {subcategories?.results.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
@@ -221,16 +242,8 @@ export function CreateActualExpenseForm({
           </div>
         )}
 
-        <Input
-          label="Name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          error={errors.name}
-          required
-        />
-
       <Input
-        label="Amount"
+        label={t('budgetReport.form.amount')}
         type="number"
         step="0.01"
         min="0"
@@ -241,7 +254,7 @@ export function CreateActualExpenseForm({
       />
 
       <Input
-        label="Date"
+        label={t('expenses.form.spentAt')}
         type="date"
         value={formData.spent_at}
         onChange={(e) => setFormData({ ...formData, spent_at: e.target.value })}
@@ -251,7 +264,7 @@ export function CreateActualExpenseForm({
 
       <div className="form-field">
         <label className="input-label">
-          Comment <span style={{ color: '#dc3545' }}>*</span>
+          {t('budgetReport.form.comment')} <span style={{ color: '#dc3545' }}>*</span>
         </label>
         <textarea
           className={`input ${errors.comment ? 'input-error' : ''}`}
@@ -263,7 +276,7 @@ export function CreateActualExpenseForm({
             }
           }}
           rows={4}
-          placeholder="Enter comment for this expense..."
+          placeholder={t('expenses.form.comment')}
           required
         />
         {errors.comment && <span className="input-error-text">{errors.comment}</span>}
@@ -274,11 +287,11 @@ export function CreateActualExpenseForm({
       <div className="form-actions">
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         )}
         <Button type="submit" disabled={isSubmitDisabled}>
-          {isLoading ? 'Creating...' : 'Create Expense'}
+          {isLoading ? t('common.creating') : t('expenses.create')}
         </Button>
       </div>
     </form>

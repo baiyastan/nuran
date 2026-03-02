@@ -98,7 +98,7 @@ export function EditProjectModal({ isOpen, onClose, project }: EditProjectModalP
       await updateProject({ id: project.id, data: payload }).unwrap()
       
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage = getErrorMessage(err)
       setApiError(errorMessage || t('projects.form.updateError'))
     }

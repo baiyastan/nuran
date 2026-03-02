@@ -12,20 +12,34 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, children, closeOnBackdropClick = true }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const firstFocusableRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | null>(null)
+  const prevIsOpenRef = useRef(false)
 
   useEffect(() => {
-    if (!isOpen) return
+    // Only focus when transitioning from closed to open
+    const wasClosed = prevIsOpenRef.current === false
+    const isNowOpen = isOpen === true
+    
+    if (!isOpen) {
+      prevIsOpenRef.current = isOpen
+      return
+    }
 
-    // Focus first input when modal opens
-    const timer = setTimeout(() => {
-      const firstInput = modalRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-        'input, textarea'
-      )
-      if (firstInput) {
-        firstInput.focus()
-        firstFocusableRef.current = firstInput
-      }
-    }, 100)
+    // Focus first input only when opening (was closed, now open)
+    let timer: NodeJS.Timeout | null = null
+    if (wasClosed && isNowOpen) {
+      timer = setTimeout(() => {
+        const firstInput = modalRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+          'input, textarea'
+        )
+        if (firstInput) {
+          firstInput.focus()
+          firstFocusableRef.current = firstInput
+        }
+      }, 100)
+    }
+    
+    // Update ref for next render
+    prevIsOpenRef.current = isOpen
 
     // Handle Escape key
     const handleEscape = (e: KeyboardEvent) => {
@@ -40,7 +54,9 @@ export function Modal({ isOpen, onClose, title, children, closeOnBackdropClick =
     document.body.style.overflow = 'hidden'
 
     return () => {
-      clearTimeout(timer)
+      if (timer) {
+        clearTimeout(timer)
+      }
       document.removeEventListener('keydown', handleEscape)
       document.body.style.overflow = ''
     }

@@ -165,20 +165,38 @@ class TestForemanAppendOnly:
     
     def test_foreman_append_only_plan_items(self, api_client, foreman_user, director_user, admin_user, db):
         """Test foreman cannot update/delete plan items."""
-        from apps.planning.models import PlanPeriod, PlanItem, Project
-        
+        from apps.planning.models import PlanPeriod, PlanItem
+        from apps.projects.models import Project, ProjectAssignment
+        from apps.budgeting.models import ExpenseCategory
+
         # Create test data
-        project = Project.objects.create(name='Test Project', status='active')
+        project = Project.objects.create(
+            name='Test Project',
+            status='active',
+            description='',
+            created_by=admin_user,
+        )
+        materials_category = ExpenseCategory.objects.create(
+            name='Materials',
+            scope='project',
+            kind='EXPENSE',
+            parent=None,
+            is_active=True,
+        )
         plan_period = PlanPeriod.objects.create(
             project=project,
             period='2024-01',
             status='draft',
             created_by=foreman_user
         )
+        ProjectAssignment.objects.create(
+            project=project,
+            prorab=foreman_user
+        )
         plan_item = PlanItem.objects.create(
             plan_period=plan_period,
             title='Test Item',
-            category='Materials',
+            category=materials_category,
             qty=10,
             unit='kg',
             amount=100.00,
@@ -190,7 +208,7 @@ class TestForemanAppendOnly:
         create_data = {
             'plan_period': plan_period.id,
             'title': 'New Item',
-            'category': 'Materials',
+            'category': materials_category.id,
             'qty': 5,
             'unit': 'kg',
             'amount': 50.00
@@ -198,10 +216,10 @@ class TestForemanAppendOnly:
         response = api_client.post('/api/v1/plan-items/', create_data)
         assert response.status_code == status.HTTP_201_CREATED
         
-        # Foreman cannot update (PATCH)
+        # Foreman can update when status is draft (PATCH)
         update_data = {'title': 'Updated Item'}
         response = api_client.patch(f'/api/v1/plan-items/{plan_item.id}/', update_data)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
         
         # Foreman cannot delete (DELETE)
         response = api_client.delete(f'/api/v1/plan-items/{plan_item.id}/')

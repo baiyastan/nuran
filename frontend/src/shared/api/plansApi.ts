@@ -28,7 +28,7 @@ export const plansApi = baseApi.injectEndpoints({
     }),
     getPlan: builder.query<Plan, number>({
       query: (id) => ({ url: `/plans/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'Plan', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Plan', id }],
     }),
     createPlan: builder.mutation<Plan, Partial<Plan>>({
       query: (body) => ({
@@ -44,7 +44,7 @@ export const plansApi = baseApi.injectEndpoints({
         method: 'PATCH',
         data: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Plan', id }, 'Plan'],
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'Plan', id }, 'Plan'],
     }),
     deletePlan: builder.mutation<void, number>({
       query: (id) => ({

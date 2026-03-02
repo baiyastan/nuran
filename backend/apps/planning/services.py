@@ -3,11 +3,36 @@ Planning services - business logic layer.
 """
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from decimal import Decimal
+import logging
 from apps.audit.services import AuditLogService
-from .models import PlanPeriod, PlanItem, ProrabPlan, ProrabPlanItem, ActualExpense
+from apps.finance.services import assert_month_open, FinancePeriodService
+from apps.finance.models import FinancePeriod
+from apps.finance.constants import MONTH_REQUIRED_MSG
+from .models import PlanPeriod, PlanItem, ProrabPlan, ProrabPlanItem, ActualExpense, Expense
+from .constants import PLAN_PERIOD_MODIFY_BLOCKED_STATUSES
+from apps.budgeting.models import MonthPeriod
+
+logger = logging.getLogger(__name__)
+
+
+def assert_plan_editing_allowed(month_period, user):
+    """Assert that plan editing is allowed for the given month period and user.
+    
+    Raises ValidationError if:
+    - Foreman tries to edit when month is LOCKED
+    - Admin and director can still edit when month is LOCKED (not strict mode)
+    """
+    if not month_period:
+        # If no month_period is set, allow editing (backward compatibility)
+        return
+    
+    if month_period.status == 'LOCKED':
+        # Only block foreman when month is LOCKED; admin/director can still edit
+        if user.role == 'foreman':
+            raise ValidationError("Plan editing is not allowed when month is locked")
 
 
 class PlanPeriodService:
@@ -16,11 +41,52 @@ class PlanPeriodService:
     @staticmethod
     def create(user, **data):
         """Create a new plan period."""
+        # Link to MonthPeriod if period is provided
+        period_str = data.get('period')
+        month_period = None
+        if period_str:
+            # Require an existing MonthPeriod; do not auto-create.
+            month_value = period_str.strip()
+            try:
+                month_period = MonthPeriod.objects.get(month=month_value)
+            except MonthPeriod.DoesNotExist:
+                raise ValidationError(MONTH_REQUIRED_MSG)
+            data['month_period'] = month_period
+        
+        # Check month period lock status before creating
+        assert_plan_editing_allowed(month_period, user)
+        
         data['created_by'] = user
         plan_period = PlanPeriod.objects.create(**data)
         
         # Audit log
         AuditLogService.log_create(user, plan_period)
+        
+        return plan_period
+    
+    @staticmethod
+    def update(plan_period, user, **data):
+        """Update a plan period."""
+        # Check month period lock status before updating
+        month_period = data.get('month_period', plan_period.month_period)
+        assert_plan_editing_allowed(month_period, user)
+        
+        before_state = {}
+        for field in plan_period._meta.fields:
+            if field.name not in ['id', 'created_at', 'updated_at']:
+                value = getattr(plan_period, field.name, None)
+                if value is not None:
+                    if hasattr(value, 'pk'):
+                        before_state[field.name] = value.pk
+                    else:
+                        before_state[field.name] = value
+        
+        for key, value in data.items():
+            setattr(plan_period, key, value)
+        plan_period.save()
+        
+        # Audit log
+        AuditLogService.log_update(user, plan_period, before_state)
         
         return plan_period
     
@@ -108,20 +174,55 @@ class PlanItemService:
     """Service for PlanItem business logic."""
     
     @staticmethod
+    def _ensure_period_editable_for_foreman(plan_period):
+        """Ensure plan period is editable for foreman (not yet accepted by admin)."""
+        if plan_period.status in PLAN_PERIOD_MODIFY_BLOCKED_STATUSES:
+            raise ValidationError("Cannot create/update plan items after plan has been accepted by admin")
+    
+    @staticmethod
     def create(user, **data):
         """Create a new plan item (append-only)."""
         plan_period = data.get('plan_period')
         
+        # Director is read-only
+        if user.role == 'director':
+            raise ValidationError("Director cannot create plan items")
+        
+        # Check month period lock status before creating
+        month_period = plan_period.month_period if plan_period else None
+        assert_plan_editing_allowed(month_period, user)
+        
+        # Admin can always create (if month is not locked)
+        if user.role == 'admin':
+            data['created_by'] = user
+            plan_item = PlanItem.objects.create(**data)
+            AuditLogService.log_create(user, plan_item)
+            return plan_item
+        
+        # Foreman validation: can only create for project plans assigned to them
+        if user.role == 'foreman':
+            PlanItemService._ensure_period_editable_for_foreman(plan_period)
+            
+            # Reject if fund_kind is not 'project'
+            if plan_period.fund_kind != 'project':
+                raise ValidationError("Foreman can only create plan items for project plans")
+            
+            # Reject if project is null
+            if not plan_period.project:
+                raise ValidationError("Foreman can only create plan items for project plans with an assigned project")
+            
+            # Only enforce assignment check if assignments exist for this project (backward compatibility)
+            from apps.projects.models import ProjectAssignment
+            project_has_assignments = ProjectAssignment.objects.filter(project=plan_period.project).exists()
+            if project_has_assignments:
+                # If assignments exist, verify foreman is assigned
+                if not ProjectAssignment.objects.filter(project=plan_period.project, prorab=user).exists():
+                    raise ValidationError("You are not assigned to this project")
+            # If no assignments exist, allow creation (backward compatibility)
+        
         # Validate plan period is not locked
         if plan_period.status == 'locked':
             raise ValidationError("Cannot add plan items to a locked plan period")
-        
-        # Foreman can only create items in draft periods they created
-        if user.role == 'foreman':
-            if plan_period.status != 'draft':
-                raise ValidationError("Foreman can only add items to draft plan periods")
-            if plan_period.created_by != user:
-                raise ValidationError("Foreman can only add items to their own plan periods")
         
         data['created_by'] = user
         plan_item = PlanItem.objects.create(**data)
@@ -134,21 +235,59 @@ class PlanItemService:
     @staticmethod
     def can_modify(plan_item, user):
         """Check if user can modify a plan item."""
-        # Foreman cannot modify plan items (append-only)
+        # Admin can always modify
+        if user.role == 'admin':
+            return True
+        
+        # Director can modify when plan period status is 'draft' or 'open' (legacy alias)
+        if user.role == 'director':
+            status = plan_item.plan_period.status
+            return status in ('draft', 'open')
+        
+        # Foreman can modify if plan period is not yet accepted by admin
         if user.role == 'foreman':
-            return False
+            return plan_item.plan_period.status not in PLAN_PERIOD_MODIFY_BLOCKED_STATUSES
         
-        # Check if plan period is locked
-        if plan_item.plan_period.status == 'locked':
-            return False
-        
-        # Admin and director can modify
-        return user.role in ('admin', 'director')
+        return False
     
     @staticmethod
     def update(plan_item, user, **data):
         """Update a plan item."""
-        if not PlanItemService.can_modify(plan_item, user):
+        # Director can update when plan period status is 'draft' or 'open' (legacy alias)
+        if user.role == 'director':
+            status = plan_item.plan_period.status
+            if status not in ('draft', 'open'):
+                raise ValidationError("Director cannot update plan items when plan period is not in draft status")
+        
+        # Check month period lock status before updating
+        month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
+        assert_plan_editing_allowed(month_period, user)
+        
+        # Admin can always update (if month is not locked)
+        if user.role == 'admin':
+            pass  # Allow update
+        # Foreman validation: can only update for project plans assigned to them
+        elif user.role == 'foreman':
+            PlanItemService._ensure_period_editable_for_foreman(plan_item.plan_period)
+            
+            # Reject if fund_kind is not 'project'
+            if plan_item.plan_period.fund_kind != 'project':
+                raise ValidationError("Foreman can only update plan items for project plans")
+            
+            # Reject if project is null
+            if not plan_item.plan_period.project:
+                raise ValidationError("Foreman can only update plan items for project plans with an assigned project")
+            
+            # Only enforce assignment check if assignments exist for this project (backward compatibility)
+            from apps.projects.models import ProjectAssignment
+            project_has_assignments = ProjectAssignment.objects.filter(project=plan_item.plan_period.project).exists()
+            if project_has_assignments:
+                # If assignments exist, verify foreman is assigned
+                if not ProjectAssignment.objects.filter(project=plan_item.plan_period.project, prorab=user).exists():
+                    raise ValidationError("You are not assigned to this project")
+            # If no assignments exist, allow update (backward compatibility)
+        # Check if user can modify (for other roles)
+        elif not PlanItemService.can_modify(plan_item, user):
             raise ValidationError("You do not have permission to modify this plan item")
         
         before_state = {}
@@ -173,6 +312,10 @@ class PlanItemService:
     @staticmethod
     def delete(plan_item, user):
         """Delete a plan item."""
+        # Check month period lock status before deleting
+        month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
+        assert_plan_editing_allowed(month_period, user)
+        
         if not PlanItemService.can_modify(plan_item, user):
             raise ValidationError("You do not have permission to delete this plan item")
         
@@ -311,16 +454,57 @@ class ActualExpenseService:
         ).order_by('-spent_at', '-created_at')
     
     @staticmethod
+    def _get_or_assign_category(expense_name, finance_period):
+        """Get or assign category for an expense based on name matching or default."""
+        from apps.budgeting.models import ExpenseCategory
+        
+        # Map fund_kind to scope
+        scope_map = {'project': 'project', 'office': 'office', 'charity': 'charity'}
+        scope = scope_map.get(finance_period.fund_kind, 'project')
+        
+        # Try to find matching category by name (normalized, case-insensitive)
+        normalized_name = expense_name.strip().lower()
+        category = ExpenseCategory.objects.filter(
+            scope=scope,
+            name__iexact=normalized_name,
+            is_active=True,
+            kind='EXPENSE'
+        ).first()
+        
+        if not category:
+            # Get or create default "Башка" category for this scope
+            default_category, _ = ExpenseCategory.objects.get_or_create(
+                name='Башка',
+                scope=scope,
+                parent=None,
+                kind='EXPENSE',
+                defaults={'is_active': True}
+            )
+            category = default_category
+        
+        return category
+    
+    @staticmethod
     def create(user, **data):
         """Create a new actual expense."""
-        # Only admin can create expenses
-        if user.role not in ('admin', 'director'):
-            raise ValidationError("Only admin or director can create actual expenses")
+        # Validate finance_period is provided
+        finance_period = data.get('finance_period')
+        if not finance_period:
+            raise ValidationError("finance_period is required")
+        
+        # Note: Month period lock does NOT affect expenses - expenses can be created even when month is LOCKED
         
         # Validate comment is not empty
         comment = data.get('comment', '').strip()
         if not comment:
             raise ValidationError("Comment is required and cannot be empty.")
+        
+        # Auto-assign category if not provided
+        if not data.get('category'):
+            expense_name = data.get('name', '').strip()
+            if not expense_name:
+                raise ValidationError("Name is required for category auto-assignment.")
+            data['category'] = ActualExpenseService._get_or_assign_category(expense_name, finance_period)
         
         data['created_by'] = user
         expense = ActualExpense.objects.create(**data)
@@ -333,9 +517,7 @@ class ActualExpenseService:
     @staticmethod
     def update(expense, user, **data):
         """Update an actual expense."""
-        # Only admin can update expenses
-        if user.role not in ('admin', 'director'):
-            raise ValidationError("Only admin or director can update actual expenses")
+        # Note: Month period lock does NOT affect expenses - expenses can be updated even when month is LOCKED
         
         # Validate comment is not empty if provided
         if 'comment' in data:
@@ -365,9 +547,7 @@ class ActualExpenseService:
     @staticmethod
     def delete(expense, user):
         """Delete an actual expense."""
-        # Only admin can delete expenses
-        if user.role not in ('admin', 'director'):
-            raise ValidationError("Only admin or director can delete actual expenses")
+        # Note: Month period lock does NOT affect expenses - expenses can be deleted even when month is LOCKED
         
         # Capture object_id BEFORE deletion
         object_id = expense.pk
@@ -384,4 +564,352 @@ class ActualExpenseService:
         
         # Audit log
         AuditLogService.log_delete(user, expense, before_state, object_id_override=object_id)
+
+
+class ExpenseService:
+    """Service for Expense business logic."""
+    
+    @staticmethod
+    def create(user, **data):
+        """Create a new expense."""
+        from django.core.exceptions import ValidationError
+        from apps.budgeting.models import ExpenseCategory
+        
+        plan_period = data.get('plan_period')
+        plan_item = data.get('plan_item')
+        category = data.get('category')
+        
+        # Auto-fill category from plan_item if not provided
+        if not category and plan_item:
+            if hasattr(plan_item, 'category'):
+                plan_item_obj = plan_item
+            else:
+                from ..models import PlanItem
+                plan_item_obj = PlanItem.objects.select_related('category').get(id=plan_item)
+            
+            if plan_item_obj.category:
+                category = plan_item_obj.category
+                data['category'] = category
+        
+        # Validate category scope matches plan_period.fund_kind (defense-in-depth)
+        if category and plan_period:
+            if hasattr(category, 'id'):
+                category_obj = category
+            else:
+                try:
+                    category_obj = ExpenseCategory.objects.get(id=category)
+                except ExpenseCategory.DoesNotExist:
+                    raise ValidationError({'category': 'Selected category does not exist.'})
+            
+            if category_obj.scope != plan_period.fund_kind:
+                raise ValidationError({
+                    'category': f"Category scope '{category_obj.scope}' does not match plan period fund_kind '{plan_period.fund_kind}'."
+                })
+        
+        data['created_by'] = user
+        expense = Expense.objects.create(**data)
+        
+        # Audit log
+        AuditLogService.log_create(user, expense)
+        
+        return expense
+    
+    @staticmethod
+    def update(expense, user, **data):
+        """Update an expense."""
+        plan_item = data.get('plan_item')
+        category = data.get('category')
+        
+        # If plan_item changed but category not explicitly set, use plan_item.category
+        if plan_item is not None and category is None:
+            if hasattr(plan_item, 'category'):
+                plan_item_obj = plan_item
+            else:
+                from ..models import PlanItem
+                plan_item_obj = PlanItem.objects.select_related('category').get(id=plan_item)
+            
+            if plan_item_obj.category:
+                data['category'] = plan_item_obj.category
+        
+        before_state = {}
+        for field in expense._meta.fields:
+            if field.name not in ['id', 'created_at', 'updated_at']:
+                value = getattr(expense, field.name, None)
+                if value is not None:
+                    if hasattr(value, 'pk'):
+                        before_state[field.name] = value.pk
+                    else:
+                        before_state[field.name] = value
+        
+        for key, value in data.items():
+            setattr(expense, key, value)
+        expense.save()
+        
+        # Audit log
+        AuditLogService.log_update(user, expense, before_state)
+        
+        return expense
+    
+    @staticmethod
+    def delete(expense, user):
+        """Delete an expense."""
+        # Capture object_id BEFORE deletion
+        object_id = expense.pk
+        
+        before_state = {
+            'id': expense.id,
+            'amount': str(expense.amount),
+            'plan_period_id': expense.plan_period_id,
+        }
+        
+        expense.delete()
+        
+        # Audit log
+        AuditLogService.log_delete(user, expense, before_state, object_id_override=object_id)
+
+
+class PlanningExpenseActualExpenseSyncService:
+    """Service for syncing Planning Expense to Finance ActualExpense."""
+    
+    @staticmethod
+    def resolve_finance_period(expense):
+        """Resolve FinancePeriod from Expense's PlanPeriod.
+        
+        Args:
+            expense: Expense instance with plan_period loaded
+            
+        Returns:
+            FinancePeriod instance (created if needed)
+            
+        Raises:
+            ValidationError: If PlanPeriod or MonthPeriod is invalid
+        """
+        plan_period = expense.plan_period
+        if not plan_period:
+            raise ValidationError("Expense must have a plan_period to sync to ActualExpense")
+        
+        # Extract year and month from PlanPeriod.period ("YYYY-MM")
+        period_str = plan_period.period
+        try:
+            year_str, month_str = period_str.split('-')
+            year = int(year_str)
+            month = int(month_str)
+        except (ValueError, AttributeError):
+            raise ValidationError(f"Invalid period format: {period_str}. Expected YYYY-MM")
+        
+        # Resolve existing MonthPeriod; do not auto-create.
+        try:
+            month_period = MonthPeriod.objects.get(month=period_str)
+        except MonthPeriod.DoesNotExist:
+            raise ValidationError(MONTH_REQUIRED_MSG)
+        
+        # Resolve FinancePeriod
+        # For office/charity: fund_kind + month_period (project=None)
+        # For project: fund_kind + month_period + project
+        fund_kind = plan_period.fund_kind
+        project = plan_period.project if fund_kind == 'project' else None
+        
+        # Query FinancePeriod
+        finance_period = FinancePeriod.objects.filter(
+            month_period=month_period,
+            fund_kind=fund_kind
+        )
+        
+        # For project fund_kind, also filter by project
+        if fund_kind == 'project':
+            if not project:
+                raise ValidationError("Project is required for fund_kind='project'")
+            finance_period = finance_period.filter(project=project)
+        else:
+            # For office/charity, ensure project is None
+            finance_period = finance_period.filter(project__isnull=True)
+        
+        finance_period = finance_period.first()
+        
+        # Create FinancePeriod if it doesn't exist
+        if not finance_period:
+            # Use a system user or the expense creator for FinancePeriod creation
+            # Since we're syncing server-side, we'll use the expense creator if available
+            creator = expense.created_by if hasattr(expense, 'created_by') and expense.created_by else None
+            
+            # Create FinancePeriod (bypassing month lock check for sync)
+            # We'll create it directly since sync should work even if month is locked
+            try:
+                # Derive finance period status from MonthPeriod status.
+                if month_period.status == 'LOCKED':
+                    finance_status = 'locked'
+                else:
+                    # Default to 'open' for OPEN and any legacy/unknown states.
+                    finance_status = 'open'
+
+                finance_period = FinancePeriod.objects.create(
+                    month_period=month_period,
+                    fund_kind=fund_kind,
+                    project=project,
+                    status=finance_status,
+                    created_by=creator
+                )
+                logger.info(f"Created FinancePeriod {finance_period.id} for sync: {period_str}, {fund_kind}, project={project}")
+            except IntegrityError:
+                # Constraint violation - FinancePeriod already exists (race condition or constraint issue)
+                # Re-query to get the existing one
+                finance_period = FinancePeriod.objects.filter(
+                    month_period=month_period,
+                    fund_kind=fund_kind
+                ).first()
+                if not finance_period:
+                    raise ValidationError(f"Failed to create or find FinancePeriod for {period_str}, {fund_kind}")
+                logger.warning(f"FinancePeriod already exists for {period_str}, {fund_kind}, using existing {finance_period.id}")
+        
+        return finance_period
+    
+    @staticmethod
+    def sync_create(expense, user):
+        """Create Finance ActualExpense from Planning Expense.
+        
+        Args:
+            expense: Expense instance (must be saved with plan_period and plan_item)
+            user: User who created the expense
+            
+        Returns:
+            ActualExpense instance or None if sync fails
+        """
+        try:
+            # Refresh expense to ensure we have latest data and related objects loaded
+            expense.refresh_from_db()
+            
+            # Check if already synced
+            if expense.finance_actual_expense_id:
+                logger.warning(f"Expense {expense.id} already has linked ActualExpense {expense.finance_actual_expense_id}, skipping create")
+                return expense.finance_actual_expense
+            
+            # Ensure plan_period and plan_item are loaded
+            if not hasattr(expense, '_plan_period_cache'):
+                expense.plan_period  # Trigger load
+            if not hasattr(expense, '_plan_item_cache'):
+                expense.plan_item  # Trigger load
+            
+            # Resolve FinancePeriod
+            finance_period = PlanningExpenseActualExpenseSyncService.resolve_finance_period(expense)
+            
+            # Get name from plan_item.title (ensure >= 2 chars)
+            plan_item = expense.plan_item
+            name = plan_item.title.strip() if plan_item and plan_item.title else "Expense"
+            if len(name) < 2:
+                name = f"Expense {expense.id}"  # Fallback
+            
+            # Prepare ActualExpense data
+            actual_expense_data = {
+                'finance_period': finance_period,
+                'period': expense.plan_period,  # Link to PlanPeriod for trace
+                'name': name,
+                'amount': expense.amount,
+                'spent_at': expense.spent_at,
+                'comment': expense.comment,
+            }
+            # Include category only if it exists (omit key if None to enable auto-assignment)
+            if expense.category is not None:
+                actual_expense_data['category'] = expense.category
+            
+            # Create ActualExpense using service
+            actual_expense = ActualExpenseService.create(user, **actual_expense_data)
+            
+            # Link back to Expense
+            expense.finance_actual_expense = actual_expense
+            expense.save(update_fields=['finance_actual_expense'])
+            
+            logger.info(f"Synced Expense {expense.id} → ActualExpense {actual_expense.id}")
+            return actual_expense
+            
+        except Exception as e:
+            logger.error(f"Failed to sync Expense {expense.id} to ActualExpense: {str(e)}", exc_info=True)
+            return None
+    
+    @staticmethod
+    def sync_update(expense, user):
+        """Update Finance ActualExpense from Planning Expense.
+        
+        Args:
+            expense: Expense instance (must be saved)
+            user: User who updated the expense
+            
+        Returns:
+            ActualExpense instance or None if sync fails
+        """
+        try:
+            # Refresh expense to ensure we have latest data
+            expense.refresh_from_db()
+            
+            # Check if synced
+            if not expense.finance_actual_expense_id:
+                # Not synced yet, create it
+                return PlanningExpenseActualExpenseSyncService.sync_create(expense, user)
+            
+            actual_expense = expense.finance_actual_expense
+            
+            # Ensure plan_period and plan_item are loaded
+            if not hasattr(expense, '_plan_period_cache'):
+                expense.plan_period  # Trigger load
+            if not hasattr(expense, '_plan_item_cache'):
+                expense.plan_item  # Trigger load
+            
+            # Resolve FinancePeriod (may have changed if plan_period changed)
+            finance_period = PlanningExpenseActualExpenseSyncService.resolve_finance_period(expense)
+            
+            # Get name from plan_item.title
+            plan_item = expense.plan_item
+            name = plan_item.title.strip() if plan_item and plan_item.title else "Expense"
+            if len(name) < 2:
+                name = f"Expense {expense.id}"
+            
+            # Prepare update data
+            update_data = {
+                'finance_period': finance_period,
+                'period': expense.plan_period,
+                'name': name,
+                'amount': expense.amount,
+                'spent_at': expense.spent_at,
+                'comment': expense.comment,
+            }
+            # Include category only if it exists (omit key if None to enable auto-assignment)
+            if expense.category is not None:
+                update_data['category'] = expense.category
+            
+            # Update ActualExpense using service
+            actual_expense = ActualExpenseService.update(actual_expense, user, **update_data)
+            
+            logger.info(f"Synced update Expense {expense.id} → ActualExpense {actual_expense.id}")
+            return actual_expense
+            
+        except Exception as e:
+            logger.error(f"Failed to sync update Expense {expense.id} to ActualExpense: {str(e)}", exc_info=True)
+            return None
+    
+    @staticmethod
+    def sync_delete(expense, user):
+        """Delete Finance ActualExpense when Planning Expense is deleted.
+        
+        Args:
+            expense: Expense instance (before deletion)
+            user: User who deleted the expense
+            
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        try:
+            if not expense.finance_actual_expense_id:
+                # Not synced, nothing to delete
+                return True
+            
+            actual_expense = expense.finance_actual_expense
+            
+            # Delete ActualExpense using service
+            ActualExpenseService.delete(actual_expense, user)
+            
+            logger.info(f"Synced delete Expense {expense.id} → ActualExpense {actual_expense.id} deleted")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to sync delete Expense {expense.id} ActualExpense: {str(e)}", exc_info=True)
+            return False
 

@@ -19,7 +19,11 @@ function UsersPage() {
   }
 
   // Extract error status code
-  const errorStatus = (error as any)?.status
+  let errorStatus: number | undefined
+  if (error && typeof error === 'object' && error !== null && 'status' in error) {
+    const status = (error as Record<string, unknown>).status
+    errorStatus = typeof status === 'number' ? status : undefined
+  }
 
   // Render error state
   if (error) {

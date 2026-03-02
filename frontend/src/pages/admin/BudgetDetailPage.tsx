@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useGetBudgetReportQuery, useUpdateSummaryCommentMutation } from '@/shared/api/budgetsApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
-import { formatDate, formatCurrency } from '@/shared/lib/utils'
+import { formatDate, formatCurrency, getErrorMessage } from '@/shared/lib/utils'
 import './BudgetDetailPage.css'
 
 function BudgetDetailPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const budgetId = id ? parseInt(id, 10) : 0
   const { data: report, isLoading, error, refetch } = useGetBudgetReportQuery(budgetId)
@@ -36,8 +34,8 @@ function BudgetDetailPage() {
         data: { comment_text: summaryComment.trim() },
       }).unwrap()
       refetch()
-    } catch (err: any) {
-      setCommentError(err?.data?.detail || 'Failed to save comment')
+    } catch (err: unknown) {
+      setCommentError(getErrorMessage(err) || 'Failed to save comment')
     }
   }
 

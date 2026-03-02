@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useListExpenseCategoriesQuery, ExpenseCategory } from '@/shared/api/expenseCategoriesApi'
+import { useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
 import { Button } from '@/shared/ui/Button/Button'
 import './CategoryPanel.css'
 

@@ -9,14 +9,19 @@ import {
   useUnlockMonthPeriodMutation,
 } from '@/shared/api/monthPeriodsApi'
 import { useToastContext } from '@/shared/ui/Toast/ToastProvider'
+import { getErrorMessage } from '@/shared/lib/utils'
 import { Button } from '@/shared/ui/Button/Button'
+import './MonthManagementPage.css'
 
 function MonthManagementPage() {
-  const { t } = useTranslation()
+  const { t } = useTranslation('monthManagement')
+  const { t: tCommon } = useTranslation('common')
   const navigate = useNavigate()
   const { showSuccess, showError } = useToastContext()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Initial month comes from ?month=YYYY-MM query (or falls back to current month).
+  // This value is preserved when navigating here from MonthGateBanner's "Manage months" link.
   const initialMonth = useMemo(() => {
     const fromUrl = searchParams.get('month')
     if (fromUrl && fromUrl.match(/^\d{4}-\d{2}$/)) {
@@ -47,6 +52,8 @@ function MonthManagementPage() {
   }
 
   const handleOpenMonth = async () => {
+    const isUnlockingExistingLockedMonth = !!monthPeriod && monthPeriod.status === 'LOCKED'
+
     try {
       if (!monthPeriod) {
         await createMonthPeriod({ month: selectedMonth }).unwrap()
@@ -54,17 +61,17 @@ function MonthManagementPage() {
         await unlockMonthPeriod(monthPeriod.id).unwrap()
       }
       await refetch()
-      showSuccess(
-        t('monthManagement.openSuccess', {
-          defaultValue: 'Month opened successfully',
-        }),
-      )
-    } catch (err: any) {
-      showError(
-        t('monthManagement.openError', {
-          defaultValue: 'Failed to open month',
-        }),
-      )
+      if (isUnlockingExistingLockedMonth) {
+        showSuccess(t('toast.unlockSuccess'))
+      } else {
+        showSuccess(t('toast.openSuccess'))
+      }
+    } catch (err: unknown) {
+      if (isUnlockingExistingLockedMonth) {
+        showError(t('toast.unlockError'))
+      } else {
+        showError(t('toast.openError'))
+      }
     }
   }
 
@@ -73,17 +80,9 @@ function MonthManagementPage() {
     try {
       await lockMonthPeriod(monthPeriod.id).unwrap()
       await refetch()
-      showSuccess(
-        t('monthManagement.lockSuccess', {
-          defaultValue: 'Month locked successfully',
-        }),
-      )
-    } catch (err: any) {
-      showError(
-        t('monthManagement.lockError', {
-          defaultValue: 'Failed to lock month',
-        }),
-      )
+      showSuccess(t('toast.lockSuccess'))
+    } catch (err: unknown) {
+      showError(t('toast.lockError'))
     }
   }
 
@@ -93,102 +92,97 @@ function MonthManagementPage() {
 
   const isMutating = isCreating || isLocking || isUnlocking
 
+  const formattedMonth = selectedMonth
+
+  const loadErrorText = useMemo(() => {
+    if (!error) return null
+    return getErrorMessage(error)
+  }, [error])
+
   return (
-    <div className="finance-periods-page">
-      <div className="page-header">
-        <div>
-          <h1>{t('monthManagement.title', { defaultValue: 'Month management' })}</h1>
-          <p className="help-text">
-            {t('monthManagement.helpText', {
-              defaultValue:
-                'Open, lock or unlock months. Month lock controls when plans can be edited across the system.',
-            })}
-          </p>
+    <div className="month-management-container">
+      <div className="month-management-page">
+        <div className="month-management-header">
+          <div>
+            <h1>{t('title')}</h1>
+            <p className="help-text">{t('helpText')}</p>
+          </div>
+          <Button variant="secondary" onClick={goBack}>
+            {tCommon('back')}
+          </Button>
         </div>
-        <Button variant="secondary" onClick={goBack}>
-          {t('common.back')}
-        </Button>
-      </div>
 
-      <div className="month-selector">
-        <MonthSelector
-          value={selectedMonth}
-          onChange={handleMonthChange}
-          monthStatus={monthPeriod?.status ?? null}
-        />
-      </div>
+        <div className="month-management-selector">
+          <MonthSelector
+            value={selectedMonth}
+            onChange={handleMonthChange}
+            monthStatus={monthPeriod?.status ?? null}
+          />
+        </div>
 
-      <div className="finance-periods-list">
-        {isLoading ? (
-          <div className="loading">{t('common.loading')}</div>
-        ) : error ? (
-          <div className="error">
-            {t('monthManagement.loadError', {
-              defaultValue: 'Failed to load month status',
-            })}
-          </div>
-        ) : (
-          <div className="month-gate-card">
-            <div className="month-gate-card__header">
-              <h3 className="month-gate-card__title">{selectedMonth}</h3>
-              <span className="month-status-badge">
-                {normalizedStatus === 'NOT_CREATED'
-                  ? t('monthManagement.status.notCreated', { defaultValue: 'Not opened' })
-                  : normalizedStatus === 'OPEN'
-                  ? t('common.status.OPEN')
-                  : t('common.status.LOCKED')}
-              </span>
+        <div className="month-management-content">
+          {isLoading ? (
+            <div className="loading">{tCommon('loading')}</div>
+          ) : error ? (
+            <div className="error">
+              {t('loadError')}
+              {loadErrorText && <div className="error-detail">{loadErrorText}</div>}
             </div>
-            <div className="month-gate-card__content">
-              {normalizedStatus === 'NOT_CREATED' && (
-                <>
-                  <p>
-                    {t('monthManagement.notOpened', {
-                      defaultValue: 'Month is not opened.',
-                    })}
-                  </p>
-                  <Button onClick={handleOpenMonth} disabled={isMutating}>
-                    {isCreating
-                      ? t('monthManagement.opening', { defaultValue: 'Opening…' })
-                      : t('monthManagement.openButton', { defaultValue: 'Open month' })}
-                  </Button>
-                </>
-              )}
-              {normalizedStatus === 'OPEN' && (
-                <>
-                  <p>
-                    {t('monthManagement.open', {
-                      defaultValue: 'Month is open.',
-                    })}
-                  </p>
-                  <Button
-                    onClick={handleLockMonth}
-                    disabled={isMutating}
-                    variant="danger"
-                  >
-                    {isLocking
-                      ? t('monthManagement.locking', { defaultValue: 'Locking…' })
-                      : t('monthManagement.lockButton', { defaultValue: 'Lock month' })}
-                  </Button>
-                </>
-              )}
-              {normalizedStatus === 'LOCKED' && (
-                <>
-                  <p>
-                    {t('monthManagement.locked', {
-                      defaultValue: 'Month is locked.',
-                    })}
-                  </p>
-                  <Button onClick={handleOpenMonth} disabled={isMutating}>
-                    {isUnlocking
-                      ? t('monthManagement.opening', { defaultValue: 'Opening…' })
-                      : t('monthManagement.unlockButton', { defaultValue: 'Unlock month' })}
-                  </Button>
-                </>
-              )}
+          ) : (
+            <div className="month-card">
+              <div className="month-card-header">
+                <h2 className="month-card-title">{formattedMonth}</h2>
+                <span
+                  className={
+                    normalizedStatus === 'NOT_CREATED'
+                      ? 'month-status-badge month-status-badge--not-created'
+                      : normalizedStatus === 'OPEN'
+                      ? 'month-status-badge month-status-badge--open'
+                      : 'month-status-badge month-status-badge--locked'
+                  }
+                >
+                  {normalizedStatus === 'NOT_CREATED'
+                    ? t('status.notCreated')
+                    : normalizedStatus === 'OPEN'
+                    ? tCommon('status.OPEN')
+                    : tCommon('status.LOCKED')}
+                </span>
+              </div>
+
+              <div className="month-card-body">
+                <p className="month-status-description">
+                  {normalizedStatus === 'NOT_CREATED'
+                    ? t('desc.notOpened')
+                    : normalizedStatus === 'OPEN'
+                    ? t('desc.open')
+                    : t('desc.locked')}
+                </p>
+
+                <div className="month-actions">
+                  {normalizedStatus === 'NOT_CREATED' && (
+                    <Button onClick={handleOpenMonth} disabled={isMutating}>
+                      {isCreating ? t('actions.opening') : t('actions.open')}
+                    </Button>
+                  )}
+                  {normalizedStatus === 'OPEN' && (
+                    <Button
+                      onClick={handleLockMonth}
+                      disabled={isMutating}
+                      variant="danger"
+                    >
+                      {isLocking ? t('actions.locking') : t('actions.lock')}
+                    </Button>
+                  )}
+                  {normalizedStatus === 'LOCKED' && (
+                    <Button onClick={handleOpenMonth} disabled={isMutating}>
+                      {isUnlocking ? t('actions.opening') : t('actions.unlock')}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

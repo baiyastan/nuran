@@ -1,0 +1,69 @@
+.plan-vs-fact-table {
+  padding: 0;
+}
+
+.plan-vs-fact-table .loading,
+.plan-vs-fact-table .error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.plan-vs-fact-table .empty-state {
+  padding: 2rem;
+  text-align: center;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.plan-vs-fact-table .empty-state p {
+  margin-bottom: 1rem;
+  color: #666;
+}
+
+.plan-vs-fact-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.plan-vs-fact-summary .fp-card {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #e0e0e0;
+}
+
+.plan-vs-fact-summary .fp-card__label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.plan-vs-fact-summary .fp-card__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.plan-vs-fact-summary .fp-card__value.diff-negative {
+  color: #198754;
+}
+
+.plan-vs-fact-summary .fp-card__value.diff-positive {
+  color: #dc3545;
+}
+
+.diff-value {
+  font-weight: 500;
+}
+
+.diff-value.diff-negative {
+  color: #198754;
+}
+
+.diff-value.diff-positive {
+  color: #dc3545;
+}
+

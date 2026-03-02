@@ -1,222 +1,250 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
-import { ExpenseCategory } from '@/shared/api/expenseCategoriesApi'
+import {
+  useListExpenseCategoriesQuery,
+  useDeleteExpenseCategoryMutation,
+  ExpenseCategory,
+} from '@/shared/api/expenseCategoriesApi'
 import { Button } from '@/shared/ui/Button/Button'
-import { AddRootModal } from '@/features/category-admin/AddRootModal'
-import { AddChildModal } from '@/features/category-admin/AddChildModal'
-import { EditCategoryModal } from '@/features/category-admin/EditCategoryModal'
-import { DeactivateCategoryModal } from '@/features/category-admin/DeactivateCategoryModal'
+import { Table } from '@/shared/ui/Table/Table'
+import { CreateCategoryModal } from './components/CreateCategoryModal'
+import { EditCategoryModal } from './components/EditCategoryModal'
+import { toast } from '@/shared/ui/Toast/toast'
 import './CategoriesPage.css'
+
+type Scope = 'office' | 'project' | 'charity'
+type ParentFilter = 'all' | 'root' | number
 
 function CategoriesPage() {
   const { t } = useTranslation()
-  const [selectedRootId, setSelectedRootId] = useState<number | null>(null)
-  const [showInactive, setShowInactive] = useState(false)
-  const [showAddRootModal, setShowAddRootModal] = useState(false)
-  const [showAddChildModal, setShowAddChildModal] = useState(false)
+  const [selectedScope, setSelectedScope] = useState<Scope>('office')
+  const [showActiveOnly, setShowActiveOnly] = useState(true)
+  const [selectedParent, setSelectedParent] = useState<ParentFilter>('all')
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null)
-  const [deactivatingCategory, setDeactivatingCategory] = useState<ExpenseCategory | null>(null)
 
-  // Fetch root categories
-  const { data: rootCategoriesData, refetch: refetchRoots } = useListExpenseCategoriesQuery({
-    parent: null,
-    is_active: showInactive ? undefined : true,
-    ordering: 'created_at', // Order by created_at ASC for roots
+  const [deleteCategory] = useDeleteExpenseCategoryMutation()
+
+  // Build query params
+  const queryParams = useMemo(() => {
+    const params: {
+      scope: Scope
+      is_active?: boolean
+      parent?: number | null
+    } = {
+      scope: selectedScope,
+    }
+
+    if (showActiveOnly) {
+      params.is_active = true
+    }
+
+    if (selectedParent !== 'all') {
+      params.parent = selectedParent === 'root' ? null : selectedParent
+    }
+
+    return params
+  }, [selectedScope, showActiveOnly, selectedParent])
+
+  // Fetch categories with filters
+  const { data: categoriesData, isLoading, error } = useListExpenseCategoriesQuery(queryParams)
+
+  // Fetch all categories for parent dropdown options
+  const { data: allCategoriesData } = useListExpenseCategoriesQuery({
+    scope: selectedScope,
+    is_active: true,
   })
 
-  // Fetch children of selected root
-  const { data: childrenData, refetch: refetchChildren } = useListExpenseCategoriesQuery(
-    {
-      parent: selectedRootId || undefined,
-      is_active: showInactive ? undefined : true,
-      ordering: 'name', // Order by name ASC for children
-    },
-    { skip: !selectedRootId }
-  )
+  // Get root categories for parent filter dropdown
+  const rootCategories = useMemo(() => {
+    return allCategoriesData?.results.filter((cat) => cat.parent_id === null) || []
+  }, [allCategoriesData])
 
-  const selectedRoot = rootCategoriesData?.results.find((cat) => cat.id === selectedRootId) || null
+  // Build parent name map for table display
+  const parentNameMap = useMemo(() => {
+    const map = new Map<number, string>()
+    allCategoriesData?.results.forEach((cat) => {
+      map.set(cat.id, cat.name)
+    })
+    return map
+  }, [allCategoriesData])
 
-  const handleRootSelect = (rootId: number) => {
-    setSelectedRootId(rootId)
-  }
+  const categories = useMemo(() => categoriesData?.results ?? [], [categoriesData])
 
-  const handleRefresh = () => {
-    refetchRoots()
-    if (selectedRootId) {
-      refetchChildren()
+  const handleDeleteClick = useCallback(async (category: ExpenseCategory) => {
+    if ((category.children_count || 0) > 0) {
+      return
     }
-  }
 
-  const handleAddRootSuccess = () => {
-    handleRefresh()
-  }
+    if (window.confirm(t('categories.confirmDelete', { name: category.name }))) {
+      try {
+        await deleteCategory(category.id).unwrap()
+      } catch (err) {
+        console.error('Delete failed:', err)
+        toast.error(t('categories.deleteError'))
+      }
+    }
+  }, [t, deleteCategory])
 
-  const handleAddChildSuccess = () => {
-    handleRefresh()
+  // Table columns
+  const columns = [
+    { key: 'name', label: t('categories.name') },
+    { key: 'parent', label: t('categories.parent') },
+    { key: 'children', label: t('categories.children') },
+    { key: 'active', label: t('categories.active') },
+    { key: 'actions', label: t('common.actions') },
+  ]
+
+  // Table data
+  const tableData = useMemo(() => {
+    return categories.map((category) => ({
+      name: category.name,
+      parent: category.parent_id ? parentNameMap.get(category.parent_id) || '—' : '—',
+      children: category.children_count || 0,
+      active: category.is_active ? (
+        <span className="badge badge-success">Active</span>
+      ) : (
+        <span className="badge badge-inactive">Inactive</span>
+      ),
+      actions: (
+        <div className="table-actions">
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => setEditingCategory(category)}
+          >
+            {t('common.edit')}
+          </Button>
+          <Button
+            size="small"
+            variant="danger"
+            onClick={() => handleDeleteClick(category)}
+            disabled={(category.children_count || 0) > 0}
+            title={
+              (category.children_count || 0) > 0
+                ? t('categories.cannotDeleteHasChildren')
+                : ''
+            }
+          >
+            {t('common.delete')}
+          </Button>
+        </div>
+      ),
+    }))
+  }, [categories, parentNameMap, t, handleDeleteClick])
+
+  const handleCreateSuccess = () => {
+    setShowCreateModal(false)
   }
 
   const handleEditSuccess = () => {
-    handleRefresh()
     setEditingCategory(null)
-  }
-
-  const handleDeactivateSuccess = () => {
-    handleRefresh()
-    setDeactivatingCategory(null)
-    // If deactivated category was selected, clear selection
-    if (deactivatingCategory?.id === selectedRootId) {
-      setSelectedRootId(null)
-    }
   }
 
   return (
     <div className="categories-page">
       <div className="page-header">
         <h2>{t('categories.title')}</h2>
-        <div className="header-actions">
-          <label className="toggle-inactive">
-            <input
-              type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
-            />
-            {t('categories.showInactive')}
-          </label>
-          <Button onClick={() => setShowAddRootModal(true)}>{t('categories.addRoot')}</Button>
-          <Button
-            onClick={() => setShowAddChildModal(true)}
-            disabled={!selectedRootId}
-            variant="secondary"
+        <Button onClick={() => setShowCreateModal(true)}>
+          {t('categories.create')}
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <div className="categories-tabs">
+        <button
+          className={`tab-button ${selectedScope === 'office' ? 'active' : ''}`}
+          onClick={() => {
+            setSelectedScope('office')
+            setSelectedParent('all')
+          }}
+        >
+          {t('categories.office')}
+        </button>
+        <button
+          className={`tab-button ${selectedScope === 'project' ? 'active' : ''}`}
+          onClick={() => {
+            setSelectedScope('project')
+            setSelectedParent('all')
+          }}
+        >
+          {t('categories.project')}
+        </button>
+        <button
+          className={`tab-button ${selectedScope === 'charity' ? 'active' : ''}`}
+          onClick={() => {
+            setSelectedScope('charity')
+            setSelectedParent('all')
+          }}
+        >
+          {t('categories.charity')}
+        </button>
+      </div>
+
+      {/* Toolbar */}
+      <div className="categories-toolbar">
+        <label className="toolbar-checkbox">
+          <input
+            type="checkbox"
+            checked={showActiveOnly}
+            onChange={(e) => setShowActiveOnly(e.target.checked)}
+          />
+          <span>{t('categories.activeOnly')}</span>
+        </label>
+
+        <div className="toolbar-select">
+          <label>{t('categories.filterByParent')}</label>
+          <select
+            value={selectedParent === 'all' ? 'all' : selectedParent === 'root' ? 'root' : selectedParent}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === 'all') {
+                setSelectedParent('all')
+              } else if (value === 'root') {
+                setSelectedParent('root')
+              } else {
+                setSelectedParent(Number(value))
+              }
+            }}
           >
-            {t('categories.addChild')}
-          </Button>
+            <option value="all">{t('categories.all')}</option>
+            <option value="root">{t('categories.rootOnly')}</option>
+            {rootCategories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="categories-layout">
-        {/* Left Column: Root Categories */}
-        <div className="categories-column">
-          <h3>{t('categories.rootTitle')}</h3>
-          {rootCategoriesData?.results.length === 0 ? (
-            <div className="empty-state">{t('categories.noRootCategories')}</div>
-          ) : (
-            <ul className="category-list">
-              {rootCategoriesData?.results.map((category) => (
-                <li
-                  key={category.id}
-                  className={`category-item ${selectedRootId === category.id ? 'selected' : ''} ${!category.is_active ? 'inactive' : ''}`}
-                  onClick={() => handleRootSelect(category.id)}
-                >
-                  <div className="category-item-content">
-                    <span className="category-name">{category.name}</span>
-                    <span className="category-scope">{category.scope}</span>
-                    {!category.is_active && (
-                      <span className="category-status">({t('categories.inactive')})</span>
-                    )}
-                  </div>
-                  <div className="category-item-actions" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      onClick={() => setEditingCategory(category)}
-                    >
-                      {t('categories.edit')}
-                    </Button>
-                    {category.is_active && (
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        onClick={() => setDeactivatingCategory(category)}
-                      >
-                        {t('categories.deactivate')}
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Right Column: Children of Selected Root */}
-        <div className="categories-column">
-          <h3>
-            {selectedRoot ? `${t('categories.childrenTitle')} "${selectedRoot.name}"` : t('categories.selectRoot')}
-          </h3>
-          {!selectedRootId ? (
-            <div className="empty-state">{t('categories.selectRootHint')}</div>
-          ) : childrenData?.results.length === 0 ? (
-            <div className="empty-state">{t('categories.noChildren')}</div>
-          ) : (
-            <ul className="category-list">
-              {childrenData?.results.map((category) => (
-                <li
-                  key={category.id}
-                  className={`category-item ${!category.is_active ? 'inactive' : ''}`}
-                >
-                  <div className="category-item-content">
-                    <span className="category-name">{category.name}</span>
-                    <span className="category-scope">{category.scope}</span>
-                    {!category.is_active && (
-                      <span className="category-status">({t('categories.inactive')})</span>
-                    )}
-                  </div>
-                  <div className="category-item-actions">
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      onClick={() => setEditingCategory(category)}
-                    >
-                      {t('categories.edit')}
-                    </Button>
-                    {category.is_active && (
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        onClick={() => setDeactivatingCategory(category)}
-                      >
-                        {t('categories.deactivate')}
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+      {/* Table */}
+      {isLoading ? (
+        <div className="loading">{t('common.loading')}</div>
+      ) : error ? (
+        <div className="error">{t('categories.loadError')}</div>
+      ) : (
+        <Table columns={columns} data={tableData} />
+      )}
 
       {/* Modals */}
-      <AddRootModal
-        isOpen={showAddRootModal}
-        onClose={() => setShowAddRootModal(false)}
-        onSuccess={handleAddRootSuccess}
+      <CreateCategoryModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleCreateSuccess}
+        scope={selectedScope}
       />
 
-      <AddChildModal
-        isOpen={showAddChildModal}
-        onClose={() => setShowAddChildModal(false)}
-        parent={selectedRoot}
-        onSuccess={handleAddChildSuccess}
-      />
-
-      <EditCategoryModal
-        isOpen={!!editingCategory}
-        onClose={() => setEditingCategory(null)}
-        category={editingCategory}
-        onSuccess={handleEditSuccess}
-      />
-
-      <DeactivateCategoryModal
-        isOpen={!!deactivatingCategory}
-        onClose={() => setDeactivatingCategory(null)}
-        category={deactivatingCategory}
-        onSuccess={handleDeactivateSuccess}
-      />
+      {editingCategory && (
+        <EditCategoryModal
+          isOpen={!!editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSuccess={handleEditSuccess}
+          category={editingCategory}
+        />
+      )}
     </div>
   )
 }
 
 export default CategoriesPage
-

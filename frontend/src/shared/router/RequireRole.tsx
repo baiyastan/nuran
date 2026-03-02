@@ -9,7 +9,7 @@ interface RequireRoleProps {
 }
 
 function RequireRole({ allowedRoles }: RequireRoleProps) {
-  const { role, isAuthenticated, accessToken, user } = useAuth()
+  const { isAuthenticated, accessToken, user } = useAuth()
   const meStatus = useAppSelector(selectMeStatus)
 
   // Show loader while loading or if we have token but haven't started query yet

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreatePlanItemMutation } from '@/shared/api/planItemsApi'
+import { useGetPlanPeriodQuery } from '@/shared/api/planPeriodsApi'
+import { useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
 import { Input } from '@/shared/ui/Input/Input'
 import { Button } from '@/shared/ui/Button/Button'
+import { getErrorMessage } from '@/shared/lib/utils'
 import './CreatePlanItemForm.css'
 
 interface CreatePlanItemFormProps {
@@ -14,39 +17,31 @@ export function CreatePlanItemForm({ planPeriodId, onSuccess }: CreatePlanItemFo
   const { t } = useTranslation()
   const [formData, setFormData] = useState({
     title: '',
-    category: '',
-    qty: '',
-    unit: '',
     amount: '',
-    note: '',
+    category: '',
   })
   const [error, setError] = useState('')
   
   const [createPlanItem, { isLoading }] = useCreatePlanItemMutation()
+  
+  // Fetch PlanPeriod to get fund_kind (scope)
+  const { data: planPeriod } = useGetPlanPeriodQuery(planPeriodId, { skip: !planPeriodId })
+  
+  // Determine scope from planPeriod.fund_kind
+  const scope = planPeriod?.fund_kind || 'project'
+  
+  // Fetch ExpenseCategories for the scope
+  const { data: categoriesData } = useListExpenseCategoriesQuery(
+    { scope: scope as 'project' | 'office' | 'charity', is_active: true },
+    { skip: !planPeriodId || !scope }
+  )
+  
+  const categories = categoriesData?.results || []
 
   const validateForm = (): string | null => {
     // Validate title
     if (!formData.title.trim()) {
       return t('planPeriodDetails.form.fields.title') + ' is required'
-    }
-
-    // Validate category
-    if (!formData.category.trim()) {
-      return t('planPeriodDetails.form.fields.category') + ' is required'
-    }
-
-    // Validate quantity - must be positive number
-    const qtyNum = Number(formData.qty)
-    if (!formData.qty.trim() || isNaN(qtyNum) || qtyNum <= 0) {
-      return t('planPeriodDetails.form.fields.quantity') + ' must be a positive number'
-    }
-
-    // Validate unit - must be non-empty string and non-numeric
-    if (!formData.unit.trim()) {
-      return t('planPeriodDetails.form.fields.unit') + ' is required'
-    }
-    if (!isNaN(Number(formData.unit.trim()))) {
-      return t('planPeriodDetails.form.fields.unit') + ' must be a text value (not a number)'
     }
 
     // Validate amount - must be positive number
@@ -70,37 +65,30 @@ export function CreatePlanItemForm({ planPeriodId, onSuccess }: CreatePlanItemFo
     }
     
     try {
-      // Cast to numbers with validation
-      const qtyNum = Number(formData.qty)
+      // Cast amount to number with validation
       const amountNum = Number(formData.amount)
       
-      // Double-check numbers are valid (shouldn't happen after validation, but safety check)
-      if (isNaN(qtyNum) || isNaN(amountNum) || qtyNum <= 0 || amountNum <= 0) {
-        setError('Invalid numeric values')
+      // Double-check amount is valid (shouldn't happen after validation, but safety check)
+      if (isNaN(amountNum) || amountNum <= 0) {
+        setError('Invalid amount value')
         return
       }
 
       await createPlanItem({
         title: formData.title.trim(),
-        category: formData.category.trim(),
-        qty: qtyNum,
-        unit: formData.unit.trim(),
         amount: amountNum,
-        note: formData.note.trim(),
         plan_period: planPeriodId,
+        category: formData.category ? Number(formData.category) : null,
       }).unwrap()
       
       onSuccess?.()
       setFormData({
         title: '',
-        category: '',
-        qty: '',
-        unit: '',
         amount: '',
-        note: '',
+        category: '',
       })
-    } catch (err: any) {
-      setError(err.data?.detail || err.message || t('planPeriodDetails.form.error'))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || t('planPeriodDetails.form.error'))
     }
   }
 
@@ -113,40 +101,32 @@ export function CreatePlanItemForm({ planPeriodId, onSuccess }: CreatePlanItemFo
         required
       />
       <Input
-        label={t('planPeriodDetails.form.fields.category')}
-        value={formData.category}
-        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-        required
-      />
-      <div className="form-row">
-        <Input
-          label={t('planPeriodDetails.form.fields.quantity')}
-          type="number"
-          step="0.01"
-          value={formData.qty}
-          onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
-          required
-        />
-        <Input
-          label={t('planPeriodDetails.form.fields.unit')}
-          value={formData.unit}
-          onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-          required
-        />
-      </div>
-      <Input
         label={t('planPeriodDetails.form.fields.amount')}
         type="number"
         step="0.01"
+        min="0"
         value={formData.amount}
         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
         required
       />
-      <Input
-        label={t('planPeriodDetails.form.fields.note')}
-        value={formData.note}
-        onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-      />
+      
+      <div className="form-field">
+        <label className="form-label">Категория</label>
+        <select
+          value={formData.category}
+          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+          className="form-select"
+          disabled={!planPeriodId || categories.length === 0}
+        >
+          <option value="">-- Категория тандаңыз --</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      
       {error && <div className="form-error">{error}</div>}
       <Button type="submit" disabled={isLoading}>
         {isLoading ? t('planPeriodDetails.form.submitting') : t('planPeriodDetails.form.submit')}

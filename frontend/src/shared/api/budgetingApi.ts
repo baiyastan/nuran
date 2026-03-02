@@ -17,8 +17,6 @@ export interface BudgetPlan {
   id: number
   period: number
   period_month: string
-  root_category: number
-  root_category_name: string
   scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
   project: number | null
   project_name: string | null
@@ -43,10 +41,10 @@ export interface BudgetLine {
 }
 
 export interface BudgetPlanListParams {
-  month?: string
+  month: string  // YYYY-MM format
+  scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
   project?: number
   status?: string
-  root_category?: number
   page?: number
 }
 
@@ -74,7 +72,7 @@ export interface ExpenseCategoryListParams {
   scope?: string
   kind?: string
   is_active?: boolean
-  parent?: number | null
+  parent?: number | null | 'null'
   page?: number
 }
 
@@ -86,9 +84,8 @@ export interface ExpenseCategoryListResponse {
 }
 
 export interface CreateBudgetPlanRequest {
-  period: string | number
-  root_category: number
-  scope?: 'OFFICE' | 'PROJECT' | 'CHARITY'
+  period: number  // MonthPeriod PK
+  scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
   project?: number | null
 }
 
@@ -152,9 +149,9 @@ export interface UpdateBudgetExpenseRequest {
 export interface BudgetPlanReportRow {
   category_id: number
   category_name: string
-  planned: string
-  spent: string
-  balance: string
+  planned: number
+  spent: number
+  balance: number
   percent: number | null
 }
 
@@ -167,9 +164,9 @@ export interface BudgetPlanReport {
   }
   rows: BudgetPlanReportRow[]
   totals: {
-    planned: string
-    spent: string
-    balance: string
+    planned: number
+    spent: number
+    balance: number
     percent: number | null
   }
 }
@@ -178,69 +175,126 @@ export const budgetingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getProjectBudgetPlan: builder.query<BudgetPlan | null, { month: string; projectId: number }>({
       query: ({ month, projectId }) => ({
-        url: '/budgets/',
+        url: '/budgets/budgets/',
         params: { month, project: projectId },
       }),
       transformResponse: (response: BudgetPlanListResponse) => {
         return response.results && response.results.length > 0 ? response.results[0] : null
       },
-      providesTags: (result, error, arg) => [
+      providesTags: (result, _error, _arg) => [
         { type: 'Budget', id: result?.id },
         'Budget',
       ],
     }),
 
-    listBudgetPlans: builder.query<BudgetPlanListResponse, BudgetPlanListParams | void>({
-      query: (params) => ({
-        url: '/budgets/',
-        params,
-      }),
-      providesTags: ['Budget'],
+    listBudgetPlans: builder.query<BudgetPlanListResponse, BudgetPlanListParams>({
+      query: (params) => {
+        if (!params.month || !params.scope) {
+          throw new Error('month and scope are required')
+        }
+        return {
+          url: '/budgets/budgets/',
+          params: {
+            month: params.month,
+            scope: params.scope,
+            project: params.project,
+            status: params.status,
+            page: params.page,
+          },
+        }
+      },
+      providesTags: (_result, _error, arg) => [
+        // Month + scope (+ project) are part of the cache identity for plan lists
+        { type: 'BudgetList', id: `${arg.month}-${arg.scope}-${arg.project || 'none'}` },
+        'Budget',
+      ],
     }),
 
     getBudgetPlan: builder.query<BudgetPlan, number>({
-      query: (id) => ({ url: `/budgets/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'Budget', id }],
+      query: (id) => ({ url: `/budgets/budgets/${id}/` }),
+      providesTags: (_result, _error, id) => [{ type: 'Budget', id }],
     }),
 
     createBudgetPlan: builder.mutation<BudgetPlan, CreateBudgetPlanRequest>({
       query: (body) => ({
-        url: '/budgets/',
+        url: '/budgets/budgets/',
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Budget'],
+      invalidatesTags: (result, _error, _arg) => {
+        if (!result) return ['Budget', 'BudgetList']
+        const tagId = `${result.period_month}-${result.scope}-${result.project || 'none'}`
+        return [
+          { type: 'Budget', id: result.id },
+          { type: 'BudgetList', id: tagId },
+          'Budget',
+          'BudgetList',
+        ]
+      },
     }),
 
     updateBudgetPlan: builder.mutation<BudgetPlan, { id: number; data: Partial<CreateBudgetPlanRequest> }>({
       query: ({ id, data }) => ({
-        url: `/budgets/${id}/`,
+        url: `/budgets/budgets/${id}/`,
         method: 'PATCH',
         data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Budget', id }, 'Budget'],
+      invalidatesTags: (result, _error, { id }) => {
+        if (!result) {
+          return [{ type: 'Budget', id }, 'Budget']
+        }
+        const tagId = `${result.period_month}-${result.scope}-${result.project || 'none'}`
+        return [
+          { type: 'Budget', id },
+          { type: 'BudgetList', id: tagId },
+          'Budget',
+          'BudgetList',
+        ]
+      },
     }),
 
     submitBudgetPlan: builder.mutation<BudgetPlan, number>({
       query: (id) => ({
-        url: `/budgets/${id}/submit/`,
+        url: `/budgets/budgets/${id}/submit/`,
         method: 'POST',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'Budget', id }, 'Budget'],
+      invalidatesTags: (result, _error, id) => {
+        if (!result) {
+          return [{ type: 'Budget', id }, 'Budget']
+        }
+        const tagId = `${result.period_month}-${result.scope}-${result.project || 'none'}`
+        return [
+          { type: 'Budget', id },
+          { type: 'BudgetList', id: tagId },
+          'Budget',
+          'BudgetList',
+        ]
+      },
     }),
 
     approveBudgetPlan: builder.mutation<BudgetPlan, { id: number; comments?: string }>({
       query: ({ id, comments }) => ({
-        url: `/budgets/${id}/approve/`,
+        url: `/budgets/budgets/${id}/approve/`,
         method: 'POST',
         data: comments ? { comments } : {},
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Budget', id }, 'Budget'],
+      invalidatesTags: (result, _error, { id }) => {
+        if (!result) {
+          return [{ type: 'Budget', id }, 'Budget']
+        }
+        const tagId = `${result.period_month}-${result.scope}-${result.project || 'none'}`
+        return [
+          { type: 'Budget', id },
+          { type: 'BudgetList', id: tagId },
+          'Budget',
+          'BudgetList',
+        ]
+      },
     }),
 
     listExpenseCategories: builder.query<ExpenseCategoryListResponse, ExpenseCategoryListParams | void>({
       query: (params) => ({
-        url: '/expense-categories/',
+        url: '/budgets/expense-categories/',
         params,
       }),
       providesTags: ['ExpenseCategories'],
@@ -248,7 +302,7 @@ export const budgetingApi = baseApi.injectEndpoints({
 
     listBudgetLines: builder.query<BudgetLineListResponse, BudgetLineListParams | void>({
       query: (params) => ({
-        url: '/budget-lines/',
+        url: '/budgets/budget-lines/',
         params,
       }),
       providesTags: ['Budget'],
@@ -256,28 +310,54 @@ export const budgetingApi = baseApi.injectEndpoints({
 
     createBudgetLine: builder.mutation<BudgetLine, CreateBudgetLineRequest>({
       query: (body) => ({
-        url: '/budget-lines/',
+        url: '/budgets/budget-lines/',
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Budget'],
+      invalidatesTags: (_result, _error, _arg) => {
+        // Need to fetch plan to get month+scope+project
+        // For now, invalidate all Budget tags (can optimize later with plan lookup)
+        return ['Budget', 'BudgetList']
+      },
     }),
 
     updateBudgetLine: builder.mutation<BudgetLine, { id: number; data: UpdateBudgetLineRequest }>({
       query: ({ id, data }) => ({
-        url: `/budget-lines/${id}/`,
+        url: `/budgets/budget-lines/${id}/`,
         method: 'PATCH',
         data,
       }),
-      invalidatesTags: ['Budget'],
+      invalidatesTags: (_result, _error, _arg) => {
+        // Need to fetch plan to get month+scope+project
+        return ['Budget', 'BudgetList']
+      },
     }),
 
     deleteBudgetLine: builder.mutation<void, number>({
       query: (id) => ({
-        url: `/budget-lines/${id}/`,
+        url: `/budgets/budget-lines/${id}/`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Budget'],
+      invalidatesTags: (_result, _error, _arg) => {
+        // Need to fetch plan to get month+scope+project
+        return ['Budget', 'BudgetList']
+      },
+    }),
+
+    bulkUpsertBudgetLines: builder.mutation<
+      { plan: number; updated: number; created: number; deleted: number; lines: BudgetLine[] },
+      { plan: number; items: Array<{ category: number; amount_planned: string; note?: string }> }
+    >({
+      query: (body) => ({
+        url: '/budgets/budget-lines/bulk-upsert/',
+        method: 'POST',
+        data: body,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        'Budget',
+        { type: 'Budget', id: arg.plan },
+        'BudgetList',
+      ],
     }),
 
     listBudgetExpenses: builder.query<BudgetExpenseListResponse, BudgetExpenseListParams | void>({
@@ -290,7 +370,7 @@ export const budgetingApi = baseApi.injectEndpoints({
 
     getBudgetExpense: builder.query<BudgetExpense, number>({
       query: (id) => ({ url: `/expenses/${id}/` }),
-      providesTags: (result, error, id) => [{ type: 'Budget', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Budget', id }],
     }),
 
     createBudgetExpense: builder.mutation<BudgetExpense, CreateBudgetExpenseRequest>({
@@ -299,7 +379,10 @@ export const budgetingApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Budget'],
+      invalidatesTags: (_result, _error, _arg) => {
+        // Need to fetch plan to get month+scope+project
+        return ['Budget', 'BudgetList']
+      },
     }),
 
     updateBudgetExpense: builder.mutation<BudgetExpense, { id: number; data: UpdateBudgetExpenseRequest }>({
@@ -320,8 +403,8 @@ export const budgetingApi = baseApi.injectEndpoints({
     }),
 
     getBudgetPlanReport: builder.query<BudgetPlanReport, number>({
-      query: (id) => ({ url: `/budgets/${id}/report/` }),
-      providesTags: (result, error, id) => [{ type: 'Budget', id }, 'Budget'],
+      query: (id) => ({ url: `/budgets/budgets/${id}/report/` }),
+      providesTags: (_result, _error, id) => [{ type: 'Budget', id }, 'Budget'],
     }),
   }),
 })
@@ -339,6 +422,7 @@ export const {
   useCreateBudgetLineMutation,
   useUpdateBudgetLineMutation,
   useDeleteBudgetLineMutation,
+  useBulkUpsertBudgetLinesMutation,
   useListBudgetExpensesQuery,
   useGetBudgetExpenseQuery,
   useCreateBudgetExpenseMutation,

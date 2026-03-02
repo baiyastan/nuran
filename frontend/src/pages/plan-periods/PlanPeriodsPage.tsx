@@ -1,221 +1,329 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import {
   useListPlanPeriodsQuery,
-  useCreatePlanPeriodMutation,
-  useLockPlanPeriodMutation,
-  useUnlockPlanPeriodMutation,
   PlanPeriodListParams,
 } from '@/shared/api/planPeriodsApi'
+import {
+  useGetMonthPeriodQuery,
+  useCreateMonthPeriodMutation,
+  useOpenMonthPeriodMutation,
+  useLockMonthPeriodMutation,
+} from '@/shared/api/monthPeriodsApi'
 import { useAuth } from '@/shared/hooks/useAuth'
-import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+import { CreatePlanPeriodModal } from '@/features/plan-period-create/CreatePlanPeriodModal'
+import { PlanPeriod } from '@/entities/plan-period/model'
+import { getErrorMessage, formatDate } from '@/shared/lib/utils'
+import { toast } from '@/shared/ui/Toast/toast'
 import './PlanPeriodsPage.css'
+
+type PlanType = 'project' | 'office' | 'charity'
 
 function PlanPeriodsPage() {
   const { t } = useTranslation()
-  const [filters] = useState<PlanPeriodListParams>({})
+  const navigate = useNavigate()
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     return new Date().toISOString().slice(0, 7)
   })
-  const { data, isLoading, error } = useListPlanPeriodsQuery(filters)
-  const [createPlanPeriod] = useCreatePlanPeriodMutation()
-  const [lockPlanPeriod] = useLockPlanPeriodMutation()
-  const [unlockPlanPeriod] = useUnlockPlanPeriodMutation()
+  const [selectedType, setSelectedType] = useState<PlanType>('project')
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const { role } = useAuth()
+
+  // Fetch plan periods filtered by selected month
+  const filters: PlanPeriodListParams = useMemo(() => ({
+    period: selectedMonth,
+  }), [selectedMonth])
+
+  const { data: planPeriodsData, isLoading: isLoadingPlanPeriods, error, refetch } = useListPlanPeriodsQuery(filters)
+  const { data: monthPeriod, refetch: refetchMonthPeriod } = useGetMonthPeriodQuery(selectedMonth)
+
+  // Month period mutations for admin
+  const [createMonthPeriod] = useCreateMonthPeriodMutation()
+  const [openMonthPeriod, { isLoading: isOpeningMonth }] = useOpenMonthPeriodMutation()
+  const [lockMonthPeriod, { isLoading: isClosingMonth }] = useLockMonthPeriodMutation()
+
+  // Check if month is open (month gate check)
+  const isMonthOpen = monthPeriod?.status === 'OPEN'
+  const monthStatus = isMonthOpen ? 'OPEN' : 'LOCKED'
 
   const canManage = role === 'admin'
 
   // Extract error status code
-  const errorStatus = (error as any)?.status
-
-  const handleMonthAction = async (recordId: number | null, month: string, currentStatus?: 'OPEN' | 'LOCKED') => {
-    try {
-      if (!currentStatus) {
-        // Create month with OPEN status
-        await createPlanPeriod({
-          period: month,
-          status: 'open',
-        }).unwrap()
-      } else if (currentStatus === 'OPEN') {
-        // Lock month
-        if (recordId) {
-          await lockPlanPeriod(recordId).unwrap()
-        }
-      } else if (currentStatus === 'LOCKED') {
-        // Unlock month
-        if (recordId) {
-          await unlockPlanPeriod(recordId).unwrap()
-        }
-      }
-    } catch (error) {
-      console.error('Month action failed:', getErrorMessage(error))
-    }
+  let errorStatus: number | undefined
+  if (error && typeof error === 'object' && error !== null && 'status' in error) {
+    const status = (error as Record<string, unknown>).status
+    errorStatus = typeof status === 'number' ? status : undefined
   }
 
-  // Normalize status to uppercase for consistent comparison
-  const normalizeStatus = (status: string): 'OPEN' | 'LOCKED' | string => {
-    if (status === 'open' || status === 'OPEN') return 'OPEN'
-    if (status === 'locked' || status === 'LOCKED') return 'LOCKED'
-    return status
-  }
+  // Extract plan periods
+  const planPeriods = useMemo(() => {
+    if (!planPeriodsData) return []
+    return Array.isArray(planPeriodsData) ? planPeriodsData : (planPeriodsData.results || [])
+  }, [planPeriodsData])
 
-  const getStatusBadge = (status: string) => {
-    // Map PlanPeriod statuses to display format
-    const isOpen = status === 'open' || status === 'OPEN'
-    const isLocked = status === 'locked' || status === 'LOCKED'
-    
-    const statusText = isOpen
-      ? t('planPeriods.statuses.open')
-      : isLocked
-      ? t('planPeriods.statuses.locked')
-      : status
-    
-    const colors: Record<string, string> = {
-      open: '#198754',
-      OPEN: '#198754',
-      locked: '#dc3545',
-      LOCKED: '#dc3545',
+  // Filter plan periods by selected type
+  const filteredPlans = useMemo(() => {
+    return planPeriods.filter((pp: PlanPeriod) => pp.fund_kind === selectedType)
+  }, [planPeriods, selectedType])
+
+  // Get status badge for plan period
+  const getPlanStatusBadge = (status: string) => {
+    const statusLower = status.toLowerCase()
+    let label: string
+    let color: string
+
+    switch (statusLower) {
+      case 'draft':
+        label = t('planPeriods.status.draft')
+        color = '#6c757d'
+        break
+      case 'submitted':
+        label = t('planPeriods.status.submitted')
+        color = '#ffc107'
+        break
+      case 'approved':
+        label = t('planPeriods.status.approved')
+        color = '#198754'
+        break
+      case 'locked':
+        label = t('planPeriods.status.locked')
+        color = '#dc3545'
+        break
+      default:
+        label = status.toUpperCase()
+        color = '#6c757d'
     }
-    
+
     return (
       <span
+        className="plan-status-badge"
         style={{
-          padding: '6px 12px',
-          borderRadius: '4px',
-          backgroundColor: colors[status] || '#6c757d',
+          backgroundColor: color,
           color: 'white',
-          fontSize: '13px',
+          padding: '4px 8px',
+          borderRadius: '4px',
+          fontSize: '12px',
           fontWeight: '500',
         }}
       >
-        {statusText}
+        {label}
       </span>
     )
   }
 
-  const getActionButton = (recordId: number, month: string, status?: string) => {
-    if (!canManage) {
-      return <span>-</span>
-    }
-
-    const normalizedStatus = status ? normalizeStatus(status) : null
-    
-    if (!normalizedStatus || (normalizedStatus !== 'OPEN' && normalizedStatus !== 'LOCKED')) {
-      return (
-        <Button
-          size="small"
-          onClick={() => handleMonthAction(null, month)}
-        >
-          {t('planPeriods.createMonth')}
-        </Button>
-      )
-    } else if (normalizedStatus === 'OPEN') {
-      return (
-        <Button
-          size="small"
-          onClick={() => handleMonthAction(recordId, month, 'OPEN')}
-        >
-          {t('planPeriods.closeMonth')}
-        </Button>
-      )
-    } else if (normalizedStatus === 'LOCKED') {
-      return (
-        <Button
-          size="small"
-          onClick={() => handleMonthAction(recordId, month, 'LOCKED')}
-        >
-          {t('planPeriods.openMonth')}
-        </Button>
-      )
-    }
-    return null
+  const handleViewDetails = (planPeriodId: number) => {
+    navigate(`/plan-periods/${planPeriodId}`)
   }
 
-  const getProjectDisplay = (record: any) => {
-    if (record.project_name) {
-      return record.project_name
+  const handleCreateSuccess = (planPeriodId?: number) => {
+    refetch()
+    if (planPeriodId) {
+      navigate(`/plan-periods/${planPeriodId}`)
     }
-    if (record.project) {
-      return `#${record.project}`
-    }
-    return '-'
   }
 
-  const columns = [
-    { key: 'project', label: t('planPeriods.columns.project') },
-    { key: 'period', label: t('planPeriods.columns.month') },
-    { key: 'status', label: t('planPeriods.columns.status') },
-    { key: 'created_at', label: t('planPeriods.columns.createdAt') },
-    { key: 'actions', label: t('planPeriods.columns.actions') },
-  ]
+  // Month gate handlers (admin only)
+  const handleOpenMonth = async () => {
+    try {
+      if (!monthPeriod) {
+        const result = await createMonthPeriod({ month: selectedMonth }).unwrap()
+        await openMonthPeriod(result.id).unwrap()
+      } else {
+        await openMonthPeriod(monthPeriod.id).unwrap()
+      }
+      refetchMonthPeriod()
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err)
+      toast.error(errorMessage || t('planPeriods.filterBar.actions.openError', { defaultValue: 'Failed to open month' }))
+    }
+  }
 
-  const tableData = data?.results.map((record) => ({
-    ...record,
-    project: getProjectDisplay(record),
-    period: record.period,
-    status: getStatusBadge(record.status),
-    created_at: formatDate(record.created_at),
-    actions: getActionButton(record.id, record.period, record.status),
-  })) || []
+  const handleCloseMonth = async () => {
+    if (!monthPeriod) return
+    try {
+      await lockMonthPeriod(monthPeriod.id).unwrap()
+      refetchMonthPeriod()
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err)
+      toast.error(errorMessage || t('planPeriods.filterBar.actions.closeError', { defaultValue: 'Failed to close month' }))
+    }
+  }
+
+  const getMonthStatusBadge = () => {
+    if (monthStatus === 'OPEN') {
+      return <span className="month-status-badge month-status-badge--open">{t('planPeriods.filterBar.status.open')}</span>
+    } else {
+      return <span className="month-status-badge month-status-badge--locked">{t('planPeriods.filterBar.status.locked')}</span>
+    }
+  }
+
+  const isLoading = isLoadingPlanPeriods
+
+  // Get plan type label
+  const getPlanTypeLabel = (type: PlanType) => {
+    switch (type) {
+      case 'project':
+        return t('planPeriods.filterBar.type.project')
+      case 'office':
+        return t('planPeriods.filterBar.type.office')
+      case 'charity':
+        return t('planPeriods.filterBar.type.charity')
+    }
+  }
+
+  // Get plan title
+  const getPlanTitle = (plan: PlanPeriod) => {
+    if (plan.fund_kind === 'project') {
+      return plan.project_name || t('planPeriods.filterBar.type.project')
+    }
+    return getPlanTypeLabel(plan.fund_kind as PlanType)
+  }
 
   return (
     <div className="plan-periods-page">
-      <div className="page-header">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-            <h2 style={{ margin: 0 }}>{t('planPeriods.title')}</h2>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '14px',
-              }}
-            />
+      {/* Filter Bar */}
+      <div className="filter-bar">
+        <div className="filter-bar-left">
+          <label htmlFor="month-picker" className="filter-label">
+            {t('planPeriods.filterBar.month')}
+          </label>
+          <input
+            id="month-picker"
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="month-picker"
+          />
+        </div>
+
+        <div className="filter-bar-center">
+          <div className="type-pills">
+            <button
+              className={`type-pill ${selectedType === 'project' ? 'type-pill-active' : ''}`}
+              onClick={() => setSelectedType('project')}
+            >
+              {t('planPeriods.filterBar.type.project')}
+            </button>
+            {role !== 'foreman' && (
+              <>
+                <button
+                  className={`type-pill ${selectedType === 'office' ? 'type-pill-active' : ''}`}
+                  onClick={() => setSelectedType('office')}
+                >
+                  {t('planPeriods.filterBar.type.office')}
+                </button>
+                <button
+                  className={`type-pill ${selectedType === 'charity' ? 'type-pill-active' : ''}`}
+                  onClick={() => setSelectedType('charity')}
+                >
+                  {t('planPeriods.filterBar.type.charity')}
+                </button>
+              </>
+            )}
           </div>
-          <p className="help-text">{t('planPeriods.helpText')}</p>
+        </div>
+
+        <div className="filter-bar-right">
+          <div className="month-status-group">
+            {getMonthStatusBadge()}
+            {canManage && (
+              <div className="month-action-button">
+                {monthStatus === 'LOCKED' ? (
+                  <Button
+                    onClick={handleOpenMonth}
+                    disabled={isOpeningMonth}
+                    size="small"
+                  >
+                    {isOpeningMonth ? t('planPeriods.filterBar.actions.opening') : t('planPeriods.filterBar.actions.openMonth')}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleCloseMonth}
+                    variant="danger"
+                    disabled={isClosingMonth}
+                    size="small"
+                  >
+                    {isClosingMonth ? t('planPeriods.filterBar.actions.closing') : t('planPeriods.filterBar.actions.closeMonth')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      
+
+      {/* Plans List */}
       {isLoading ? (
         <div className="loading">{t('planPeriods.loading')}</div>
       ) : error ? (
         <div className="error">
           {errorStatus === 401 ? (
-            <>
-              <p>{t('planPeriods.error401')}</p>
-            </>
+            <p>{t('planPeriods.error401')}</p>
           ) : errorStatus === 403 ? (
             <p>{t('planPeriods.error403')}</p>
           ) : (
-            <>
-              <p>{t('planPeriods.error')}</p>
-              {import.meta.env.DEV && errorStatus && (
-                <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-                  Status: {errorStatus}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      ) : !data?.results.length ? (
-        <div className="empty-state">
-          <p>{t('planPeriods.empty')}</p>
-          {canManage && (
-            <Button onClick={() => {
-              handleMonthAction(null, selectedMonth)
-            }}>
-              {t('planPeriods.createMonth')}
-            </Button>
+            <p>{t('planPeriods.error')}</p>
           )}
         </div>
       ) : (
-        <Table columns={columns} data={tableData} />
+        <>
+          {!isMonthOpen && (
+            <div className="month-closed-banner">
+              {t('planPeriods.monthClosed')}
+            </div>
+          )}
+          
+          {filteredPlans.length === 0 ? (
+            <div className="empty-state">
+              <h3 className="empty-state-title">{t('planPeriods.empty.title')}</h3>
+              <p className="empty-state-description">{t('planPeriods.empty.description')}</p>
+              {canManage && isMonthOpen && (
+                <Button onClick={() => setShowCreateModal(true)} className="empty-state-button">
+                  {t('planPeriods.empty.createButton')}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="plans-grid">
+              {filteredPlans.map((plan: PlanPeriod) => (
+                <div key={plan.id} className="plan-card">
+                  <div className="plan-card-header">
+                    <h3 className="plan-card-title">{getPlanTitle(plan)}</h3>
+                    {getPlanStatusBadge(plan.status)}
+                  </div>
+                  <div className="plan-card-body">
+                    <div className="plan-card-field">
+                      <span className="plan-card-label">{t('planPeriods.card.createdBy')}:</span>
+                      <span className="plan-card-value">{plan.created_by_username || '—'}</span>
+                    </div>
+                    <div className="plan-card-field">
+                      <span className="plan-card-label">{t('planPeriods.card.createdAt')}:</span>
+                      <span className="plan-card-value">{formatDate(plan.created_at)}</span>
+                    </div>
+                  </div>
+                  <div className="plan-card-actions">
+                    <Button onClick={() => handleViewDetails(plan.id)} size="small">
+                      {t('planPeriods.card.view')}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {showCreateModal && (
+        <CreatePlanPeriodModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          period={selectedMonth}
+          onSuccess={(planPeriodId) => handleCreateSuccess(planPeriodId)}
+          defaultPlanType={selectedType}
+          existingPlans={planPeriods}
+        />
       )}
     </div>
   )

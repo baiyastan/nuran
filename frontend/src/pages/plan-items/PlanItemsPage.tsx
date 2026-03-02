@@ -16,7 +16,7 @@ import { PlanItem } from '@/entities/plan-item/model'
 import './PlanItemsPage.css'
 
 export function PlanItemsPage() {
-  const { user, role } = useAuth()
+  const { role } = useAuth()
   const [filters, setFilters] = useState<PlanItemListParams>({})
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
@@ -51,8 +51,8 @@ export function PlanItemsPage() {
 
   const tableData = data?.results.map((item: PlanItem) => ({
     ...item,
-    cost: formatCurrency(item.cost),
-    date: formatDate(item.date),
+    cost: formatCurrency(item.cost ?? 0),
+    date: formatDate(item.date ?? item.created_at),
     created_at: formatDate(item.created_at),
     actions: (
       <div className="actions">
@@ -94,7 +94,7 @@ export function PlanItemsPage() {
         <div className="create-form-container">
           {selectedPlanId ? (
             <CreatePlanItemForm
-              planId={selectedPlanId}
+              planPeriodId={selectedPlanId}
               onSuccess={() => {
                 setShowCreateForm(false)
                 setSelectedPlanId(null)
@@ -120,8 +120,8 @@ export function PlanItemsPage() {
       )}
       
       <PlanItemFilters
-        onFilterChange={setFilters}
-        plans={plans.map((p) => ({ id: p.id, name: p.name }))}
+        filters={filters}
+        onChange={setFilters}
       />
       
       {isLoading ? (

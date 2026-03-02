@@ -14,8 +14,8 @@ function ForbiddenPage() {
   const { isLoading: isLoadingMe } = useMeQuery()
 
   const getHomePath = (role?: string): string => {
-    if (role === 'foreman') return '/prorab/projects'
-    return '/plan-periods'
+    if (role === 'foreman') return '/plan-setup'
+    return '/'
   }
 
   // Auto-redirect after 1500ms when auth is loaded
@@ -44,7 +44,18 @@ function ForbiddenPage() {
         <h2>{t('errors.accessForbidden')}</h2>
         <p>{t('errors.noPermission')}</p>
         {role && <p className="error-role">{t('errors.yourRole')} {role}</p>}
-        <Button onClick={handleGoHome}>{t('common.goToHome')}</Button>
+        {role === 'foreman' ? (
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button onClick={() => navigate('/plan-setup', { replace: true })}>
+              {t('errors.goToPlanSetup')}
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/reports', { replace: true })}>
+              {t('errors.goToReports')}
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={handleGoHome}>{t('common.goToHome')}</Button>
+        )}
       </div>
     </div>
   )

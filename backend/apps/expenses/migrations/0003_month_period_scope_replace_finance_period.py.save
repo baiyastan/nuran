@@ -1,0 +1,84 @@
+# Replace finance_period with month_period + scope
+
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+def backfill_month_period_and_scope(apps, schema_editor):
+    ActualExpense = apps.get_model('expenses', 'ActualExpense')
+    scope_map = {'office': 'OFFICE', 'project': 'PROJECT', 'charity': 'CHARITY'}
+    for obj in ActualExpense.objects.select_related('finance_period').all():
+        fp = obj.finance_period
+        if fp:
+            obj.month_period_id = fp.month_period_id
+            obj.scope = scope_map.get(fp.fund_kind, 'OFFICE')
+            obj.save(update_fields=['month_period_id', 'scope'])
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('budgeting', '0003_normalize_monthperiod_data'),
+        ('expenses', '0002_rename_expenses_act_finance_abc123_idx_expenses_ac_finance_bd3093_idx_and_more'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='actualexpense',
+            name='month_period',
+            field=models.ForeignKey(
+                help_text='Month period (required)',
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='expense_actual_expenses',
+                to='budgeting.monthperiod',
+            ),
+        ),
+        migrations.AddField(
+            model_name='actualexpense',
+            name='scope',
+            field=models.CharField(
+                choices=[('OFFICE', 'Office'), ('PROJECT', 'Project'), ('CHARITY', 'Charity')],
+                help_text='OFFICE, PROJECT, or CHARITY',
+                max_length=20,
+                null=True,
+            ),
+        ),
+        migrations.AddIndex(
+            model_name='actualexpense',
+            index=models.Index(fields=['month_period', 'scope'], name='expenses_ac_month_p_7a1b2c_idx'),
+        ),
+        migrations.RunPython(backfill_month_period_and_scope, noop_reverse),
+        migrations.RemoveField(
+            model_name='actualexpense',
+            name='finance_period',
+        ),
+        migrations.RemoveIndex(
+            model_name='actualexpense',
+            name='expenses_ac_finance_bd3093_idx',
+        ),
+        migrations.AlterField(
+            model_name='actualexpense',
+            name='month_period',
+            field=models.ForeignKey(
+                help_text='Month period (required)',
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='expense_actual_expenses',
+                to='budgeting.monthperiod',
+            ),
+        ),
+        migrations.AlterField(
+            model_name='actualexpense',
+            name='scope',
+            field=models.CharField(
+                choices=[('OFFICE', 'Office'), ('PROJECT', 'Project'), ('CHARITY', 'Charity')],
+                help_text='OFFICE, PROJECT, or CHARITY',
+                max_length=20,
+            ),
+        ),
+    ]
+
