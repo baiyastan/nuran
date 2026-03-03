@@ -64,8 +64,8 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
-      - ./docker/nginx.http.conf:/etc/nginx/conf.d/http.conf:ro
-      - ./docker/nginx.ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
+      # - ./docker/nginx.http.conf:/etc/nginx/conf.d/http.conf:ro
+      # - ./docker/nginx.ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
     depends_on:
       - backend
 
