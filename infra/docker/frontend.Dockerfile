@@ -14,7 +14,7 @@ WORKDIR /app/frontend
 RUN pnpm install --frozen-lockfile --prod=false
 
 # Copy frontend source
-COPY frontend ./ 
+COPY frontend ./
 
 # Build SPA
 RUN pnpm run build
@@ -25,8 +25,11 @@ FROM nginx:alpine
 
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
-COPY infra/docker/nginx.http.conf /etc/nginx/conf.d/http.conf
-COPY infra/docker/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
+# IMPORTANT: put configs OUTSIDE conf.d, otherwise nginx loads both
+RUN mkdir -p /etc/nginx/templates
+COPY infra/docker/nginx.http.conf /etc/nginx/templates/http.conf
+COPY infra/docker/nginx.ssl.conf  /etc/nginx/templates/ssl.conf
+
 COPY infra/docker/nginx-entrypoint.sh /nginx-entrypoint.sh
 RUN chmod +x /nginx-entrypoint.sh
 
