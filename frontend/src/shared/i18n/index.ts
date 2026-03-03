@@ -15,8 +15,22 @@ const ruFinancePeriods = ruTranslations.financePeriods || {}
 const kyIncomeEntries = kyTranslations.incomeEntries || {}
 const ruIncomeEntries = ruTranslations.incomeEntries || {}
 
-const kyFinancePeriodDetails = kyTranslations.financePeriodDetails || {}
-const ruFinancePeriodDetails = ruTranslations.financePeriodDetails || {}
+const kyFinancePeriodDetailsSource = kyTranslations.financePeriodDetails || {}
+const ruFinancePeriodDetailsSource = ruTranslations.financePeriodDetails || {}
+
+// Alias so fully-qualified keys resolve when ns=financePeriodDetails:
+// - financePeriodDetails.* (e.g. financePeriodDetails.summary.plannedTotal)
+// - common.* (e.g. common.back)
+const kyFinancePeriodDetails = {
+  ...kyFinancePeriodDetailsSource,
+  financePeriodDetails: kyFinancePeriodDetailsSource,
+  common: kyCommon,
+}
+const ruFinancePeriodDetails = {
+  ...ruFinancePeriodDetailsSource,
+  financePeriodDetails: ruFinancePeriodDetailsSource,
+  common: ruCommon,
+}
 
 const kyReports = kyTranslations.reports || {}
 const ruReports = ruTranslations.reports || {}
@@ -68,6 +82,21 @@ i18n
       useSuspense: false,
     },
   })
+
+// Sanity check: confirm aliased paths exist under financePeriodDetails namespace (dev only)
+if (import.meta.env?.DEV) {
+  const check = (lng: 'ky' | 'ru') => {
+    const ns = i18n.getResource(lng, 'financePeriodDetails', 'financePeriodDetails.summary.plannedTotal')
+    const commonBack = i18n.getResource(lng, 'financePeriodDetails', 'common.back')
+    const ok = typeof ns === 'string' && typeof commonBack === 'string'
+    console.log(`[i18n] ${lng} financePeriodDetails aliases: ${ok ? 'OK' : 'MISSING'} (financePeriodDetails.summary.plannedTotal, common.back)`)
+    return ok
+  }
+  i18n.on('initialized', () => {
+    check('ky')
+    check('ru')
+  })
+}
 
 export default i18n
 

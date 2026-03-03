@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
-# Idempotent deploy script: pull main and rebuild stack. Use with flock to avoid concurrent runs.
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-/var/www/nuran}"
 LOCK_FILE="${REPO_ROOT}/.deploy.lock"
+LOG_FILE="${REPO_ROOT}/.deploy.log"
+BRANCH="${BRANCH:-master}"
 
 cd "${REPO_ROOT}"
 
+exec >>"$LOG_FILE" 2>&1
+
 exec 9>"${LOCK_FILE}"
 if ! flock -n 9; then
-  echo "Another deploy is in progress (lock: ${LOCK_FILE}). Exiting." >&2
+  echo "[$(date -Iseconds)] Another deploy is in progress (lock: ${LOCK_FILE}). Exiting."
   exit 1
 fi
 
-echo "[$(date -Iseconds)] Starting deploy at ${REPO_ROOT}"
+echo "[$(date -Iseconds)] Starting deploy at ${REPO_ROOT} (branch=${BRANCH})"
 
-git pull origin main
+git fetch origin "${BRANCH}"
+git reset --hard "origin/${BRANCH}"
 
-docker compose -f infra/docker-compose.yml up -d --build
+docker compose --env-file .env -f infra/docker-compose.yml up -d --build
 
 docker image prune -f
 
