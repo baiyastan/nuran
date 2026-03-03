@@ -8,26 +8,18 @@
       { "source": "raw-request-body" }
     ],
     "trigger-rule": {
-      "and": [
-        {
-          "match": {
-            "type": "value",
-            "value": "push",
-            "parameter": { "source": "header", "name": "X-GitHub-Event" }
-          }
-        },
-        {
-          "match": {
-            "type": "value",
-            "value": "refs/heads/master",
-            "parameter": { "source": "payload", "name": "ref" }
-          }
+      "match": {
+        "type": "value",
+        "value": "refs/heads/master",
+        "parameter": {
+          "source": "payload",
+          "name": "ref"
         }
-      ]
+      }
     },
     "incoming-payload-content-type": "application/json",
     "http-methods": ["POST"],
-    "response-message": "Deploy triggered (master).",
+    "response-message": "Deploy triggered (branch master only). Check logs if needed.",
     "include-command-output-in-response": false
   }
 ]
