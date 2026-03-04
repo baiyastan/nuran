@@ -7,6 +7,7 @@ RUN apk add --no-cache \
     ca-certificates \
     curl \
     git \
+    openssl \
     docker-cli \
     docker-cli-compose \
     tar \
