@@ -3,13 +3,16 @@
     "id": "deploy",
     "execute-command": "/var/www/nuran/scripts/deploy-trigger.sh",
     "command-working-directory": "/var/www/nuran",
-    "pass-headers-to-command": [
-      "X-Hub-Signature-256",
-      "X-Deploy-Token"
+
+    "pass-environment-to-command": [
+      "HTTP_X_HUB_SIGNATURE_256",
+      "HTTP_X_DEPLOY_TOKEN"
     ],
+
     "pass-arguments-to-command": [
       { "source": "raw-request-body" }
     ],
+
     "trigger-rule": {
       "match": {
         "type": "value",
@@ -20,9 +23,8 @@
         }
       }
     },
+
     "incoming-payload-content-type": "application/json",
-    "http-methods": ["POST"],
-    "response-message": "Deploy triggered (branch master only). Check logs if needed.",
-    "include-command-output-in-response": false
+    "http-methods": ["POST"]
   }
 ]
