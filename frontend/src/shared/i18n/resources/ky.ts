@@ -131,7 +131,7 @@ export default {
     parent: 'Ата-эне',
     parentCategory: 'Ата-эне категориясы',
     scopeInherited: 'Облус ата-энеден мурасталат',
-    project: 'Долбоор',
+    project: 'Объект',
     office: 'Кеңсе',
     charity: 'Кайрымдуулук',
     create: 'Категория түзүү',
@@ -221,13 +221,13 @@ export default {
     },
   },
   projects: {
-    title: 'Долбоорлор',
-    create: 'Долбоор түзүү',
-    edit: 'Долбоорду түзөтүү',
-    createFirst: 'Биринчи долбоорду түзүү',
-    loadError: 'Долбоорлорду жүктөөдө ката',
-    empty: 'Долбоорлор табылган жок',
-    loading: 'Долбоорлорду жүктөөдө...',
+    title: 'Объекттер',
+    create: 'Объект түзүү',
+    edit: 'Объекти түзөтүү',
+    createFirst: 'Биринчи объектти түзүү',
+    loadError: 'Объекттерди жүктөөдө ката',
+    empty: 'Объекттер табылган жок',
+    loading: 'Объекттерди жүктөөдө...',
     assignedForeman: 'Белгиленген прораб',
     notAssigned: 'Белгиленген жок',
     columns: {
@@ -246,31 +246,31 @@ export default {
       delete: 'Жок кылуу',
     },
     deleteConfirm: {
-      title: 'Долбоорду жок кылуу?',
-      message: 'Долбоор жок кылынат. Бул аракетти кайтаруу мүмкүн эмес.',
+      title: 'Объекти жок кылуу?',
+      message: 'Объект жок кылынат. Бул аракетти кайтаруу мүмкүн эмес.',
       confirm: 'Жок кылуу',
       cancel: 'Жокко чыгаруу',
     },
-    deleteSuccess: 'Долбоор жок кылынды',
-    deleteError: 'Долбоорду жок кылууда ката',
+    deleteSuccess: 'Объект жок кылынды',
+    deleteError: 'Объекти жок кылууда ката',
     statuses: {
       active: 'Активдүү',
       completed: 'Аякталды',
       onHold: 'Токтотулду',
     },
     form: {
-      nameLabel: 'Долбоордун аталышы',
-      namePlaceholder: 'Долбоордун аталышын киргизиңиз',
+      nameLabel: 'Объекттин аталышы',
+      namePlaceholder: 'Объекттин аталышын киргизиңиз',
       nameMinLength: 'Аталыш эң кеминде 2 символ болушу керек',
       nameMaxLength: 'Аталыш 255 символдон ашпашы керек',
       descriptionLabel: 'Сыпаттама',
-      descriptionPlaceholder: 'Долбоордун сыпаттамасын киргизиңиз (милдеттүү эмес)',
+      descriptionPlaceholder: 'Объекттин сыпаттамасын киргизиңиз (милдеттүү эмес)',
       statusLabel: 'Статус',
       prorabLabel: 'Прораб',
       selectProrab: 'Прорабды тандаңыз (милдеттүү эмес)',
-      createError: 'Долбоорду түзүүдө ката',
-      updateError: 'Долбоорду жаңылоодо ката',
-      projectNotFound: 'Долбоор табылган жок',
+      createError: 'Объекти түзүүдө ката',
+      updateError: 'Объекти жаңылоодо ката',
+      projectNotFound: 'Объект табылган жок',
     },
   },
   planPeriods: {
@@ -306,7 +306,7 @@ export default {
     filterBar: {
       month: 'Ай',
       type: {
-        project: 'Долбоор',
+        project: 'Объект',
         office: 'Офис',
         charity: 'Благотворительность',
       },
@@ -330,14 +330,14 @@ export default {
       completion: 'Аяктоо %',
     },
     tabs: {
-      project: 'Долбоор',
+      project: 'Объект',
       office: 'Офис',
       charity: 'Благотворительность',
     },
     create: {
       title: 'Жаңы айлык план түзүү',
       button: {
-        project: 'Долбоор планын түзүү',
+        project: 'Объект планын түзүү',
         office: 'Офис планын түзүү',
         charity: 'Кайрымдуулук планын түзүү',
       },
@@ -348,21 +348,21 @@ export default {
       },
       step2: {
         project: {
-          title: 'Долбоор планын түзүү',
+          title: 'Объект планын түзүү',
         },
         office: {
           title: 'Офис планын түзүү',
-          projectNotFound: 'Офис долбоору табылган жок',
+          projectNotFound: 'Офис объекти табылган жок',
           duplicate: 'Бул ай үчүн офис планы мурунтан эле бар',
         },
         charity: {
           title: 'Благотворительность планын түзүү',
-          projectNotFound: 'Благотворительность долбоору табылган жок',
+          projectNotFound: 'Благотворительность объекти табылган жок',
           duplicate: 'Бул ай үчүн благотворительность планы мурунтан эле бар',
         },
         fields: {
-          project: 'Долбоор',
-          selectProject: 'Долбоорду тандаңыз',
+          project: 'Объект',
+          selectProject: 'Объекти тандаңыз',
           comments: 'Комментарий',
           commentsPlaceholder: 'Комментарий киргизиңиз (милдеттүү эмес)',
         },
@@ -378,7 +378,7 @@ export default {
     },
     columns: {
       month: 'Ай',
-      project: 'Долбоор',
+      project: 'Объект',
       period: 'Мезгил',
       status: 'Статус',
       limitAmount: 'Чектүү сумма',
@@ -422,9 +422,9 @@ export default {
       description: 'Бул ай жана тип үчүн айлык план түзүлгөн жок. План түзүү үчүн төмөнкү баскычты басыңыз.',
       createButton: 'План түзүү',
       createPlan: 'План түзүү',
-      officeProjectNotFound: 'Офис долбоору табылган жок',
-      charityProjectNotFound: 'Благотворительность долбоору табылган жок',
-      noProjectPlan: 'Бул ай үчүн проект планы жок',
+      officeProjectNotFound: 'Офис объекти табылган жок',
+      charityProjectNotFound: 'Благотворительность объекти табылган жок',
+      noProjectPlan: 'Бул ай үчүн объект планы жок',
       noOfficePlan: 'Бул ай үчүн офис планы жок',
       noCharityPlan: 'Бул ай үчүн жакшылык планы жок',
     },
@@ -473,7 +473,7 @@ export default {
   },
   pages: {
     projects: {
-      title: 'Долбоорлор',
+      title: 'Объекттер',
     },
     planPeriods: {
       title: 'Планга уруксат (ай боюнча)',
@@ -491,7 +491,7 @@ export default {
   submittedPlans: {
     title: 'Прораб пландары',
     columns: {
-      project: 'Долбоор',
+      project: 'Объект',
       month: 'Ай',
       totalPlanned: 'Жалпы пландалган',
       status: 'Статус',
@@ -499,7 +499,7 @@ export default {
     },
     filters: {
       month: 'Ай',
-      project: 'Долбоор',
+      project: 'Объект',
       status: 'Статус',
     },
     buttons: {
@@ -522,11 +522,11 @@ export default {
     error401: 'Сессия бүттү. Кайра кириңиз.',
     error403: 'Сизде уруксат жок.',
     projects: {
-      title: 'Менин долбоорлорум',
-      loading: 'Долбоорлорду жүктөөдө...',
-      empty: 'Долбоорлор табылган жок',
+      title: 'Менин объекттерим',
+      loading: 'Объекттерди жүктөөдө...',
+      empty: 'Объекттер табылган жок',
       columns: {
-        project: 'Долбоор',
+        project: 'Объект',
         assignedAt: 'Белгиленген күнү',
         actions: 'Аракеттер',
       },
@@ -549,7 +549,7 @@ export default {
       buttons: {
         openPlan: 'Планды ачуу',
         enterPlan: 'План киргизүү',
-        backToProjects: 'Долбоорлорго кайтуу',
+        backToProjects: 'Объекттерге кайтуу',
       },
     },
     budgetPlan: {
@@ -650,7 +650,7 @@ export default {
     },
     filters: {
       month: 'Ай',
-      project: 'Долбоор',
+      project: 'Объект',
       status: 'Статус',
     },
     buttons: {
@@ -671,7 +671,7 @@ export default {
       editExpense: 'Чыгымды түзөтүү',
     },
     plan: {
-      project: 'Долбоор',
+      project: 'Объект',
       month: 'Ай',
       status: 'Статус',
     },
@@ -697,13 +697,13 @@ export default {
     createError: 'Каржы мезгилин түзүүдө ката',
     month: 'Ай:',
     tabs: {
-      project: 'Долбоор',
+      project: 'Объект',
       office: 'Кеңсе',
       charity: 'Кайрымдуулук',
       planVsFact: 'План vs Факт',
     },
     fundKind: {
-      project: 'Долбоор',
+      project: 'Объект',
       office: 'Кеңсе',
       charity: 'Кайрымдуулук',
     },
@@ -743,7 +743,7 @@ export default {
     columns: {
       month: 'Ай',
       fundKind: 'Каржы түрү',
-      project: 'Долбоор',
+      project: 'Объект',
       status: 'Статус',
       incomeTotal: 'Киреше жалпысы',
       createdAt: 'Түзүлгөн күнү',
@@ -796,7 +796,7 @@ export default {
       title: 'Каржы мезгили - {{month}} ({{fundKind}})',
       month: 'Ай:',
       fundKind: 'Каржы түрү:',
-      project: 'Долбоор:',
+      project: 'Объект:',
       status: 'Статус:',
       incomePlanAmount: 'Киреше план суммасы:',
       incomeActualAmount: 'Киреше чыныгы суммасы:',
@@ -817,14 +817,14 @@ export default {
       monthPeriod: 'Ай мезгили',
       selectMonthPeriod: 'Ай мезгилин тандаңыз...',
       fundKind: 'Каржы түрү',
-      project: 'Долбоор',
-      selectProject: 'Долбоорду тандаңыз...',
+      project: 'Объект',
+      selectProject: 'Объекти тандаңыз...',
       status: 'Статус',
       errors: {
         monthRequired: 'Ай талап кылынат',
         monthPeriodRequired: 'Ай мезгили талап кылынат',
-        projectRequired: 'Долбоор талап кылынат (каржы түрү долбоор болгондо)',
-        projectMustBeEmpty: 'Долбоор бош болушу керек (каржы түрү долбоор эмес болгондо)',
+        projectRequired: 'Объект талап кылынат (каржы түрү project болгондо)',
+        projectMustBeEmpty: 'Объект бош болушу керек (каржы түрү project эмес болгондо)',
       },
     },
     delete: {
@@ -836,8 +836,8 @@ export default {
       title: 'Каржы мезгилдери',
     },
     planVsFact: {
-      onlyForProject: 'План vs Факт тек долбоор мезгилдери үчүн жеткиликтүү',
-      noPlanFound: 'Бул долбоор/ай үчүн план табылган жок',
+      onlyForProject: 'План vs Факт тек объект мезгилдери үчүн жеткиликтүү',
+      noPlanFound: 'Бул объект/ай үчүн план табылган жок',
       summary: {
         totalPlan: 'Жалпы план',
         totalFact: 'Жалпы факт',
@@ -1102,16 +1102,16 @@ export default {
     title: 'Отчёттор',
     tabs: {
       office: 'Кеңсе',
-      project: 'Долбоор',
+      project: 'Объект',
       charity: 'Кайрымдуулук',
       income: 'Киреше',
     },
     filters: {
       month: 'Ай',
       scope: 'Багыт',
-      project: 'Долбоор',
-      selectProject: 'Долбоор тандаңыз...',
-      loadingProjects: 'Долбоорлорду жүктөөдө...',
+      project: 'Объект',
+      selectProject: 'Объект тандаңыз...',
+      loadingProjects: 'Объекттерди жүктөөдө...',
     },
     status: {
       LOCKED: 'ЖАБЫК',
@@ -1120,7 +1120,7 @@ export default {
     warnings: {
       noFinancePeriod: 'Бул ай жана багыт үчүн финансылык мезгил табылган жок. Адегенде түзүңүз.',
       noBudgetPlan: 'Бул ай жана бул багыт үчүн бюджет планы табылган жок.',
-      selectProject: 'Отчётторду көрүү үчүн долбоор тандаңыз.',
+      selectProject: 'Отчётторду көрүү үчүн объект тандаңыз.',
       incomePlannedOfficeOnly: 'Киреше планы тек кеңсе багыты үчүн жеткиликтүү',
     },
     income: {
@@ -1233,7 +1233,7 @@ export default {
     },
     scopeOptions: {
       OFFICE: 'Кеңсе',
-      PROJECT: 'Долбоор',
+      PROJECT: 'Объект',
       CHARITY: 'Кайрымдуулук',
     },
     summary: {

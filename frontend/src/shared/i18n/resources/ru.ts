@@ -131,7 +131,7 @@ export default {
     parent: 'Родитель',
     parentCategory: 'Родительская категория',
     scopeInherited: 'Область наследуется от родителя',
-    project: 'Проект',
+    project: 'Объект',
     office: 'Офис',
     charity: 'Благотворительность',
     create: 'Создать категорию',
@@ -155,7 +155,7 @@ export default {
         noRootMessage: 'Нет корневой категории для этой сферы. Создайте её.',
         createRootButton: 'Создать корневую категорию',
         rootNameOffice: 'Офис расходы (Root)',
-        rootNameProject: 'Проект расходы (Root)',
+        rootNameProject: 'Объект расходы (Root)',
         rootNameCharity: 'Благотворительность (Root)',
       },
       addRoot: {
@@ -221,13 +221,13 @@ export default {
     },
   },
   projects: {
-    title: 'Проекты',
-    create: 'Создать проект',
-    edit: 'Редактировать проект',
-    createFirst: 'Создать первый проект',
-    loadError: 'Ошибка загрузки проектов',
-    empty: 'Проекты не найдены',
-    loading: 'Загрузка проектов...',
+    title: 'Объекты',
+    create: 'Создать объект',
+    edit: 'Редактировать объект',
+    createFirst: 'Создать первый объект',
+    loadError: 'Ошибка загрузки объектов',
+    empty: 'Объекты не найдены',
+    loading: 'Загрузка объектов...',
     assignedForeman: 'Назначен прораб',
     notAssigned: 'Не назначен',
     columns: {
@@ -246,31 +246,31 @@ export default {
       delete: 'Удалить',
     },
     deleteConfirm: {
-      title: 'Удалить проект?',
-      message: 'Проект будет удалён. Это действие нельзя отменить.',
+      title: 'Удалить объект?',
+      message: 'Объект будет удалён. Это действие нельзя отменить.',
       confirm: 'Удалить',
       cancel: 'Отмена',
     },
-    deleteSuccess: 'Проект удалён',
-    deleteError: 'Ошибка удаления проекта',
+    deleteSuccess: 'Объект удалён',
+    deleteError: 'Ошибка удаления объекта',
     statuses: {
       active: 'Активный',
       completed: 'Завершен',
       onHold: 'Приостановлен',
     },
     form: {
-      nameLabel: 'Название проекта',
-      namePlaceholder: 'Введите название проекта',
+      nameLabel: 'Название объекта',
+      namePlaceholder: 'Введите название объекта',
       nameMinLength: 'Название должно содержать минимум 2 символа',
       nameMaxLength: 'Название не должно превышать 255 символов',
       descriptionLabel: 'Описание',
-      descriptionPlaceholder: 'Введите описание проекта (необязательно)',
+      descriptionPlaceholder: 'Введите описание объекта (необязательно)',
       statusLabel: 'Статус',
       prorabLabel: 'Прораб',
       selectProrab: 'Выберите прораба (необязательно)',
-      createError: 'Ошибка создания проекта',
-      updateError: 'Ошибка обновления проекта',
-      projectNotFound: 'Проект не найден',
+      createError: 'Ошибка создания объекта',
+      updateError: 'Ошибка обновления объекта',
+      projectNotFound: 'Объект не найден',
     },
   },
   planPeriods: {
@@ -306,7 +306,7 @@ export default {
     filterBar: {
       month: 'Месяц',
       type: {
-        project: 'Проект',
+        project: 'Объект',
         office: 'Офис',
         charity: 'Благотворительность',
       },
@@ -330,14 +330,14 @@ export default {
       completion: 'Выполнение %',
     },
     tabs: {
-      project: 'Проект',
+      project: 'Объект',
       office: 'Офис',
       charity: 'Благотворительность',
     },
     create: {
       title: 'Создать новый месячный план',
       button: {
-        project: 'Создать план проекта',
+        project: 'Создать план объекта',
         office: 'Создать план офиса',
         charity: 'Создать план благотворительности',
       },
@@ -348,21 +348,21 @@ export default {
       },
       step2: {
         project: {
-          title: 'Создать план проекта',
+          title: 'Создать план объекта',
         },
         office: {
           title: 'Создать план офиса',
-          projectNotFound: 'Проект офиса не найден',
+          projectNotFound: 'Объект офиса не найден',
           duplicate: 'План офиса для этого месяца уже существует',
         },
         charity: {
           title: 'Создать план благотворительности',
-          projectNotFound: 'Проект благотворительности не найден',
+          projectNotFound: 'Объект благотворительности не найден',
           duplicate: 'План благотворительности для этого месяца уже существует',
         },
         fields: {
-          project: 'Проект',
-          selectProject: 'Выберите проект',
+          project: 'Объект',
+          selectProject: 'Выберите объект',
           comments: 'Комментарий',
           commentsPlaceholder: 'Введите комментарий (необязательно)',
         },
@@ -378,7 +378,7 @@ export default {
     },
     columns: {
       month: 'Месяц',
-      project: 'Проект',
+      project: 'Объект',
       period: 'Период',
       status: 'Статус',
       limitAmount: 'Лимит суммы',
@@ -422,9 +422,9 @@ export default {
       description: 'Для выбранного месяца и типа не создано месячных планов. Нажмите кнопку ниже, чтобы создать план.',
       createButton: 'Создать план',
       createPlan: 'Создать план',
-      officeProjectNotFound: 'Проект офиса не найден',
-      charityProjectNotFound: 'Проект благотворительности не найден',
-      noProjectPlan: 'Для этого месяца нет плана проекта',
+      officeProjectNotFound: 'Объект офиса не найден',
+      charityProjectNotFound: 'Объект благотворительности не найден',
+      noProjectPlan: 'Для этого месяца нет плана объекта',
       noOfficePlan: 'Для этого месяца нет плана офиса',
       noCharityPlan: 'Для этого месяца нет плана благотворительности',
     },
@@ -473,7 +473,7 @@ export default {
   },
   pages: {
     projects: {
-      title: 'Проекты',
+      title: 'Объекты',
     },
     planPeriods: {
       title: 'Доступ к плану (по месяцу)',
@@ -491,7 +491,7 @@ export default {
   submittedPlans: {
     title: 'Планы прорабов',
     columns: {
-      project: 'Проект',
+      project: 'Объект',
       month: 'Месяц',
       totalPlanned: 'Всего запланировано',
       status: 'Статус',
@@ -499,7 +499,7 @@ export default {
     },
     filters: {
       month: 'Месяц',
-      project: 'Проект',
+      project: 'Объект',
       status: 'Статус',
     },
     buttons: {
@@ -522,11 +522,11 @@ export default {
     error401: 'Сессия истекла. Войдите снова.',
     error403: 'У вас нет разрешения.',
     projects: {
-      title: 'Мои проекты',
-      loading: 'Загрузка проектов...',
-      empty: 'Проекты не найдены',
+      title: 'Мои объекты',
+      loading: 'Загрузка объектов...',
+      empty: 'Объекты не найдены',
       columns: {
-        project: 'Проект',
+        project: 'Объект',
         assignedAt: 'Дата назначения',
         actions: 'Действия',
       },
@@ -549,7 +549,7 @@ export default {
       buttons: {
         openPlan: 'Открыть план',
         enterPlan: 'Ввести план',
-        backToProjects: 'Назад к проектам',
+        backToProjects: 'Назад к объектам',
       },
     },
     budgetPlan: {
@@ -650,7 +650,7 @@ export default {
     },
     filters: {
       month: 'Месяц',
-      project: 'Проект',
+      project: 'Объект',
       status: 'Статус',
     },
     buttons: {
@@ -671,7 +671,7 @@ export default {
       editExpense: 'Редактировать расход',
     },
     plan: {
-      project: 'Проект',
+      project: 'Объект',
       month: 'Месяц',
       status: 'Статус',
     },
@@ -697,13 +697,13 @@ export default {
     createError: 'Ошибка создания финансового периода',
     month: 'Месяц:',
     tabs: {
-      project: 'Проект',
+      project: 'Объект',
       office: 'Офис',
       charity: 'Благотворительность',
       planVsFact: 'План vs Факт',
     },
     fundKind: {
-      project: 'Проект',
+      project: 'Объект',
       office: 'Офис',
       charity: 'Благотворительность',
     },
@@ -743,7 +743,7 @@ export default {
     columns: {
       month: 'Месяц',
       fundKind: 'Тип финансирования',
-      project: 'Проект',
+      project: 'Объект',
       status: 'Статус',
       incomeTotal: 'Итого доходов',
       createdAt: 'Дата создания',
@@ -796,7 +796,7 @@ export default {
       title: 'Финансовый период - {{month}} ({{fundKind}})',
       month: 'Месяц:',
       fundKind: 'Тип финансирования:',
-      project: 'Проект:',
+      project: 'Объект:',
       status: 'Статус:',
       incomePlanAmount: 'Плановая сумма дохода:',
       incomeActualAmount: 'Фактическая сумма дохода:',
@@ -817,14 +817,14 @@ export default {
       monthPeriod: 'Месячный период',
       selectMonthPeriod: 'Выберите месячный период...',
       fundKind: 'Тип финансирования',
-      project: 'Проект',
-      selectProject: 'Выберите проект...',
+      project: 'Объект',
+      selectProject: 'Выберите объект...',
       status: 'Статус',
       errors: {
         monthRequired: 'Месяц обязателен',
         monthPeriodRequired: 'Месячный период обязателен',
-        projectRequired: 'Проект обязателен (когда тип финансирования - проект)',
-        projectMustBeEmpty: 'Проект должен быть пустым (когда тип финансирования не проект)',
+        projectRequired: 'Объект обязателен (когда тип финансирования - project)',
+        projectMustBeEmpty: 'Объект должен быть пустым (когда тип финансирования не project)',
       },
     },
     delete: {
@@ -836,8 +836,8 @@ export default {
       title: 'Финансовые периоды',
     },
     planVsFact: {
-      onlyForProject: 'План vs Факт доступен только для проектных периодов',
-      noPlanFound: 'План не найден для этого проекта/месяца',
+      onlyForProject: 'План vs Факт доступен только для объектных периодов',
+      noPlanFound: 'План не найден для этого объекта/месяца',
       summary: {
         totalPlan: 'Итого план',
         totalFact: 'Итого факт',
@@ -1102,16 +1102,16 @@ export default {
     title: 'Отчёты',
     tabs: {
       office: 'Офис',
-      project: 'Проект',
+      project: 'Объект',
       charity: 'Благотворительность',
       income: 'Доходы',
     },
     filters: {
       month: 'Месяц',
       scope: 'Область',
-      project: 'Проект',
-      selectProject: 'Выберите проект...',
-      loadingProjects: 'Загрузка проектов...',
+      project: 'Объект',
+      selectProject: 'Выберите объект...',
+      loadingProjects: 'Загрузка объектов...',
     },
     status: {
       LOCKED: 'ЗАКРЫТ',
@@ -1120,7 +1120,7 @@ export default {
     warnings: {
       noFinancePeriod: 'Финансовый период для этого месяца и области не найден. Сначала создайте его.',
       noBudgetPlan: 'Бюджетный план для этого месяца и области не найден.',
-      selectProject: 'Выберите проект для просмотра отчётов.',
+      selectProject: 'Выберите объект для просмотра отчётов.',
       incomePlannedOfficeOnly: 'План доходов доступен только для области офиса',
     },
     income: {
@@ -1233,7 +1233,7 @@ export default {
     },
     scopeOptions: {
       OFFICE: 'Офис',
-      PROJECT: 'Проект',
+      PROJECT: 'Объект',
       CHARITY: 'Благотворительность',
     },
     summary: {
