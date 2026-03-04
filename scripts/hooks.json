@@ -17,14 +17,13 @@
       "match": {
         "type": "value",
         "value": "refs/heads/master",
-        "parameter": {
-          "source": "payload",
-          "name": "ref"
-        }
+        "parameter": { "source": "payload", "name": "ref" }
       }
     },
 
     "incoming-payload-content-type": "application/json",
-    "http-methods": ["POST"]
+    "http-methods": ["POST"],
+    "response-message": "Deploy triggered (branch master only). Check logs if needed.",
+    "include-command-output-in-response": false
   }
 ]
