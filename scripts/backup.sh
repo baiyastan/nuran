@@ -24,7 +24,13 @@ docker compose -f infra/docker-compose.yml exec -T db \
   pg_dump -U "${POSTGRES_USER:-${DB_USER:-postgres}}" "${POSTGRES_DB:-${DB_NAME:-nuran}}" \
   | gzip > "${BACKUP_FILE}"
 
+if [ ! -s "${BACKUP_FILE}" ]; then
+  echo "Error: Backup file is missing or empty." >&2
+  exit 1
+fi
+
 echo "Backup created."
+echo "Backup OK: ${BACKUP_FILE}"
 
 echo "Rotating backups, keeping the 7 most recent..."
 ls -1t "${BACKUP_DIR}"/nuran_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --

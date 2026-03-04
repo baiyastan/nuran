@@ -27,6 +27,7 @@ COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # IMPORTANT: put configs OUTSIDE conf.d, otherwise nginx loads both
 RUN mkdir -p /etc/nginx/templates
+COPY infra/docker/nginx-rate-limit.conf /etc/nginx/templates/00-rate-limit.conf
 COPY infra/docker/nginx.http.conf /etc/nginx/templates/http.conf
 COPY infra/docker/nginx.ssl.conf  /etc/nginx/templates/ssl.conf
 

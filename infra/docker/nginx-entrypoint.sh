@@ -13,10 +13,11 @@ if [ "$TARGET" = "ssl.conf" ]; then
   fi
 fi
 
-# conf.d ичинде бир гана файл болсун
+# conf.d: rate-limit zone first, then server config
 rm -f /etc/nginx/conf.d/*
 
 # TEMPLATE ПАПКАДАН көчүрөбүз
+cp /etc/nginx/templates/00-rate-limit.conf /etc/nginx/conf.d/00-rate-limit.conf
 cp "/etc/nginx/templates/$TARGET" /etc/nginx/conf.d/default.conf
 
 nginx -t

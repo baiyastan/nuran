@@ -219,6 +219,8 @@ To restore from a backup (optional helper script):
 
 The restore script will prompt for confirmation before applying changes.
 
+**Restore test plan (recommended):** Periodically verify backups by running a restore on a staging copy or local clone (e.g. monthly). After restore, confirm the app starts and can read data; this validates retention and dump consistency.
+
 ## Testing
 
 ### Backend Tests

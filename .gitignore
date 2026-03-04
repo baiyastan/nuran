@@ -35,6 +35,8 @@ staticfiles/
 .coverage
 htmlcov/
 *.log
+.deploy.lock
+.deploy-trigger.log
 
 # Node / Vite / pnpm
 node_modules/

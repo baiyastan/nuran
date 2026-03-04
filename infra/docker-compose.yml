@@ -67,6 +67,7 @@ services:
       # - ./docker/nginx.ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
     depends_on:
       - backend
+      - webhook
 
   webhook:
     build:
@@ -82,6 +83,12 @@ services:
       - /var/www/nuran:/var/www/nuran
       - ../scripts/hooks.json:/etc/webhook/hooks.json:ro
     command: ["-hooks", "/etc/webhook/hooks.json", "-verbose", "-port", "9000"]
+    healthcheck:
+      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/hooks/deploy); test \"$$code\" = '405' || test \"$$code\" = '404' || test \"$$code\" = '200'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   certbot:
     image: certbot/certbot:latest
