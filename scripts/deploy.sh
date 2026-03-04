@@ -21,7 +21,7 @@ echo "[$(date -Iseconds)] Starting deploy at ${REPO_ROOT} (branch=${BRANCH})"
 git fetch origin "${BRANCH}"
 git reset --hard "origin/${BRANCH}"
 
-docker compose --env-file .env -f infra/docker-compose.yml up -d --build --force-recreate backend nginx
+docker compose --env-file .env -f infra/docker-compose.yml up -d --build --force-recreate --remove-orphans backend nginx
 
 docker image prune -f
 
