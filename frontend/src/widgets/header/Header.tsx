@@ -80,7 +80,7 @@ function Header() {
               <LanguageSwitcher />
               <span className="header-user">
                 <span className="header-user-email">{user.email}</span>
-                <span className="header-user-role">({t('header.userRole', { role: user.role })})</span>
+                <span className="header-user-role">({t('header.userRole', { role: user.role })})-</span>
               </span>
               <Button onClick={handleLogout} variant="secondary" size="small">
                 {t('common.logout')}
