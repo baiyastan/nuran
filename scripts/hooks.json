@@ -3,7 +3,10 @@
     "id": "deploy",
     "execute-command": "/var/www/nuran/scripts/deploy-trigger.sh",
     "command-working-directory": "/var/www/nuran",
-    "pass-headers-to-command": true,
+    "pass-headers-to-command": [
+      "X-Hub-Signature-256",
+      "X-Deploy-Token"
+    ],
     "pass-arguments-to-command": [
       { "source": "raw-request-body" }
     ],
