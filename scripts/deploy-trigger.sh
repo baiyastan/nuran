@@ -2,7 +2,7 @@
 set -eu
 
 REPO_ROOT="${REPO_ROOT:-/var/www/nuran}"
-LOG_FILE="${REPO_ROOT}/.deploy-trigger.log"
+LOG_FILE="${REPO_ROOT}/scripts/.deploy-trigger.log"
 
 log() { echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] $*" >> "${LOG_FILE}"; }
 
@@ -14,7 +14,7 @@ fi
 
 if [ -n "${HTTP_X_DEPLOY_TOKEN:-}" ]; then
   if [ "$HTTP_X_DEPLOY_TOKEN" != "$WEBHOOK_SECRET" ]; then
-    log "ERROR: Invalid X-Deploy-Token"
+    log "ERROR: Invalid X-Deploy-Token (403)"
     echo "Invalid X-Deploy-Token" >&2
     exit 1
   fi
@@ -23,6 +23,6 @@ if [ -n "${HTTP_X_DEPLOY_TOKEN:-}" ]; then
   exec /var/www/nuran/scripts/deploy.sh
 fi
 
-log "ERROR: Missing X-Deploy-Token"
+log "ERROR: Missing X-Deploy-Token (403)"
 echo "Missing X-Deploy-Token" >&2
 exit 1

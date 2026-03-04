@@ -103,6 +103,7 @@ A **webhook** service runs inside the stack. It is **not** exposed on a public p
 ### 3. Test and logs
 
 - After a push to `main`, the webhook runs: `git pull origin main`, then `docker compose -f infra/docker-compose.yml up -d --build`, then `docker image prune -f`. A lock file prevents overlapping deploys.
+- For **acceptance tests** (healthz, webhook POST, nginx→webhook, nginx -t/reload), see [scripts/verification.md](scripts/verification.md).
 - To watch webhook and deploy logs:
   ```bash
   docker logs -f nuran-webhook-1

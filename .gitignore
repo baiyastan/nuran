@@ -37,6 +37,8 @@ htmlcov/
 *.log
 .deploy.lock
 .deploy-trigger.log
+scripts/.deploy.log
+scripts/.deploy-trigger.log
 
 # Node / Vite / pnpm
 node_modules/

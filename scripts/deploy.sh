@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-/var/www/nuran}"
 LOCK_FILE="${REPO_ROOT}/.deploy.lock"
-LOG_FILE="${REPO_ROOT}/.deploy.log"
+LOG_FILE="${REPO_ROOT}/scripts/.deploy.log"
 BRANCH="${BRANCH:-main}"
 
 cd "${REPO_ROOT}"
