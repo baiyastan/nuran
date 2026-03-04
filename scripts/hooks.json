@@ -5,25 +5,33 @@
     "command-working-directory": "/var/www/nuran",
 
     "pass-environment-to-command": [
-      "HTTP_X_HUB_SIGNATURE_256",
-      "HTTP_X_DEPLOY_TOKEN"
+      {
+        "source": "header",
+        "name": "X-Deploy-Token",
+        "envname": "HTTP_X_DEPLOY_TOKEN"
+      }
     ],
 
     "pass-arguments-to-command": [
-      { "source": "raw-request-body" }
+      {
+        "source": "raw-request-body"
+      }
     ],
 
     "trigger-rule": {
       "match": {
         "type": "value",
         "value": "refs/heads/master",
-        "parameter": { "source": "payload", "name": "ref" }
+        "parameter": {
+          "source": "payload",
+          "name": "ref"
+        }
       }
     },
 
     "incoming-payload-content-type": "application/json",
     "http-methods": ["POST"],
-    "response-message": "Deploy triggered (branch master only). Check logs if needed.",
+    "response-message": "Deploy triggered",
     "include-command-output-in-response": false
   }
 ]
