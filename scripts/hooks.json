@@ -7,8 +7,8 @@
     "pass-environment-to-command": [
       {
         "source": "header",
-        "name": "X-Deploy-Token",
-        "envname": "HTTP_X_DEPLOY_TOKEN"
+        "name": "X-Hub-Signature-256",
+        "envname": "HTTP_X_HUB_SIGNATURE_256"
       }
     ],
 
