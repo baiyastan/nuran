@@ -5,8 +5,10 @@ import { useAuth } from '@/shared/hooks/useAuth'
 import { useGetDashboardKpiQuery } from '@/shared/api/reportsApi'
 
 vi.mock('@/shared/hooks/useAuth', () => ({ useAuth: vi.fn() }))
-vi.mock('@/shared/api/reportsApi', async (orig) => {
-  const actual = await orig()
+vi.mock('@/shared/api/reportsApi', async () => {
+  const actual = await vi.importActual<typeof import('@/shared/api/reportsApi')>(
+    '@/shared/api/reportsApi'
+  )
   return {
     ...actual,
     useGetDashboardKpiQuery: vi.fn(),
