@@ -21,12 +21,12 @@ echo "[$(date -Iseconds)] Starting deploy at ${REPO_ROOT} (branch=${BRANCH})"
 git fetch origin "${BRANCH}"
 git reset --hard "origin/${BRANCH}"
 
-docker compose --env-file .env -f infra/docker-compose.yml up -d --build --force-recreate --remove-orphans backend nginx
+docker compose --env-file .env -f infra/docker-compose.yml up -d --build --force-recreate --remove-orphans --no-deps backend nginx
 
 docker image prune -f
 
-# Post-deploy healthcheck: nginx root must respond
-if ! curl -sf --connect-timeout 10 --max-time 15 http://nginx/ -o /dev/null; then
+# Post-deploy healthcheck: nginx root must respond (curl via host network so 127.0.0.1:80 is nginx)
+if ! docker run --rm --network host curlimages/curl:latest curl -sf --connect-timeout 10 --max-time 15 http://127.0.0.1/ -o /dev/null; then
   echo "[$(date -Iseconds)] Healthcheck failed: nginx root unreachable"
   exit 1
 fi
