@@ -6,7 +6,11 @@ import { useAuth } from '@/shared/hooks/useAuth'
 import { Button } from '@/shared/ui/Button/Button'
 import './MonthGateBanner.css'
 
-export function MonthGateBanner() {
+interface MonthGateBannerProps {
+  showManageButton?: boolean
+}
+
+export function MonthGateBanner({ showManageButton = true }: MonthGateBannerProps) {
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -50,7 +54,7 @@ export function MonthGateBanner() {
       <div className="month-gate-banner month-gate-banner--warning">
         <span>{t('monthGate.notOpened')}</span>
         <span>{t('monthGate.bodyNotOpened')}</span>
-        {isAdmin && (
+        {isAdmin && showManageButton && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}
           </Button>
@@ -64,7 +68,7 @@ export function MonthGateBanner() {
       <div className="month-gate-banner month-gate-banner--locked">
         <span>{t('monthGate.locked')}</span>
         <span>{t('monthGate.bodyLocked')}</span>
-        {isAdmin && (
+        {isAdmin && showManageButton && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}
           </Button>
@@ -78,7 +82,7 @@ export function MonthGateBanner() {
       <div className="month-gate-banner month-gate-banner--open">
         <span>{t('monthGate.open')}</span>
         <span>{t('monthGate.bodyOpen')}</span>
-        {isAdmin && (
+        {isAdmin && showManageButton && (
           <Button type="button" onClick={handleManageMonths}>
             {t('monthGate.manageLink', { defaultValue: 'Manage months' })}
           </Button>

@@ -23,6 +23,7 @@ export default {
     back: 'Артка',
     close: 'Жабуу',
     actions: 'Аракеттер',
+    count: 'Саны',
     status: {
       OPEN: 'АЧЫК',
       LOCKED: 'ЖАБЫК',
@@ -76,6 +77,7 @@ export default {
     required: 'Бул талаа талап кылынат',
     goToPlanSetup: 'План түзүүгө баруу',
     goToReports: 'Отчётторго баруу',
+    generic: 'Ката чыкты',
   },
   planning: {
     plan: 'План',
@@ -1133,6 +1135,9 @@ export default {
         actual: 'Чыныгы',
         delta: 'Айырма',
         deltaPercent: 'Айырма %',
+        plan: 'План',
+        diff: 'Айырма',
+        sharePercent: 'Үлүш %',
       },
       charts: {
         plannedVsActualBySource: 'Булак боюнча план жана чыныгы киреше',
@@ -1177,6 +1182,9 @@ export default {
         actual: 'Чыныгы',
         delta: 'Айырма',
         deltaPercent: 'Айырма %',
+        sharePercent: 'Үлүш %',
+        plan: 'План',
+        diff: 'Айырма',
       },
       charts: {
         plannedVsActualByCategory: 'Категория боюнча план жана чыныгы чыгым',
@@ -1222,6 +1230,21 @@ export default {
         expenseActual: 'Чыгым чыныгы',
         net: 'Таза',
       },
+      actions: {
+        viewIncomeBreakdown: 'Булактар боюнча деталдуу көрүү',
+        viewExpenseBreakdown: 'Категориялар боюнча деталдуу көрүү',
+        viewNetBreakdown: 'Айырманы түшүндүрүү',
+      },
+      netExplanation: 'Айырма = киреше {{income}} − чыгым {{expense}} = {{net}}',
+      details: 'Деталдар',
+      times: 'Ирет',
+      total: 'Жалпы',
+      vendor: 'Контрагент',
+      date: 'Күнү',
+      amount: 'Сумма',
+      comment: 'Комментарий',
+      documentNumber: 'Документ',
+      noData: 'Маалымат жок',
     },
   },
   planSetup: {

@@ -73,4 +73,151 @@
   background: #dc2626;
 }
 
+.global-summary-section {
+  margin-bottom: 1.5rem;
+}
 
+.summary-loading,
+.summary-error {
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.summary-error {
+  color: #b91c1c;
+}
+
+.summary-kpi-chevron-button {
+  margin-top: 0.1rem;
+  align-self: flex-start;
+  margin-left: 0.1rem;
+  background: none;
+  border: none;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.summary-kpi-chevron-button svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.15s ease;
+}
+
+.summary-kpi-chevron-button--open svg {
+  transform: rotate(180deg);
+}
+
+.summary-kpi-chevron-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.summary-kpi-link {
+  margin-top: 0.25rem;
+  align-self: flex-start;
+  padding: 0.15rem 0;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.summary-kpi-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.global-summary-breakdown {
+  margin-top: 1.25rem;
+}
+
+.global-summary-breakdown.net-breakdown p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.summary-link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.summary-link-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.global-summary-expense-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.expense-details-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.expense-details-summary {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+.expense-details-summary span {
+  white-space: nowrap;
+}
+
+.expense-details-pagination {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expense-details-page-indicator {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.summary-no-data {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.diff-value {
+  font-weight: 600;
+}
+
+.diff-value--good {
+  color: #15803d;
+}
+
+.diff-value--bad {
+  color: #b91c1c;
+}
+
+.diff-value--neutral {
+  color: #6b7280;
+  font-weight: 400;
+}

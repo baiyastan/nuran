@@ -9,6 +9,7 @@ export interface IncomeEntryListParams {
   search?: string
   ordering?: string
   page?: number
+  source?: number | 'null'
 }
 
 export interface IncomeEntryListResponse {
@@ -16,6 +17,13 @@ export interface IncomeEntryListResponse {
   next: string | null
   previous: string | null
   results: IncomeEntry[]
+  total_count?: number
+  total_amount?: string
+  payer_breakdown?: {
+    payer: string
+    count: number
+    amount: string
+  }[]
 }
 
 export interface CreateIncomeEntryRequest {

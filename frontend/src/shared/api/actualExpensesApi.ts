@@ -6,10 +6,16 @@ export type ActualExpenseScope = 'OFFICE' | 'PROJECT' | 'CHARITY'
 export interface ActualExpenseListParams {
   month?: string // YYYY-MM (required for list by month+scope)
   scope?: ActualExpenseScope
-  category?: number
+  category?: number | 'null'
   spent_at?: string
   ordering?: string
   page?: number
+}
+
+export interface ActualExpenseVendorBreakdown {
+  vendor: string
+  count: number
+  amount: string
 }
 
 export interface ActualExpenseListResponse {
@@ -17,6 +23,10 @@ export interface ActualExpenseListResponse {
   next: string | null
   previous: string | null
   results: ActualExpense[]
+  // Optional drill-down metadata for month+category slices
+  total_count?: number
+  total_amount?: string
+  vendor_breakdown?: ActualExpenseVendorBreakdown[]
 }
 
 /** Payload for creating an actual expense: month + scope (backend resolves month_period). */

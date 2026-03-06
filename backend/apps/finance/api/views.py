@@ -1,14 +1,19 @@
 """
 Finance API views.
 """
+from decimal import Decimal
+
+from django.db.models import Sum, Count, DecimalField, Value, OuterRef, Subquery
+from django.db.models.functions import Coalesce
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError, PermissionDenied
-from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db.models import Sum, Count, DecimalField, Value, OuterRef, Subquery
-from django.db.models.functions import Coalesce
+from rest_framework.response import Response
+
+from apps.budgeting.models import MonthPeriod
+from apps.finance.constants import MONTH_REQUIRED_MSG
 from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan
 from ..services import (
     FinancePeriodService,
@@ -172,7 +177,72 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
                 'created_by'
             )
         )
-    
+
+    def list(self, request, *args, **kwargs):
+        """
+        List income entries.
+
+        For dashboard drill-down, when both month and source are provided, this
+        endpoint aggregates across all finance periods for the given month_period
+        and source (including source='null') and returns paginated results with
+        total_count and total_amount metadata.
+        """
+        month = request.query_params.get('month')
+        source_param = request.query_params.get('source')
+
+        # Fallback to default behavior when not using month+source drill-down.
+        if not (month and source_param is not None):
+            return super().list(request, *args, **kwargs)
+
+        month = month.strip()
+        try:
+            month_period = MonthPeriod.objects.get(month=month)
+        except MonthPeriod.DoesNotExist:
+            return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = self.get_queryset().filter(
+            finance_period__month_period=month_period,
+        )
+
+        if source_param == 'null':
+            queryset = queryset.filter(source__isnull=True)
+        else:
+            try:
+                source_id = int(source_param)
+            except (TypeError, ValueError):
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(source_id=source_id)
+
+        # Apply additional filters (fund_kind, project, search, ordering, etc.)
+        queryset = self.filter_queryset(queryset)
+
+        total_count = queryset.count()
+        total_amount = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            data = response.data
+            data['total_count'] = total_count
+            data['total_amount'] = str(total_amount.quantize(Decimal('0.00')))
+            data['payer_breakdown'] = []
+            response.data = data
+            return response
+
+        serializer = self.get_serializer(queryset, many=True)
+        data = {
+            'count': total_count,
+            'next': None,
+            'previous': None,
+            'results': serializer.data,
+            'total_count': total_count,
+            'total_amount': str(total_amount.quantize(Decimal('0.00'))),
+            'payer_breakdown': [],
+        }
+        return Response(data)
+
     def perform_create(self, serializer):
         """Create income entry with audit logging."""
         # Fail-fast: require related MonthPeriod to exist (OPEN or LOCKED allowed)

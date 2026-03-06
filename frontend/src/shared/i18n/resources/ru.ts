@@ -23,6 +23,7 @@ export default {
     back: 'Назад',
     close: 'Закрыть',
     actions: 'Действия',
+    count: 'Количество',
     status: {
       OPEN: 'ОТКРЫТ',
       LOCKED: 'ЗАКРЫТ',
@@ -76,6 +77,7 @@ export default {
     goToPlanSetup: 'Перейти к плану',
     goToReports: 'Перейти к отчётам',
     required: 'Это поле обязательно для заполнения',
+    generic: 'Произошла ошибка',
   },
   planning: {
     plan: 'План',
@@ -1133,6 +1135,9 @@ export default {
         actual: 'Факт',
         delta: 'Разница',
         deltaPercent: 'Разница %',
+        plan: 'План',
+        diff: 'Разница',
+        sharePercent: 'Доля %',
       },
       charts: {
         plannedVsActualBySource: 'План и факт доходов по источникам',
@@ -1177,6 +1182,9 @@ export default {
         actual: 'Факт',
         delta: 'Разница',
         deltaPercent: 'Разница %',
+        sharePercent: 'Доля %',
+        plan: 'План',
+        diff: 'Разница',
       },
       charts: {
         plannedVsActualByCategory: 'План и факт расходов по категориям',
@@ -1222,6 +1230,21 @@ export default {
         expenseActual: 'Факт расходов',
         net: 'Чистый',
       },
+      actions: {
+        viewIncomeBreakdown: 'Показать детализацию доходов по источникам',
+        viewExpenseBreakdown: 'Показать детализацию расходов по категориям',
+        viewNetBreakdown: 'Показать расшифровку разницы',
+      },
+      netExplanation: 'Разница = доходы {{income}} − расходы {{expense}} = {{net}}',
+      details: 'Детали',
+      times: 'Раз',
+      total: 'Итого',
+      vendor: 'Контрагент',
+      date: 'Дата',
+      amount: 'Сумма',
+      comment: 'Комментарий',
+      documentNumber: 'Документ',
+      noData: 'Нет данных',
     },
   },
   planSetup: {
