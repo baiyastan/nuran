@@ -52,7 +52,22 @@ def _display_name(value: str | None) -> str:
     return value or "Uncategorized"
 
 
+def _ensure_pdf_font_files_exist() -> None:
+    missing_paths = [
+        str(font_path)
+        for font_path in (FONT_REGULAR_PATH, FONT_BOLD_PATH)
+        if not font_path.is_file()
+    ]
+    if missing_paths:
+        missing_display = ", ".join(missing_paths)
+        raise RuntimeError(
+            "Required DejaVu font files are missing for PDF export: "
+            f"{missing_display}. Install DejaVu fonts in the backend image."
+        )
+
+
 def _register_pdf_fonts() -> None:
+    _ensure_pdf_font_files_exist()
     registered_fonts = pdfmetrics.getRegisteredFontNames()
     if FONT_REGULAR not in registered_fonts:
         pdfmetrics.registerFont(TTFont(FONT_REGULAR, str(FONT_REGULAR_PATH)))
