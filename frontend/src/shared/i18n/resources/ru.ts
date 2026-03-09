@@ -15,6 +15,10 @@ export default {
     print: 'Печать',
     logout: 'Выйти',
     loading: 'Загрузка...',
+    loadingScreen: {
+      title: 'Загрузка данных',
+      description: 'Пожалуйста подождите несколько секунд',
+    },
     error: 'Ошибка',
     emptyState: 'Нет данных',
     goToHome: 'На главную',
@@ -63,6 +67,8 @@ export default {
     expenses: 'Расходы',
     incomeSources: 'Источники дохода',
     reports: 'Отчёты',
+    expandSidebar: 'Развернуть меню',
+    collapseSidebar: 'Свернуть меню',
   },
   errors: {
     forbidden: 'Запрещено',
@@ -132,6 +138,8 @@ export default {
     name: 'Название',
     parent: 'Родитель',
     parentCategory: 'Родительская категория',
+    parentSelectorLabel: 'В какую категорию входит',
+    parentOptionTopLevel: '—',
     scopeInherited: 'Область наследуется от родителя',
     project: 'Объект',
     office: 'Офис',
@@ -143,6 +151,7 @@ export default {
     children: 'Дочерние категории',
     active: 'Активна',
     rootOnly: 'Только корневые',
+    root: 'Корень',
     cannotDeleteHasChildren: 'Нельзя удалить: есть дочерние категории',
     confirmDelete: 'Удалить "{{name}}"?',
     deleteError: 'Ошибка удаления категории',
@@ -154,11 +163,11 @@ export default {
         creating: 'Создание...',
         nameRequired: 'Название обязательно',
         createError: 'Ошибка создания категории',
-        noRootMessage: 'Нет корневой категории для этой сферы. Создайте её.',
-        createRootButton: 'Создать корневую категорию',
-        rootNameOffice: 'Офис расходы (Root)',
-        rootNameProject: 'Объект расходы (Root)',
-        rootNameCharity: 'Благотворительность (Root)',
+        noRootMessage: 'Нет категорий для этой сферы. Создайте первую.',
+        createRootButton: 'Создать первую категорию',
+        rootNameOffice: 'Офис расходы',
+        rootNameProject: 'Объект расходы',
+        rootNameCharity: 'Благотворительность',
       },
       addRoot: {
         title: 'Добавить корневую категорию',
@@ -198,6 +207,11 @@ export default {
       subcategories: 'Подкатегории',
       noRootCategories: 'Корневые категории не найдены',
       noSubcategories: 'Подкатегории не найдены',
+    },
+    slugs: {
+      tax: 'Налог',
+      rent: 'Аренда',
+      other: 'Другое',
     },
   },
   incomeSources: {
@@ -779,7 +793,7 @@ export default {
       creatingMonthPeriod: 'Создание периода месяца...',
     },
     incomeEntry: {
-      addButton: '+ Добавить запись',
+      addButton: '+ Добавить доход',
     },
     income: {
       common: {
@@ -992,6 +1006,7 @@ export default {
     table: {
       columns: {
         spentAt: 'Дата расхода',
+        category: 'Категория',
         planRow: 'Строка плана',
         amount: 'Сумма',
         comment: 'Комментарий',
@@ -1013,6 +1028,8 @@ export default {
         planRowPlaceholder: 'Выберите строку плана',
         selectPlanPeriodFirst: 'Сначала выберите период плана',
         comment: 'Комментарий (обязательно)',
+        category: 'Категория',
+        categoryWillBeAssigned: 'Категория будет назначена автоматически по выбранной строке плана',
       },
       buttons: {
         save: 'Сохранить',
@@ -1050,6 +1067,7 @@ export default {
     plans: {
       title: 'Планы доходов',
       addButton: '+ Добавить план',
+      amountColumn: 'Плановая сумма',
       empty: 'Планов пока нет',
       disabled: 'Период не открыт',
     },
@@ -1234,6 +1252,8 @@ export default {
         viewIncomeBreakdown: 'Показать детализацию доходов по источникам',
         viewExpenseBreakdown: 'Показать детализацию расходов по категориям',
         viewNetBreakdown: 'Показать расшифровку разницы',
+        exportPdf: 'Скачать PDF',
+        exportingPdf: 'Подготовка PDF...',
       },
       netExplanation: 'Разница = доходы {{income}} − расходы {{expense}} = {{net}}',
       details: 'Детали',
@@ -1245,6 +1265,9 @@ export default {
       comment: 'Комментарий',
       documentNumber: 'Документ',
       noData: 'Нет данных',
+      incomeSourcesSummaryTitle: 'Итоги по источникам доходов',
+      expenseCategoriesSummaryTitle: 'Итоги по категориям расходов',
+      exportError: 'Не удалось экспортировать PDF',
     },
   },
   planSetup: {
@@ -1266,10 +1289,12 @@ export default {
       category: 'Категория',
       amountPlanned: 'Запланированная сумма',
       note: 'Примечание',
+      comment: 'Комментарий',
     },
     actions: {
       save: 'Сохранить',
       saving: 'Сохранение...',
+      savePlan: 'Сохранить план',
       createPlan: 'Создать план',
       creating: 'Создание...',
     },
@@ -1277,6 +1302,8 @@ export default {
     loadingPlan: 'Загрузка плана...',
     monthPeriodNotFound: 'Период месяца не найден. Сначала создайте или откройте месяц.',
     emptyCategories: 'Нет конечных категорий расходов для этой области.',
+    emptyStateNoPlanLine1: 'План на этот месяц ещё не создан.',
+    emptyStateNoPlanLine2: 'После создания плана вы сможете ввести суммы по категориям.',
     saved: 'Сохранено',
   },
   monthGate: {

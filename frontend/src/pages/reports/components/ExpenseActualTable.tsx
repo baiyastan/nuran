@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Table } from '@/shared/ui/Table/Table'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatKGS, formatDate } from '@/shared/lib/utils'
 import { useAuth } from '@/shared/hooks/useAuth'
 import './ReportsTable.css'
@@ -51,7 +52,7 @@ export function ExpenseActualTable({ items, monthStatus, loading }: ExpenseActua
   }))
 
   if (loading) {
-    return <div className="table-loading">{t('expense.tables.actual.loading')}</div>
+    return <TableSkeleton columnCount={columns.length} />
   }
 
   if (items.length === 0) {

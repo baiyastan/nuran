@@ -8,6 +8,7 @@ import {
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { Button } from '@/shared/ui/Button/Button'
 import { getErrorMessage } from '@/shared/lib/utils'
+import { displayCategoryName } from '@/shared/lib/categoryUtils'
 import './CategoryModals.css'
 
 interface EditCategoryModalProps {
@@ -101,7 +102,7 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
         </div>
 
         <div className="form-field">
-          <label className="input-label">{t('categories.parent') || 'Parent'}</label>
+          <label className="input-label">{t('categories.parentSelectorLabel')}</label>
           <select
             className="input"
             value={formData.parent || ''}
@@ -109,10 +110,10 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
               setFormData({ ...formData, parent: e.target.value ? Number(e.target.value) : null })
             }
           >
-            <option value="">— {t('categories.root') || 'Root'} —</option>
+            <option value="">{t('categories.parentOptionTopLevel')}</option>
             {rootCategories.map((cat) => (
               <option key={cat.id} value={cat.id}>
-                {cat.name}
+                {displayCategoryName(cat.name)}
               </option>
             ))}
           </select>

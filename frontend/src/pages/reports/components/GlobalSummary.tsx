@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Table } from '@/shared/ui/Table/Table'
+import { Button } from '@/shared/ui/Button/Button'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { useListIncomeEntriesQuery } from '@/shared/api/incomeEntriesApi'
 import {
+  useExportExpenseCategoryDetailPdfMutation,
+  useExportIncomeSourceDetailPdfMutation,
   useGetDashboardExpenseCategoriesQuery,
   useGetDashboardIncomeSourcesQuery,
   useGetDashboardKpiQuery,
+  useExportSectionPdfMutation,
 } from '@/shared/api/reportsApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
 import { formatDate, formatKGS } from '@/shared/lib/utils'
@@ -16,6 +21,8 @@ interface GlobalSummaryProps {
 }
 
 type OpenPanel = 'income' | 'expense' | 'net' | null
+type ExportSectionType = 'income_sources' | 'expense_categories'
+type ExportDetailType = 'income_source_detail' | 'expense_category_detail'
 
 function getDifferenceColor(type: 'income' | 'expense', diff: number): string {
   if (diff === 0) return 'diff-value diff-value--neutral'
@@ -39,9 +46,66 @@ function formatSignedKGS(diff: number): string {
   return `${sign}${formatted}`
 }
 
+function ChevronIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function getExportFilename(month: string, sectionType: ExportSectionType) {
+  return `${month}_${sectionType}_report.pdf`
+}
+
+function getDetailExportFilename(
+  month: string,
+  detailType: ExportDetailType,
+  targetId: number | null
+) {
+  const target = targetId === null ? 'uncategorized' : String(targetId)
+
+  if (detailType === 'income_source_detail') {
+    return `${month}_income_source_${target}_detail_report.pdf`
+  }
+
+  return `${month}_expense_category_${target}_detail_report.pdf`
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const downloadUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = downloadUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(downloadUrl)
+}
+
 export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
+  const [exportSectionPdf] = useExportSectionPdfMutation()
+  const [exportIncomeSourceDetailPdf] = useExportIncomeSourceDetailPdfMutation()
+  const [exportExpenseCategoryDetailPdf] = useExportExpenseCategoryDetailPdfMutation()
+  const [exportingSection, setExportingSection] = useState<ExportSectionType | null>(null)
+  const [exportErrorSection, setExportErrorSection] = useState<ExportSectionType | null>(null)
+  const [exportingDetail, setExportingDetail] = useState<ExportDetailType | null>(null)
+  const [exportErrorDetail, setExportErrorDetail] = useState<ExportDetailType | null>(null)
   const [selectedIncomeSourceId, setSelectedIncomeSourceId] = useState<number | null | undefined>(undefined)
   const [selectedIncomeSourceName, setSelectedIncomeSourceName] = useState<string>('')
   const [incomeDetailPage, setIncomeDetailPage] = useState<number>(1)
@@ -149,129 +213,177 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const hasError =
     kpiError || expenseCategoriesError || incomeSourcesError
 
+  const handleSectionExport = async (sectionType: ExportSectionType) => {
+    setExportErrorSection(null)
+    setExportingSection(sectionType)
+
+    try {
+      const blob = await exportSectionPdf({ month, sectionType }).unwrap()
+      downloadBlob(blob, getExportFilename(month, sectionType))
+    } catch {
+      setExportErrorSection(sectionType)
+    } finally {
+      setExportingSection(null)
+    }
+  }
+
+  const handleIncomeDetailExport = async () => {
+    if (selectedIncomeSourceId === undefined) {
+      return
+    }
+
+    setExportErrorDetail(null)
+    setExportingDetail('income_source_detail')
+
+    try {
+      const blob = await exportIncomeSourceDetailPdf({
+        month,
+        sourceId: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
+      }).unwrap()
+      downloadBlob(
+        blob,
+        getDetailExportFilename(month, 'income_source_detail', selectedIncomeSourceId)
+      )
+    } catch {
+      setExportErrorDetail('income_source_detail')
+    } finally {
+      setExportingDetail(null)
+    }
+  }
+
+  const handleExpenseDetailExport = async () => {
+    if (selectedExpenseCategoryId === undefined) {
+      return
+    }
+
+    setExportErrorDetail(null)
+    setExportingDetail('expense_category_detail')
+
+    try {
+      const blob = await exportExpenseCategoryDetailPdf({
+        month,
+        categoryId: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
+      }).unwrap()
+      downloadBlob(
+        blob,
+        getDetailExportFilename(month, 'expense_category_detail', selectedExpenseCategoryId)
+      )
+    } catch {
+      setExportErrorDetail('expense_category_detail')
+    } finally {
+      setExportingDetail(null)
+    }
+  }
+
+  const renderSectionHeader = (title: string, sectionType: ExportSectionType) => (
+    <div className="global-summary-section-header">
+      <h4 className="global-summary-section-title">{title}</h4>
+      <Button
+        type="button"
+        variant="secondary"
+        size="small"
+        className="global-summary-export-button"
+        disabled={exportingSection !== null}
+        title={t('globalSummary.actions.exportPdf')}
+        aria-label={`${title} ${t('globalSummary.actions.exportPdf')}`}
+        onClick={() => {
+          void handleSectionExport(sectionType)
+        }}
+      >
+        {exportingSection === sectionType
+          ? t('globalSummary.actions.exportingPdf')
+          : t('globalSummary.actions.exportPdf')}
+      </Button>
+    </div>
+  )
+
   return (
     <div className="report-section global-summary-section">
       <h2>{t('globalSummary.title')}</h2>
       <div className="summary-card global-summary">
         <h3>{t('globalSummary.summaryTitle')}</h3>
         {isLoading && (
-          <div className="summary-loading">
-            {t('loading')}
-          </div>
+          <LoadingScreen compact title={t('loading')} description="" />
         )}
         {hasError && !isLoading && (
           <div className="summary-error">
             {t('errors.generic', { defaultValue: 'Failed to load summary' })}
           </div>
         )}
-        <div className="summary-grid">
-          <div className="summary-item">
-            <span className="summary-label">{t('globalSummary.labels.incomeActual')}:</span>
-            <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
-            <button
-              type="button"
-              className={`summary-kpi-chevron-button${
-                openPanel === 'income' ? ' summary-kpi-chevron-button--open' : ''
-              }`}
-              aria-label={t('globalSummary.actions.viewIncomeBreakdown')}
-              title={t('globalSummary.actions.viewIncomeBreakdown')}
-              onClick={() =>
-                setOpenPanel((current) => (current === 'income' ? null : 'income'))
-              }
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                focusable="false"
+        {!isLoading && !hasError && (
+          <div className="summary-grid">
+            <div className="summary-item">
+              <span className="summary-label">{t('globalSummary.labels.incomeActual')}:</span>
+              <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
+              <button
+                type="button"
+                className={`summary-kpi-chevron-button${
+                  openPanel === 'income' ? ' summary-kpi-chevron-button--open' : ''
+                }`}
+                aria-label={t('globalSummary.actions.viewIncomeBreakdown')}
+                aria-expanded={openPanel === 'income'}
+                title={t('globalSummary.actions.viewIncomeBreakdown')}
+                onClick={() =>
+                  setOpenPanel((current) => (current === 'income' ? null : 'income'))
+                }
               >
-                <path
-                  d="M6 9l6 6 6-6"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
-            <span className="summary-value">
-              {formatKGS(expenseActualTotal)}
-            </span>
-            <button
-              type="button"
-              className={`summary-kpi-chevron-button${
-                openPanel === 'expense' ? ' summary-kpi-chevron-button--open' : ''
-              }`}
-              aria-label={t('globalSummary.actions.viewExpenseBreakdown')}
-              title={t('globalSummary.actions.viewExpenseBreakdown')}
-              onClick={() =>
-                setOpenPanel((current) => (current === 'expense' ? null : 'expense'))
-              }
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                focusable="false"
+                <ChevronIcon />
+              </button>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
+              <span className="summary-value">
+                {formatKGS(expenseActualTotal)}
+              </span>
+              <button
+                type="button"
+                className={`summary-kpi-chevron-button${
+                  openPanel === 'expense' ? ' summary-kpi-chevron-button--open' : ''
+                }`}
+                aria-label={t('globalSummary.actions.viewExpenseBreakdown')}
+                aria-expanded={openPanel === 'expense'}
+                title={t('globalSummary.actions.viewExpenseBreakdown')}
+                onClick={() =>
+                  setOpenPanel((current) => (current === 'expense' ? null : 'expense'))
+                }
               >
-                <path
-                  d="M6 9l6 6 6-6"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">{t('globalSummary.labels.net')}:</span>
-            <span
-              className={`summary-value ${
-                net >= 0 ? 'positive' : 'negative'
-              }`}
-            >
-              {formatKGS(net)}
-            </span>
-            <button
-              type="button"
-              className={`summary-kpi-chevron-button${
-                openPanel === 'net' ? ' summary-kpi-chevron-button--open' : ''
-              }`}
-              aria-label={t('globalSummary.actions.viewNetBreakdown')}
-              title={t('globalSummary.actions.viewNetBreakdown')}
-              onClick={() =>
-                setOpenPanel((current) => (current === 'net' ? null : 'net'))
-              }
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                focusable="false"
+                <ChevronIcon />
+              </button>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">{t('globalSummary.labels.net')}:</span>
+              <span
+                className={`summary-value ${
+                  net >= 0 ? 'positive' : 'negative'
+                }`}
               >
-                <path
-                  d="M6 9l6 6 6-6"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
+                {formatKGS(net)}
+              </span>
+              <button
+                type="button"
+                className={`summary-kpi-chevron-button${
+                  openPanel === 'net' ? ' summary-kpi-chevron-button--open' : ''
+                }`}
+                aria-label={t('globalSummary.actions.viewNetBreakdown')}
+                aria-expanded={openPanel === 'net'}
+                title={t('globalSummary.actions.viewNetBreakdown')}
+                onClick={() =>
+                  setOpenPanel((current) => (current === 'net' ? null : 'net'))
+                }
+              >
+                <ChevronIcon />
+              </button>
+            </div>
           </div>
-        </div>
-        {openPanel === 'income' && incomeBySource.length > 0 && (
+        )}
+        {openPanel === 'income' && !isLoading && !hasError && incomeBySource.length > 0 && (
           <div className="global-summary-breakdown">
+            {renderSectionHeader(t('globalSummary.incomeSourcesSummaryTitle'), 'income_sources')}
+            {exportErrorSection === 'income_sources' && (
+              <div className="summary-error">
+                {t('globalSummary.exportError')}
+              </div>
+            )}
             <Table
               columns={[
                 { key: 'source_name', label: t('income.tables.actual.columns.sourceName') },
@@ -317,9 +429,32 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             />
             {selectedIncomeSourceId !== undefined && (
               <div className="global-summary-expense-details">
-                <h4 className="expense-details-title">
-                  {selectedIncomeSourceName} – {t('globalSummary.details')}
-                </h4>
+                <div className="global-summary-section-header global-summary-section-header--detail">
+                  <h4 className="expense-details-title">
+                    {selectedIncomeSourceName} – {t('globalSummary.details')}
+                  </h4>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    className="global-summary-export-button"
+                    disabled={exportingDetail !== null}
+                    title={t('globalSummary.actions.exportPdf')}
+                    aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
+                    onClick={() => {
+                      void handleIncomeDetailExport()
+                    }}
+                  >
+                    {exportingDetail === 'income_source_detail'
+                      ? t('globalSummary.actions.exportingPdf')
+                      : t('globalSummary.actions.exportPdf')}
+                  </Button>
+                </div>
+                {exportErrorDetail === 'income_source_detail' && (
+                  <div className="summary-error">
+                    {t('globalSummary.exportError')}
+                  </div>
+                )}
 
                 {loadingIncomeDetails && (
                   <div className="summary-loading">
@@ -399,6 +534,12 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
         )}
         {openPanel === 'expense' && expenseByCategory.length > 0 && (
           <div className="global-summary-breakdown">
+            {renderSectionHeader(t('globalSummary.expenseCategoriesSummaryTitle'), 'expense_categories')}
+            {exportErrorSection === 'expense_categories' && (
+              <div className="summary-error">
+                {t('globalSummary.exportError')}
+              </div>
+            )}
             <Table
               columns={[
                 { key: 'category_name', label: t('expense.tables.actual.columns.categoryName') },
@@ -444,9 +585,32 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             />
             {selectedExpenseCategoryId !== undefined && (
               <div className="global-summary-expense-details">
-                <h4 className="expense-details-title">
-                  {selectedExpenseCategoryName} – {t('globalSummary.details')}
-                </h4>
+                <div className="global-summary-section-header global-summary-section-header--detail">
+                  <h4 className="expense-details-title">
+                    {selectedExpenseCategoryName} – {t('globalSummary.details')}
+                  </h4>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    className="global-summary-export-button"
+                    disabled={exportingDetail !== null}
+                    title={t('globalSummary.actions.exportPdf')}
+                    aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
+                    onClick={() => {
+                      void handleExpenseDetailExport()
+                    }}
+                  >
+                    {exportingDetail === 'expense_category_detail'
+                      ? t('globalSummary.actions.exportingPdf')
+                      : t('globalSummary.actions.exportPdf')}
+                  </Button>
+                </div>
+                {exportErrorDetail === 'expense_category_detail' && (
+                  <div className="summary-error">
+                    {t('globalSummary.exportError')}
+                  </div>
+                )}
 
                 {loadingExpenseDetails && (
                   <div className="summary-loading">

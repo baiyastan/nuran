@@ -10,6 +10,7 @@ import { useListProjectsQuery } from '@/shared/api/projectsApi'
 import { useListBudgetLinesQuery } from '@/shared/api/budgetingApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { formatMoneyKGS } from '@/shared/utils/formatMoney'
 import './SubmittedProjectPlansPage.css'
@@ -265,7 +266,7 @@ function SubmittedProjectPlansPage() {
       </div>
 
       {isLoading || isFetching ? (
-        <div className="loading">{t('submittedPlans.loading')}</div>
+        <TableSkeleton columnCount={5} />
       ) : plans.length === 0 ? (
         <div className="empty-state">{t('submittedPlans.emptyState')}</div>
       ) : (

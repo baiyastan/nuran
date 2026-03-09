@@ -8,6 +8,7 @@ import { useListPlansQuery } from '@/shared/api/plansApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CreatePlanItemForm } from '@/features/plan-item-create/CreatePlanItemForm'
 import { PlanItemFilters } from '@/features/plan-item-filters/PlanItemFilters'
 import { ApprovePlanItemButton } from '@/features/plan-item-approve/ApprovePlanItemButton'
@@ -125,7 +126,7 @@ export function PlanItemsPage() {
       />
       
       {isLoading ? (
-        <div>Loading...</div>
+        <TableSkeleton columnCount={11} />
       ) : error ? (
         <div>Error loading plan items</div>
       ) : (

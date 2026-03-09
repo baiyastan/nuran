@@ -3,20 +3,356 @@ Reports API views.
 """
 import re
 from decimal import Decimal
+from typing import Any
 
 from django.db.models import Sum, Q, Count
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import status, views
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 
 from apps.budgeting.models import BudgetLine, BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
 from apps.expenses.services import aggregate_by_category, sum_expenses
-from apps.finance.models import IncomeEntry, IncomePlan
 from apps.finance.constants import MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
+from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource
+from apps.reports.services.pdf import build_report_detail_pdf, build_report_section_pdf
+
 from .serializers import BudgetPlanReportSerializer
-from django.shortcuts import get_object_or_404
+
+
+def _to_decimal_str(value: Decimal) -> str:
+    return str((value or Decimal('0.00')).quantize(Decimal('0.00')))
+
+
+def _ensure_owner_dashboard_access(request) -> None:
+    role = getattr(request.user, "role", None)
+    if not (request.user.is_superuser or role in ("admin", "director")):
+        raise PermissionDenied(ADMIN_ONLY_MSG)
+
+
+def _get_validated_month_period(month_param: str | None) -> tuple[tuple[str, MonthPeriod] | None, Response | None]:
+    if not month_param:
+        return None, Response(
+            {'month': 'month parameter is required (format: YYYY-MM)'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    month = month_param.strip()
+    if not re.match(r'^\d{4}-\d{2}$', month):
+        return None, Response(
+            {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        month_period = MonthPeriod.objects.get(month=month)
+    except MonthPeriod.DoesNotExist:
+        return None, Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
+
+    return (month, month_period), None
+
+
+def _build_dashboard_expense_categories_data(month: str, month_period: MonthPeriod) -> dict[str, Any]:
+    plan_qs = BudgetLine.objects.filter(
+        plan__period=month_period,
+    ).values('category_id', 'category__name').annotate(
+        plan=Sum('amount_planned')
+    )
+
+    plan_by_category = {}
+    for row in plan_qs:
+        cid = row['category_id']
+        plan_by_category[cid] = {
+            'category_id': cid,
+            'category_name': row['category__name'] or '',
+            'plan': row['plan'] or Decimal('0.00'),
+        }
+
+    fact_qs = ExpenseActualExpense.objects.filter(
+        month_period=month_period,
+    ).values('category_id', 'category__name').annotate(
+        fact=Sum('amount'),
+        count=Count('id'),
+    )
+
+    fact_by_category = {}
+    for row in fact_qs:
+        cid = row['category_id']
+        fact_by_category[cid] = {
+            'category_id': cid,
+            'category_name': row['category__name'] or '',
+            'fact': row['fact'] or Decimal('0.00'),
+            'count': row['count'] or 0,
+        }
+
+    all_category_ids = set(plan_by_category.keys()) | set(fact_by_category.keys())
+    rows = []
+    total_plan = Decimal('0.00')
+    total_fact = Decimal('0.00')
+
+    for cid in all_category_ids:
+        plan_data = plan_by_category.get(cid)
+        fact_data = fact_by_category.get(cid)
+
+        plan = plan_data['plan'] if plan_data else Decimal('0.00')
+        fact = fact_data['fact'] if fact_data else Decimal('0.00')
+        count = fact_data['count'] if fact_data else 0
+
+        category_name = ''
+        if plan_data and plan_data.get('category_name'):
+            category_name = plan_data['category_name']
+        elif fact_data and fact_data.get('category_name'):
+            category_name = fact_data['category_name']
+
+        diff = fact - plan
+        total_plan += plan
+        total_fact += fact
+        rows.append({
+            'category_id': cid,
+            'category_name': category_name,
+            'plan': plan,
+            'fact': fact,
+            'diff': diff,
+            'count': count,
+        })
+
+    for row in rows:
+        fact = row['fact']
+        if total_fact > 0:
+            share_percent = (fact / total_fact) * Decimal('100')
+            row['sharePercent'] = float(share_percent)
+        else:
+            row['sharePercent'] = None
+
+    serialized_rows = [
+        {
+            'category_id': row['category_id'],
+            'category_name': row['category_name'],
+            'plan': _to_decimal_str(row['plan']),
+            'fact': _to_decimal_str(row['fact']),
+            'diff': _to_decimal_str(row['diff']),
+            'count': row['count'],
+            'sharePercent': row['sharePercent'],
+        }
+        for row in rows
+    ]
+
+    return {
+        'month': month,
+        'month_status': month_period.status,
+        'totals': {
+            'plan': _to_decimal_str(total_plan),
+            'fact': _to_decimal_str(total_fact),
+        },
+        'rows': serialized_rows,
+    }
+
+
+def _build_dashboard_income_sources_data(month: str, month_period: MonthPeriod) -> dict[str, Any]:
+    plan_qs = IncomePlan.objects.filter(
+        period__month_period=month_period,
+    ).values('source_id', 'source__name').annotate(
+        plan=Sum('amount')
+    )
+
+    plan_by_source: dict[object, dict[str, object]] = {}
+    for row in plan_qs:
+        sid = row['source_id']
+        plan_by_source[sid] = {
+            'source_id': sid,
+            'source_name': row['source__name'] or '',
+            'plan': row['plan'] or Decimal('0.00'),
+        }
+
+    fact_qs = IncomeEntry.objects.filter(
+        finance_period__month_period=month_period,
+    ).values('source_id', 'source__name').annotate(
+        fact=Sum('amount'),
+        count=Count('id'),
+    )
+
+    fact_by_source: dict[object, dict[str, object]] = {}
+    for row in fact_qs:
+        sid = row['source_id']
+        fact_by_source[sid] = {
+            'source_id': sid,
+            'source_name': row['source__name'] or '',
+            'fact': row['fact'] or Decimal('0.00'),
+            'count': row['count'] or 0,
+        }
+
+    all_source_ids = set(plan_by_source.keys()) | set(fact_by_source.keys())
+    rows: list[dict[str, object]] = []
+    total_plan = Decimal('0.00')
+    total_fact = Decimal('0.00')
+
+    for sid in all_source_ids:
+        plan_data = plan_by_source.get(sid)
+        fact_data = fact_by_source.get(sid)
+
+        plan = plan_data['plan'] if plan_data else Decimal('0.00')
+        fact = fact_data['fact'] if fact_data else Decimal('0.00')
+        count = fact_data['count'] if fact_data else 0
+
+        source_name = ''
+        if plan_data and plan_data.get('source_name'):
+            source_name = plan_data['source_name']
+        elif fact_data and fact_data.get('source_name'):
+            source_name = fact_data['source_name']
+
+        diff = fact - plan
+        total_plan += plan
+        total_fact += fact
+        rows.append(
+            {
+                'source_id': sid,
+                'source_name': source_name,
+                'plan': plan,
+                'fact': fact,
+                'diff': diff,
+                'count': count,
+            }
+        )
+
+    for row in rows:
+        fact_value = row['fact']
+        if total_fact > 0:
+            share_percent = (fact_value / total_fact) * Decimal('100')
+            row['sharePercent'] = float(share_percent)
+        else:
+            row['sharePercent'] = None
+
+    serialized_rows = [
+        {
+            'source_id': row['source_id'],
+            'source_name': row['source_name'],
+            'plan': _to_decimal_str(row['plan']),
+            'fact': _to_decimal_str(row['fact']),
+            'diff': _to_decimal_str(row['diff']),
+            'count': row['count'],
+            'sharePercent': row['sharePercent'],
+        }
+        for row in rows
+    ]
+
+    return {
+        'month': month,
+        'month_status': month_period.status,
+        'totals': {
+            'plan': _to_decimal_str(total_plan),
+            'fact': _to_decimal_str(total_fact),
+        },
+        'rows': serialized_rows,
+    }
+
+
+def _get_nullable_target_id(
+    request,
+    param_name: str,
+) -> tuple[tuple[int | None, bool] | None, Response | None]:
+    raw_value = request.query_params.get(param_name)
+    if raw_value is None:
+        return None, Response(
+            {param_name: f'{param_name} query parameter is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    raw_value = raw_value.strip()
+    if raw_value == 'null':
+        return (None, True), None
+
+    try:
+        return (int(raw_value), False), None
+    except (TypeError, ValueError):
+        return None, Response(
+            {param_name: f'{param_name} must be an integer or "null"'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+def _build_income_source_detail_pdf_data(
+    month: str,
+    month_period: MonthPeriod,
+    source_id: int | None,
+    is_uncategorized: bool,
+) -> dict[str, Any]:
+    queryset = (
+        IncomeEntry.objects.select_related('source')
+        .filter(finance_period__month_period=month_period)
+        .order_by('-received_at', '-created_at')
+    )
+
+    if is_uncategorized:
+        queryset = queryset.filter(source__isnull=True)
+        item_name = 'Без источника'
+    else:
+        source = get_object_or_404(IncomeSource, pk=source_id)
+        queryset = queryset.filter(source_id=source.id)
+        item_name = source.name
+
+    total_count = queryset.count()
+    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    return {
+        'month': month,
+        'month_status': month_period.status,
+        'item_name': item_name,
+        'total_count': total_count,
+        'total_amount': _to_decimal_str(total_amount),
+        'rows': [
+            {
+                'date': entry.received_at.strftime('%Y-%m-%d'),
+                'amount': _to_decimal_str(entry.amount),
+                'name': entry.source.name if entry.source else '',
+                'comment': entry.comment,
+            }
+            for entry in queryset
+        ],
+    }
+
+
+def _build_expense_category_detail_pdf_data(
+    month: str,
+    month_period: MonthPeriod,
+    category_id: int | None,
+    is_uncategorized: bool,
+) -> dict[str, Any]:
+    queryset = (
+        ExpenseActualExpense.objects.select_related('category')
+        .filter(month_period=month_period)
+        .order_by('-spent_at', '-created_at')
+    )
+
+    if is_uncategorized:
+        queryset = queryset.filter(category__isnull=True)
+        item_name = 'Без категории'
+    else:
+        category = get_object_or_404(ExpenseCategory, pk=category_id)
+        queryset = queryset.filter(category_id=category.id)
+        item_name = category.name
+
+    total_count = queryset.count()
+    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    return {
+        'month': month,
+        'month_status': month_period.status,
+        'item_name': item_name,
+        'total_count': total_count,
+        'total_amount': _to_decimal_str(total_amount),
+        'rows': [
+            {
+                'date': expense.spent_at.strftime('%Y-%m-%d'),
+                'amount': _to_decimal_str(expense.amount),
+                'name': expense.category.name if expense.category else '',
+                'comment': expense.comment,
+            }
+            for expense in queryset
+        ],
+    }
 
 
 class BudgetPlanReportView(views.APIView):
@@ -281,132 +617,21 @@ class DashboardExpenseCategoriesView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        role = getattr(request.user, "role", None)
-        if not (request.user.is_superuser or role in ("admin", "director")):
-            raise PermissionDenied(ADMIN_ONLY_MSG)
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
 
-        month = request.query_params.get('month')
-        if not month:
-            return Response(
-                {'month': 'month parameter is required (format: YYYY-MM)'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        month = month.strip()
-        if not re.match(r'^\d{4}-\d{2}$', month):
-            return Response(
-                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Ensure MonthPeriod exists (do not auto-create)
-        try:
-            month_period = MonthPeriod.objects.get(month=month)
-        except MonthPeriod.DoesNotExist:
-            return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Plan: sum BudgetLine.amount_planned across ALL BudgetPlan for this MonthPeriod (ignore scope)
-        plan_qs = BudgetLine.objects.filter(
-            plan__period=month_period,
-        ).values('category_id', 'category__name').annotate(
-            plan=Sum('amount_planned')
-        )
-
-        plan_by_category = {}
-        for row in plan_qs:
-            cid = row['category_id']
-            plan_by_category[cid] = {
-                'category_id': cid,
-                'category_name': row['category__name'] or '',
-                'plan': row['plan'] or Decimal('0.00'),
-            }
-
-        # Fact: sum ActualExpense.amount and count(*) across ALL scopes for this MonthPeriod
-        fact_qs = ExpenseActualExpense.objects.filter(
-            month_period=month_period,
-        ).values('category_id', 'category__name').annotate(
-            fact=Sum('amount'),
-            count=Count('id'),
-        )
-
-        fact_by_category = {}
-        for row in fact_qs:
-            cid = row['category_id']
-            fact_by_category[cid] = {
-                'category_id': cid,
-                'category_name': row['category__name'] or '',
-                'fact': row['fact'] or Decimal('0.00'),
-                'count': row['count'] or 0,
-            }
-
-        all_category_ids = set(plan_by_category.keys()) | set(fact_by_category.keys())
-
-        rows = []
-        total_plan = Decimal('0.00')
-        total_fact = Decimal('0.00')
-
-        for cid in all_category_ids:
-            plan_data = plan_by_category.get(cid)
-            fact_data = fact_by_category.get(cid)
-
-            plan = plan_data['plan'] if plan_data else Decimal('0.00')
-            fact = fact_data['fact'] if fact_data else Decimal('0.00')
-            count = fact_data['count'] if fact_data else 0
-
-            # Prefer names from plan, then fact
-            category_name = ''
-            if plan_data and plan_data.get('category_name'):
-                category_name = plan_data['category_name']
-            elif fact_data and fact_data.get('category_name'):
-                category_name = fact_data['category_name']
-
-            diff = fact - plan
-            total_plan += plan
-            total_fact += fact
-            rows.append({
-                'category_id': cid,
-                'category_name': category_name,
-                'plan': plan,
-                'fact': fact,
-                'diff': diff,
-                'count': count,
-            })
-
-        # Compute share-of-total percentages
-        for row in rows:
-            fact = row['fact']
-            if total_fact > 0:
-                share_percent = (fact / total_fact) * Decimal('100')
-                row['sharePercent'] = float(share_percent)
-            else:
-                row['sharePercent'] = None
-
-        def to_decimal_str(value: Decimal) -> str:
-            return str((value or Decimal('0.00')).quantize(Decimal('0.00')))
-
-        serialized_rows = []
-        for row in rows:
-            serialized_rows.append(
-                {
-                    'category_id': row['category_id'],
-                    'category_name': row['category_name'],
-                    'plan': to_decimal_str(row['plan']),
-                    'fact': to_decimal_str(row['fact']),
-                    'diff': to_decimal_str(row['diff']),
-                    'count': row['count'],
-                    'sharePercent': row['sharePercent'],
-                }
-            )
-
-        response_data = {
-            'month': month,
-            'totals': {
-                'plan': to_decimal_str(total_plan),
-                'fact': to_decimal_str(total_fact),
+        month, month_period = validated
+        response_data = _build_dashboard_expense_categories_data(month, month_period)
+        return Response(
+            {
+                'month': response_data['month'],
+                'totals': response_data['totals'],
+                'rows': response_data['rows'],
             },
-            'rows': serialized_rows,
-        }
-
-        return Response(response_data, status=status.HTTP_200_OK)
+            status=status.HTTP_200_OK,
+        )
 
 
 class DashboardIncomeSourcesView(views.APIView):
@@ -421,134 +646,129 @@ class DashboardIncomeSourcesView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        role = getattr(request.user, "role", None)
-        if not (request.user.is_superuser or role in ("admin", "director")):
-            raise PermissionDenied(ADMIN_ONLY_MSG)
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
 
-        month = request.query_params.get('month')
-        if not month:
-            return Response(
-                {'month': 'month parameter is required (format: YYYY-MM)'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        month = month.strip()
-        if not re.match(r'^\d{4}-\d{2}$', month):
-            return Response(
-                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Ensure MonthPeriod exists (do not auto-create)
-        try:
-            month_period = MonthPeriod.objects.get(month=month)
-        except MonthPeriod.DoesNotExist:
-            return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Plan: sum IncomePlan.amount across all FinancePeriod for this MonthPeriod (ignore fund_kind/project)
-        plan_qs = IncomePlan.objects.filter(
-            period__month_period=month_period,
-        ).values('source_id', 'source__name').annotate(
-            plan=Sum('amount')
-        )
-
-        plan_by_source: dict[object, dict[str, object]] = {}
-        for row in plan_qs:
-            sid = row['source_id']
-            plan_by_source[sid] = {
-                'source_id': sid,
-                'source_name': row['source__name'] or '',
-                'plan': row['plan'] or Decimal('0.00'),
-            }
-
-        # Fact: sum IncomeEntry.amount and count(*) across all FinancePeriod for this MonthPeriod
-        fact_qs = IncomeEntry.objects.filter(
-            finance_period__month_period=month_period,
-        ).values('source_id', 'source__name').annotate(
-            fact=Sum('amount'),
-            count=Count('id'),
-        )
-
-        fact_by_source: dict[object, dict[str, object]] = {}
-        for row in fact_qs:
-            sid = row['source_id']
-            fact_by_source[sid] = {
-                'source_id': sid,
-                'source_name': row['source__name'] or '',
-                'fact': row['fact'] or Decimal('0.00'),
-                'count': row['count'] or 0,
-            }
-
-        all_source_ids = set(plan_by_source.keys()) | set(fact_by_source.keys())
-
-        rows: list[dict[str, object]] = []
-        total_plan = Decimal('0.00')
-        total_fact = Decimal('0.00')
-
-        for sid in all_source_ids:
-            plan_data = plan_by_source.get(sid)
-            fact_data = fact_by_source.get(sid)
-
-            plan = plan_data['plan'] if plan_data else Decimal('0.00')
-            fact = fact_data['fact'] if fact_data else Decimal('0.00')
-            count = fact_data['count'] if fact_data else 0
-
-            # Prefer source name from plan, then fact
-            source_name = ''
-            if plan_data and plan_data.get('source_name'):
-                source_name = plan_data['source_name']
-            elif fact_data and fact_data.get('source_name'):
-                source_name = fact_data['source_name']
-
-            diff = fact - plan
-            total_plan += plan
-            total_fact += fact
-
-            rows.append(
-                {
-                    'source_id': sid,
-                    'source_name': source_name,
-                    'plan': plan,
-                    'fact': fact,
-                    'diff': diff,
-                    'count': count,
-                }
-            )
-
-        # Compute share-of-total percentages
-        for row in rows:
-            fact_value = row['fact']
-            if total_fact > 0:
-                share_percent = (fact_value / total_fact) * Decimal('100')
-                row['sharePercent'] = float(share_percent)
-            else:
-                row['sharePercent'] = None
-
-        def to_decimal_str(value: Decimal) -> str:
-            return str((value or Decimal('0.00')).quantize(Decimal('0.00')))
-
-        serialized_rows = [
+        month, month_period = validated
+        response_data = _build_dashboard_income_sources_data(month, month_period)
+        return Response(
             {
-                'source_id': row['source_id'],
-                'source_name': row['source_name'],
-                'plan': to_decimal_str(row['plan']),
-                'fact': to_decimal_str(row['fact']),
-                'diff': to_decimal_str(row['diff']),
-                'count': row['count'],
-                'sharePercent': row['sharePercent'],
-            }
-            for row in rows
-        ]
-
-        response_data = {
-            'month': month,
-            'totals': {
-                'plan': to_decimal_str(total_plan),
-                'fact': to_decimal_str(total_fact),
+                'month': response_data['month'],
+                'totals': response_data['totals'],
+                'rows': response_data['rows'],
             },
-            'rows': serialized_rows,
-        }
+            status=status.HTTP_200_OK,
+        )
 
-        return Response(response_data, status=status.HTTP_200_OK)
+
+class ExportSectionPdfView(views.APIView):
+    """
+    Export a dashboard section as PDF.
+
+    GET /api/v1/reports/export-section-pdf/?month=YYYY-MM&section_type=income_sources|expense_categories
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        section_type = request.query_params.get('section_type')
+        if section_type not in ('income_sources', 'expense_categories'):
+            return Response(
+                {'section_type': 'section_type must be one of: income_sources, expense_categories'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        month, month_period = validated
+        if section_type == 'income_sources':
+            section_data = _build_dashboard_income_sources_data(month, month_period)
+        else:
+            section_data = _build_dashboard_expense_categories_data(month, month_period)
+
+        pdf_content = build_report_section_pdf(section_type, section_data)
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        response['Content-Disposition'] = (
+            f'attachment; filename="{month}_{section_type}_report.pdf"'
+        )
+        return response
+
+
+class ExportIncomeSourceDetailPdfView(views.APIView):
+    """
+    Export an income-source drill-down section as PDF.
+
+    GET /api/v1/reports/export-income-source-detail-pdf/?month=YYYY-MM&source_id=ID|null
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        parsed_target, target_error = _get_nullable_target_id(request, 'source_id')
+        if target_error:
+            return target_error
+
+        month, month_period = validated
+        source_id, is_uncategorized = parsed_target
+        detail_data = _build_income_source_detail_pdf_data(
+            month,
+            month_period,
+            source_id,
+            is_uncategorized,
+        )
+        pdf_content = build_report_detail_pdf('income_source', detail_data)
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        filename_target = 'uncategorized' if is_uncategorized else str(source_id)
+        response['Content-Disposition'] = (
+            f'attachment; filename="{month}_income_source_{filename_target}_detail_report.pdf"'
+        )
+        return response
+
+
+class ExportExpenseCategoryDetailPdfView(views.APIView):
+    """
+    Export an expense-category drill-down section as PDF.
+
+    GET /api/v1/reports/export-expense-category-detail-pdf/?month=YYYY-MM&category_id=ID|null
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        parsed_target, target_error = _get_nullable_target_id(request, 'category_id')
+        if target_error:
+            return target_error
+
+        month, month_period = validated
+        category_id, is_uncategorized = parsed_target
+        detail_data = _build_expense_category_detail_pdf_data(
+            month,
+            month_period,
+            category_id,
+            is_uncategorized,
+        )
+        pdf_content = build_report_detail_pdf('expense_category', detail_data)
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        filename_target = 'uncategorized' if is_uncategorized else str(category_id)
+        response['Content-Disposition'] = (
+            f'attachment; filename="{month}_expense_category_{filename_target}_detail_report.pdf"'
+        )
+        return response
 
 
 class DashboardKpiView(views.APIView):

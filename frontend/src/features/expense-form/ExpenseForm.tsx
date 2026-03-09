@@ -153,11 +153,11 @@ export function ExpenseForm({ planPeriodId, fundKind: _fundKind, expense, onSucc
       </div>
 
       <div className="form-field">
-        <label className="form-label">{t('expensesPage.form.fields.category') || 'Category'}</label>
+        <label className="form-label">{t('expensesPage.form.fields.category')}</label>
         <div className="form-readonly-text">
           {selectedPlanItem?.category_name 
-            ? `${t('expensesPage.form.fields.category') || 'Category'}: ${selectedPlanItem.category_name}`
-            : t('expensesPage.form.fields.categoryWillBeAssigned') || 'Category will be assigned automatically'}
+            ? `${t('expensesPage.form.fields.category')}: ${selectedPlanItem.category_name}`
+            : t('expensesPage.form.fields.categoryWillBeAssigned')}
         </div>
       </div>
 

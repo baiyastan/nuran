@@ -57,7 +57,7 @@ describe('RequireAuth', () => {
       { initialEntries: ['/'] }
     )
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 
@@ -78,7 +78,7 @@ describe('RequireAuth', () => {
       { initialEntries: ['/'] }
     )
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 

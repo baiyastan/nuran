@@ -12,7 +12,8 @@ import { useMonthPeriodId } from '@/shared/hooks/useMonthPeriodId'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { getErrorMessage, formatAmountInputDisplay, parseAmountInputInput } from '@/shared/lib/utils'
 import { toast } from '@/shared/ui/Toast/toast'
 import { formatMoneyKGS } from '@/shared/utils/formatMoney'
 import { formatMonthLabel } from '@/shared/lib/formatMonthLabel'
@@ -43,6 +44,34 @@ function scopeToApi(scope: ScopeUI): 'office' | 'project' | 'charity' {
 
 const DEFAULT_MONTH = () => new Date().toISOString().slice(0, 7)
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
+function decodeNote(note: string): { paymentDate: string; comment: string } {
+  if (!note || !note.trim()) return { paymentDate: '', comment: '' }
+  const lines = note.trim().split('\n')
+  const first = lines[0].trim()
+  if (DATE_ONLY_REGEX.test(first)) {
+    return {
+      paymentDate: first,
+      comment: lines.slice(1).join('\n').trim(),
+    }
+  }
+  return { paymentDate: '', comment: note.trim() }
+}
+
+function encodeNote(paymentDate: string, comment: string): string {
+  const datePart = paymentDate.trim()
+  const commentPart = comment.trim()
+  if (datePart && commentPart) return datePart + '\n' + commentPart
+  if (datePart) return datePart
+  return commentPart
+}
+
+const CATEGORY_BADGE_COLORS = ['#e8f4ea', '#e8f0fe', '#fef7e0', '#fce8e6', '#f3e8f5']
+function getCategoryBadgeColor(categoryId: number): string {
+  return CATEGORY_BADGE_COLORS[Math.abs(categoryId) % CATEGORY_BADGE_COLORS.length]
+}
+
 export default function PlanSetupPage() {
   const { t, i18n } = useTranslation('planSetup')
   const [searchParams, setSearchParams] = useSearchParams()
@@ -58,7 +87,7 @@ export default function PlanSetupPage() {
     scopeParamRaw && allowedScopes.includes(scopeParamRaw) ? scopeParamRaw : defaultScope
 
   const [plannedByCategory, setPlannedByCategory] = useState<
-    Record<number, { amount: string; note: string }>
+    Record<number, { amount: string; comment: string }>
   >({})
 
   const lang = i18n.resolvedLanguage || i18n.language || 'ru'
@@ -114,7 +143,8 @@ export default function PlanSetupPage() {
   })
 
   const plans = plansData?.results ?? []
-  const plan = plans.find((p) => p.scope === scope) ?? null
+  // Normalize API scope to UI scope for matching (backend returns OFFICE/PROJECT/CHARITY)
+  const plan = plans.find((p) => (p.scope && String(p.scope).toUpperCase()) === scope) ?? null
 
   const [createBudgetPlan, { isLoading: isCreatingPlan }] = useCreateBudgetPlanMutation()
 
@@ -152,11 +182,12 @@ export default function PlanSetupPage() {
     }
     const lines = linesData?.results ?? []
     if (lines.length > 0) {
-      const next: Record<number, { amount: string; note: string }> = {}
+      const next: Record<number, { amount: string; comment: string }> = {}
       lines.forEach((line) => {
+        const { comment } = decodeNote(line.note || '')
         next[line.category] = {
           amount: line.amount_planned || '',
-          note: line.note || '',
+          comment,
         }
       })
       setPlannedByCategory(next)
@@ -189,23 +220,27 @@ export default function PlanSetupPage() {
   const setAmount = (categoryId: number, value: string) => {
     setPlannedByCategory((prev) => ({
       ...prev,
-      [categoryId]: { ...(prev[categoryId] ?? { amount: '', note: '' }), amount: value },
+      [categoryId]: { ...(prev[categoryId] ?? { amount: '', comment: '' }), amount: value },
     }))
   }
-  const setNote = (categoryId: number, value: string) => {
+  const setComment = (categoryId: number, value: string) => {
     setPlannedByCategory((prev) => ({
       ...prev,
-      [categoryId]: { ...(prev[categoryId] ?? { amount: '', note: '' }), note: value },
+      [categoryId]: { ...(prev[categoryId] ?? { amount: '', comment: '' }), comment: value },
     }))
   }
 
   const handleSave = async () => {
     if (!plan) return
-    const items = leafCategories.map((cat) => ({
-      category: cat.id,
-      amount_planned: plannedByCategory[cat.id]?.amount?.trim() || '0',
-      note: plannedByCategory[cat.id]?.note?.trim() ?? '',
-    }))
+    const items = leafCategories.map((cat) => {
+      const cell = plannedByCategory[cat.id]
+      const note = encodeNote('', cell?.comment ?? '')
+      return {
+        category: cat.id,
+        amount_planned: cell?.amount?.trim() || '0',
+        note,
+      }
+    })
     try {
       await bulkUpsertBudgetLines({ plan: plan.id, items }).unwrap()
       refetchLines()
@@ -222,7 +257,7 @@ export default function PlanSetupPage() {
   }, 0)
 
   if (isLoadingPeriodId) {
-    return <div className="plan-setup-page loading">{t('loading')}</div>
+    return <LoadingScreen title={t('loading')} description="" />
   }
 
   if (month && !monthPeriodId && !isLoadingPeriodId) {
@@ -265,6 +300,10 @@ export default function PlanSetupPage() {
             {t('readOnlyLocked', { defaultValue: 'Month is locked — planning is read-only.' })}
           </p>
         )}
+        <div className="plan-setup-no-plan-message">
+          <p>{t('emptyStateNoPlanLine1')}</p>
+          <p>{t('emptyStateNoPlanLine2')}</p>
+        </div>
         <div className="plan-setup-actions">
           <Button onClick={handleCreatePlan} disabled={isCreatingPlan || isLocked}>
             {isCreatingPlan ? t('actions.creating') : t('actions.createPlan')}
@@ -275,38 +314,51 @@ export default function PlanSetupPage() {
   }
 
   if (!plan) {
-    return <div className="plan-setup-page loading">{t('loadingPlan')}</div>
+    return <LoadingScreen title={t('loadingPlan')} description="" />
   }
 
   const columns = [
     { key: 'category_name', label: t('table.category') },
     { key: 'amount', label: t('table.amountPlanned') },
-    { key: 'note', label: t('table.note') },
+    { key: 'comment', label: t('table.comment') },
   ]
-  const tableData = leafCategories.map((cat) => ({
-    category_name: cat.name,
-    amount: (
-      <input
-        type="number"
-        min={0}
-        step="0.01"
-        value={plannedByCategory[cat.id]?.amount ?? ''}
-        onChange={(e) => setAmount(cat.id, e.target.value)}
-        className="plan-setup-input"
-        disabled={isLocked}
-      />
-    ),
-    note: (
-      <input
-        type="text"
-        value={plannedByCategory[cat.id]?.note ?? ''}
-        onChange={(e) => setNote(cat.id, e.target.value)}
-        className="plan-setup-input"
-        placeholder={t('table.note')}
-        disabled={isLocked}
-      />
-    ),
-  }))
+  const tableData = leafCategories.map((cat) => {
+    const cell = plannedByCategory[cat.id]
+    const rawAmount = cell?.amount ?? ''
+    const backgroundColor = getCategoryBadgeColor(cat.id)
+    return {
+      category_name: (
+        <span className="plan-setup-category-badge" style={{ backgroundColor }}>
+          {cat.name}
+        </span>
+      ),
+      amount: (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={formatAmountInputDisplay(rawAmount)}
+          onChange={(e) => setAmount(cat.id, parseAmountInputInput(e.target.value))}
+          onBlur={(e) => {
+            const raw = parseAmountInputInput(e.target.value)
+            if (raw !== rawAmount) setAmount(cat.id, raw)
+          }}
+          className="plan-setup-input plan-setup-input-amount"
+          placeholder="0"
+          disabled={isLocked}
+        />
+      ),
+      comment: (
+        <input
+          type="text"
+          value={cell?.comment ?? ''}
+          onChange={(e) => setComment(cat.id, e.target.value)}
+          className="plan-setup-input plan-setup-input-comment"
+          placeholder={t('table.comment')}
+          disabled={isLocked}
+        />
+      ),
+    }
+  })
 
   return (
     <div className="plan-setup-page">
@@ -345,8 +397,12 @@ export default function PlanSetupPage() {
         <p className="plan-setup-empty">{t('emptyCategories')}</p>
       )}
       <div className="plan-setup-actions">
-        <Button onClick={handleSave} disabled={isSaving || !plan || isLocked}>
-          {isSaving ? t('actions.saving') : t('actions.save')}
+        <Button
+          className="plan-setup-save-btn"
+          onClick={handleSave}
+          disabled={isSaving || !plan || isLocked}
+        >
+          {isSaving ? t('actions.saving') : t('actions.savePlan')}
         </Button>
       </div>
     </div>

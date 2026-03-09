@@ -1,16 +1,7 @@
-import { useTranslation } from 'react-i18next'
-import './Loader.css'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 function Loader() {
-  const { t } = useTranslation()
-  
-  return (
-    <div className="loader-container">
-      <div className="loader-spinner"></div>
-      <p className="loader-text">{t('common.loading')}</p>
-    </div>
-  )
+  return <LoadingScreen />
 }
 
 export default Loader
-

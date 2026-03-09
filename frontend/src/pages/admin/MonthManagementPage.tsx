@@ -10,6 +10,7 @@ import {
 } from '@/shared/api/monthPeriodsApi'
 import { useToastContext } from '@/shared/ui/Toast/ToastProvider'
 import { getErrorMessage } from '@/shared/lib/utils'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { Button } from '@/shared/ui/Button/Button'
 import './MonthManagementPage.css'
 
@@ -122,7 +123,7 @@ function MonthManagementPage() {
 
         <div className="month-management-content">
           {isLoading ? (
-            <div className="loading">{tCommon('loading')}</div>
+            <LoadingScreen compact />
           ) : error ? (
             <div className="error">
               {t('loadError')}

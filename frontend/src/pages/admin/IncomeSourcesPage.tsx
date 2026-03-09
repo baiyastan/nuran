@@ -7,6 +7,7 @@ import {
 } from '@/shared/api/incomeSourcesApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CreateIncomeSourceModal } from '@/features/income-source-create/CreateIncomeSourceModal'
 import { EditIncomeSourceModal } from '@/features/income-source-edit/EditIncomeSourceModal'
 import './IncomeSourcesPage.css'
@@ -83,7 +84,7 @@ function IncomeSourcesPage() {
       </div>
 
       {isLoading ? (
-        <div className="loading">{t('incomeSources.loading')}</div>
+        <TableSkeleton columnCount={3} />
       ) : error ? (
         <div className="error">{t('incomeSources.error')}</div>
       ) : !data?.results.length ? (

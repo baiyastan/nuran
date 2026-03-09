@@ -1,0 +1,184 @@
+.finance-page {
+  padding: 1.5rem;
+}
+
+.finance-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.finance-page-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.finance-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.finance-page-status {
+  margin-left: 0.25rem;
+}
+
+/* Month Selector */
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.month-selector__label {
+  font-weight: 500;
+  color: #333;
+}
+
+.month-selector__input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.month-selector__input:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* Status Badge */
+.finance-page-badge {
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  display: inline-block;
+}
+
+.finance-page-badge--open {
+  background-color: #198754;
+}
+
+.finance-page-badge--locked {
+  background-color: #dc3545;
+}
+
+.finance-page-badge--closed {
+  background-color: #6c757d;
+}
+
+/* Period Locked Message */
+.period-locked-message {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.875rem;
+}
+
+/* Income Plans Section */
+.income-plans-section {
+  margin-top: 1.5rem;
+}
+
+.income-plans-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.income-plans-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.income-plans-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.income-plans-disabled {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.875rem;
+}
+
+/* Table Section */
+.details-table {
+  margin-top: 1.5rem;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.table-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.table-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* State Styles */
+.finance-page-error {
+  padding: 20px;
+  text-align: center;
+  color: #dc3545;
+}
+
+.finance-page-empty {
+  padding: 20px;
+  text-align: center;
+  color: #6c757d;
+}
+
+.finance-page-entries-empty {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 2rem;
+}
+
+.finance-page-entries-empty p {
+  margin: 0 0 0.75rem;
+}
+
+.finance-periods-empty-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.finance-periods-hint {
+  margin-top: 10px;
+  text-align: center;
+  color: #6c757d;
+  font-size: 14px;
+}

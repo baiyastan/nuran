@@ -118,6 +118,7 @@ class TestDashboardExpenseCategoriesAPI:
     def test_sums_and_diff_by_category_across_all_scopes(
         self,
         api_client_admin,
+        admin_user,
         month_period_open,
     ):
         # Categories
@@ -162,6 +163,7 @@ class TestDashboardExpenseCategoriesAPI:
             amount=Decimal("80.00"),
             spent_at="2024-02-05",
             comment="Office expense 1",
+            created_by=admin_user,
         )
         ExpenseActualExpense.objects.create(
             month_period=month_period_open,
@@ -170,6 +172,7 @@ class TestDashboardExpenseCategoriesAPI:
             amount=Decimal("500.00"),
             spent_at="2024-02-06",
             comment="Project expense 1",
+            created_by=admin_user,
         )
 
         # Uncategorized actual expense (no plan)
@@ -180,6 +183,7 @@ class TestDashboardExpenseCategoriesAPI:
             amount=Decimal("50.00"),
             spent_at="2024-02-07",
             comment="Uncategorized expense",
+            created_by=admin_user,
         )
 
         response = api_client_admin.get(
@@ -238,4 +242,115 @@ class TestDashboardExpenseCategoriesAPI:
         assert data["rows"] == []
         assert data["totals"]["plan"] == "0.00"
         assert data["totals"]["fact"] == "0.00"
+
+    def test_export_expense_categories_pdf_returns_attachment(
+        self,
+        api_client_admin,
+        admin_user,
+        month_period_open,
+    ):
+        category = ExpenseCategory.objects.create(
+            name="Office export category",
+            scope="office",
+            kind="EXPENSE",
+        )
+        plan = BudgetPlan.objects.create(
+            period=month_period_open,
+            scope="OFFICE",
+        )
+        BudgetLine.objects.create(
+            plan=plan,
+            category=category,
+            amount_planned=Decimal("310.00"),
+        )
+        ExpenseActualExpense.objects.create(
+            month_period=month_period_open,
+            scope="OFFICE",
+            category=category,
+            amount=Decimal("280.00"),
+            spent_at="2024-02-14",
+            comment="Expense export row",
+            created_by=admin_user,
+        )
+
+        response = api_client_admin.get(
+            "/api/v1/reports/export-section-pdf/?month=2024-02&section_type=expense_categories"
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/pdf"
+        assert 'attachment; filename="2024-02_expense_categories_report.pdf"' == response["Content-Disposition"]
+        assert response.content.startswith(b"%PDF")
+
+    def test_export_section_pdf_forbids_foreman(
+        self,
+        api_client_foreman,
+        month_period_open,
+    ):
+        response = api_client_foreman.get(
+            "/api/v1/reports/export-section-pdf/?month=2024-02&section_type=expense_categories"
+        )
+
+        assert response.status_code == 403
+
+    def test_export_expense_category_detail_pdf_returns_attachment(
+        self,
+        api_client_admin,
+        admin_user,
+        month_period_open,
+    ):
+        category = ExpenseCategory.objects.create(
+            name="Office detail export category",
+            scope="office",
+            kind="EXPENSE",
+        )
+        ExpenseActualExpense.objects.create(
+            month_period=month_period_open,
+            scope="OFFICE",
+            category=category,
+            amount=Decimal("180.00"),
+            spent_at="2024-02-15",
+            comment="Expense detail export row",
+            created_by=admin_user,
+        )
+
+        response = api_client_admin.get(
+            f"/api/v1/reports/export-expense-category-detail-pdf/?month=2024-02&category_id={category.id}"
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/pdf"
+        assert (
+            f'attachment; filename="2024-02_expense_category_{category.id}_detail_report.pdf"'
+            == response["Content-Disposition"]
+        )
+        assert response.content.startswith(b"%PDF")
+
+    def test_export_uncategorized_expense_category_detail_pdf_returns_attachment(
+        self,
+        api_client_admin,
+        admin_user,
+        month_period_open,
+    ):
+        ExpenseActualExpense.objects.create(
+            month_period=month_period_open,
+            scope="OFFICE",
+            category=None,
+            amount=Decimal("90.00"),
+            spent_at="2024-02-16",
+            comment="Uncategorized expense detail export row",
+            created_by=admin_user,
+        )
+
+        response = api_client_admin.get(
+            "/api/v1/reports/export-expense-category-detail-pdf/?month=2024-02&category_id=null"
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/pdf"
+        assert (
+            'attachment; filename="2024-02_expense_category_uncategorized_detail_report.pdf"'
+            == response["Content-Disposition"]
+        )
+        assert response.content.startswith(b"%PDF")
 

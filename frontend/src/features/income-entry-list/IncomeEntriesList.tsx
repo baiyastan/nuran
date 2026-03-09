@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { toast } from '@/shared/ui/Toast/toast'
@@ -110,7 +111,7 @@ export function IncomeEntriesList({ financePeriodId, isMonthOpen = true, canMana
       </div>
 
       {isLoading ? (
-        <div className="loading">{t('common.loading')}</div>
+        <TableSkeleton columnCount={6} />
       ) : error ? (
         <div className="error">{t('incomeEntries.loadError')}</div>
       ) : !data?.results.length ? (

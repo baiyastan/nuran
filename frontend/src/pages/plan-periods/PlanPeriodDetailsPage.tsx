@@ -5,6 +5,8 @@ import { useGetMonthPeriodQuery } from '@/shared/api/monthPeriodsApi'
 import { useListPlanItemsQuery } from '@/shared/api/planItemsApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatDate } from '@/shared/lib/utils'
 import { formatMoneyKGS } from '@/shared/utils/formatMoney'
 import { CreatePlanItemForm } from '@/features/plan-item-create/CreatePlanItemForm'
@@ -80,7 +82,7 @@ function PlanPeriodDetailsPage() {
   })) || []
 
   if (isLoadingPeriod) {
-    return <div className="loading">{t('planPeriodDetails.loading')}</div>
+    return <LoadingScreen />
   }
 
   if (periodError || !planPeriod) {
@@ -152,7 +154,7 @@ function PlanPeriodDetailsPage() {
       <div className="plan-items-section">
         <h3>{t('planPeriodDetails.items.title')}</h3>
         {isLoadingItems ? (
-          <div className="loading">{t('planPeriodDetails.loadingItems')}</div>
+          <TableSkeleton columnCount={4} />
         ) : !planItems?.results.length ? (
           <div className="empty-state">{t('planPeriodDetails.items.empty')}</div>
         ) : (

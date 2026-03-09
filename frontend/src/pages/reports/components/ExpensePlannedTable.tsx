@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Table } from '@/shared/ui/Table/Table'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatKGS } from '@/shared/lib/utils'
 import './ReportsTable.css'
 
@@ -39,7 +40,7 @@ export function ExpensePlannedTable({ lines, budgetPlanStatus, loading }: Expens
   }))
 
   if (loading) {
-    return <div className="table-loading">{t('expense.tables.planned.loading')}</div>
+    return <TableSkeleton columnCount={columns.length} />
   }
 
   if (lines.length === 0) {

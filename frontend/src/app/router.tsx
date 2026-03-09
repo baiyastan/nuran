@@ -19,8 +19,7 @@ const BudgetReportPage = lazy(() => import('@/pages/admin/BudgetReportPage'))
 const SubmittedProjectPlansPage = lazy(() => import('@/pages/admin/SubmittedProjectPlansPage'))
 const MonthManagementPage = lazy(() => import('@/pages/admin/MonthManagementPage'))
 const PlanSetupPage = lazy(() => import('@/pages/planSetup/PlanSetupPage'))
-const FinancePeriodsPage = lazy(() => import('@/pages/admin/FinancePeriodsPage'))
-const FinancePeriodDetailsPage = lazy(() => import('@/pages/finance-periods/FinancePeriodDetailsPage'))
+const FinancePage = lazy(() => import('@/pages/finance/FinancePage'))
 const ExpensesPage = lazy(() => import('@/pages/expenses/ExpensesPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
 
@@ -58,18 +57,22 @@ export const router = createBrowserRouter([
             ],
           },
           {
-            path: 'finance-periods',
+            path: 'finance',
             element: <RequireRole allowedRoles={['admin', 'director']} />,
             children: [
               {
                 index: true,
-                element: <FinancePeriodsPage />,
-              },
-              {
-                path: ':id',
-                element: <FinancePeriodDetailsPage />,
+                element: <FinancePage />,
               },
             ],
+          },
+          {
+            path: 'finance-periods/:id',
+            element: <Navigate to="/finance" replace />,
+          },
+          {
+            path: 'finance-periods',
+            element: <Navigate to="/finance" replace />,
           },
           {
             path: 'reports',

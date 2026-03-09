@@ -29,6 +29,7 @@ export function CreateCategoryModal({
 }: CreateCategoryModalProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
+  const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
   const [error, setError] = useState('')
 
   const [createCategory, { isLoading }] = useCreateExpenseCategoryMutation()
@@ -39,12 +40,12 @@ export function CreateCategoryModal({
   )
 
   const rootCategories = rootCategoriesData?.results ?? []
-  const singleRoot = rootCategories.length > 0 ? rootCategories[0] : null
   const hasRoot = rootCategories.length > 0
 
   useEffect(() => {
     if (isOpen) {
       setName('')
+      setSelectedParentId(null)
       setError('')
     }
   }, [isOpen])
@@ -64,10 +65,9 @@ export function CreateCategoryModal({
     }
   }
 
-  const handleCreateChild = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!singleRoot) return
     if (!name.trim()) {
       setError(t('categories.modals.create.nameRequired'))
       return
@@ -76,7 +76,7 @@ export function CreateCategoryModal({
       await createCategory({
         name: name.trim(),
         scope,
-        parent: singleRoot.id,
+        parent: selectedParentId,
       }).unwrap()
       onSuccess?.()
       onClose()
@@ -89,9 +89,9 @@ export function CreateCategoryModal({
 
   const title = t('categories.modals.create.title')
 
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title}>
-      {!hasRoot ? (
+  if (!hasRoot) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title={title}>
         <div className="category-form">
           <p className="category-modal-message">
             {t('categories.modals.create.noRootMessage')}
@@ -110,31 +110,52 @@ export function CreateCategoryModal({
             </Button>
           </div>
         </div>
-      ) : (
-        <form onSubmit={handleCreateChild} className="category-form">
-          <div className="form-field">
-            <label className="input-label">
-              {t('categories.name')} <span style={{ color: '#dc3545' }}>*</span>
-            </label>
-            <input
-              type="text"
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-          {error && <div className="form-error">{error}</div>}
-          <div className="form-actions">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={isLoading || !name.trim()}>
-              {isLoading ? t('categories.modals.create.creating') : t('categories.modals.create.create')}
-            </Button>
-          </div>
-        </form>
-      )}
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+      <form onSubmit={handleSubmit} className="category-form">
+        <div className="form-field">
+          <label className="input-label">
+            {t('categories.name')} <span style={{ color: '#dc3545' }}>*</span>
+          </label>
+          <input
+            type="text"
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-field">
+          <label className="input-label">{t('categories.parentSelectorLabel')}</label>
+          <select
+            className="input"
+            value={selectedParentId ?? ''}
+            onChange={(e) =>
+              setSelectedParentId(e.target.value === '' ? null : Number(e.target.value))
+            }
+          >
+            <option value="">{t('categories.parentOptionTopLevel')}</option>
+            {rootCategories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="form-actions">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" disabled={isLoading || !name.trim()}>
+            {isLoading ? t('categories.modals.create.creating') : t('categories.modals.create.create')}
+          </Button>
+        </div>
+      </form>
     </Modal>
   )
 }

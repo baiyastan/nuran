@@ -1,0 +1,22 @@
+/* Skeleton blocks - use with shared Table layout */
+.table-skeleton .table-skeleton__cell {
+  height: 16px;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  animation: table-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.table-skeleton .table th .table-skeleton__cell {
+  height: 14px;
+  background-color: #d1d5db;
+}
+
+@keyframes table-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

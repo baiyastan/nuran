@@ -6,6 +6,7 @@ import {
 } from '@/shared/api/plansApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatDate } from '@/shared/lib/utils'
 import './PlansPage.css'
 
@@ -58,7 +59,7 @@ export function PlansPage() {
       </div>
       
       {isLoading ? (
-        <div>Loading...</div>
+        <TableSkeleton columnCount={7} />
       ) : error ? (
         <div>Error loading plans</div>
       ) : (

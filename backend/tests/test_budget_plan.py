@@ -166,6 +166,32 @@ class TestBudgetPlanAPI:
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['scope'] == 'OFFICE'
 
+    def test_filter_by_month_and_scope_returns_only_matching_scope(self, api_client, month_period):
+        """List with month+scope returns only the plan for that scope (Plan Setup page)."""
+        BudgetPlan.objects.create(
+            period=month_period,
+            scope='OFFICE',
+            project=None,
+        )
+        BudgetPlan.objects.create(
+            period=month_period,
+            scope='PROJECT',
+            project=None,
+        )
+        BudgetPlan.objects.create(
+            period=month_period,
+            scope='CHARITY',
+            project=None,
+        )
+        for scope in ('OFFICE', 'PROJECT', 'CHARITY'):
+            response = api_client.get(
+                f'/api/v1/budgets/budgets/?month={month_period.month}&scope={scope}'
+            )
+            assert response.status_code == 200, f'scope={scope}'
+            results = response.data['results']
+            assert len(results) == 1, f'scope={scope}: expected 1 result, got {len(results)}'
+            assert results[0]['scope'] == scope, f'scope={scope}: got {results[0]["scope"]}'
+
     def test_create_budget_plan_missing_month_period_string_returns_400(self, api_client):
         """Creating BudgetPlan with non-existent month string should return 400, not 403."""
         data = {

@@ -88,7 +88,7 @@ export default function Sidebar({ onCollapsedChange }: SidebarProps) {
         <button
           className="sidebar__toggle"
           onClick={toggleCollapse}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
           type="button"
         >
           <span className="sidebar__toggle-icon">{isCollapsed ? '→' : '←'}</span>

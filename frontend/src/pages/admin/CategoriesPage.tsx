@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useListExpenseCategoriesQuery,
@@ -6,182 +6,143 @@ import {
   ExpenseCategory,
 } from '@/shared/api/expenseCategoriesApi'
 import { Button } from '@/shared/ui/Button/Button'
-import { Table } from '@/shared/ui/Table/Table'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CreateCategoryModal } from './components/CreateCategoryModal'
 import { EditCategoryModal } from './components/EditCategoryModal'
+import { displayCategoryName } from '@/shared/lib/categoryUtils'
 import { toast } from '@/shared/ui/Toast/toast'
 import './CategoriesPage.css'
 
 type Scope = 'office' | 'project' | 'charity'
-type ParentFilter = 'all' | 'root' | number
+
+interface TreeRow {
+  category: ExpenseCategory
+  depth: 0 | 1
+}
+
+function buildTree(categories: ExpenseCategory[]): TreeRow[] {
+  const roots = categories.filter((c) => c.parent_id === null)
+  const byParent = new Map<number | null, ExpenseCategory[]>()
+  byParent.set(null, roots)
+  categories.forEach((c) => {
+    if (c.parent_id !== null) {
+      const list = byParent.get(c.parent_id) ?? []
+      list.push(c)
+      byParent.set(c.parent_id, list)
+    }
+  })
+  const rows: TreeRow[] = []
+  roots.forEach((root) => {
+    rows.push({ category: root, depth: 0 })
+    const children = byParent.get(root.id) ?? []
+    children.forEach((child) => rows.push({ category: child, depth: 1 }))
+  })
+  return rows
+}
 
 function CategoriesPage() {
   const { t } = useTranslation()
   const [selectedScope, setSelectedScope] = useState<Scope>('office')
   const [showActiveOnly, setShowActiveOnly] = useState(true)
-  const [selectedParent, setSelectedParent] = useState<ParentFilter>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const [deleteCategory] = useDeleteExpenseCategoryMutation()
 
-  // Build query params
-  const queryParams = useMemo(() => {
-    const params: {
-      scope: Scope
-      is_active?: boolean
-      parent?: number | null
-    } = {
+  const queryParams = useMemo(
+    () => ({
       scope: selectedScope,
-    }
+      ...(showActiveOnly ? { is_active: true } : {}),
+    }),
+    [selectedScope, showActiveOnly]
+  )
 
-    if (showActiveOnly) {
-      params.is_active = true
-    }
-
-    if (selectedParent !== 'all') {
-      params.parent = selectedParent === 'root' ? null : selectedParent
-    }
-
-    return params
-  }, [selectedScope, showActiveOnly, selectedParent])
-
-  // Fetch categories with filters
   const { data: categoriesData, isLoading, error } = useListExpenseCategoriesQuery(queryParams)
 
-  // Fetch all categories for parent dropdown options
-  const { data: allCategoriesData } = useListExpenseCategoriesQuery({
-    scope: selectedScope,
-    is_active: true,
-  })
-
-  // Get root categories for parent filter dropdown
-  const rootCategories = useMemo(() => {
-    return allCategoriesData?.results.filter((cat) => cat.parent_id === null) || []
-  }, [allCategoriesData])
-
-  // Build parent name map for table display
-  const parentNameMap = useMemo(() => {
-    const map = new Map<number, string>()
-    allCategoriesData?.results.forEach((cat) => {
-      map.set(cat.id, cat.name)
-    })
-    return map
-  }, [allCategoriesData])
-
   const categories = useMemo(() => categoriesData?.results ?? [], [categoriesData])
+  const treeRows = useMemo(() => buildTree(categories), [categories])
 
-  const handleDeleteClick = useCallback(async (category: ExpenseCategory) => {
-    if ((category.children_count || 0) > 0) {
-      return
-    }
-
-    if (window.confirm(t('categories.confirmDelete', { name: category.name }))) {
-      try {
-        await deleteCategory(category.id).unwrap()
-      } catch (err) {
-        console.error('Delete failed:', err)
-        toast.error(t('categories.deleteError'))
+  useEffect(() => {
+    if (openMenuId === null) return
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null)
       }
     }
-  }, [t, deleteCategory])
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuId(null)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [openMenuId])
 
-  // Table columns
-  const columns = [
-    { key: 'name', label: t('categories.name') },
-    { key: 'parent', label: t('categories.parent') },
-    { key: 'children', label: t('categories.children') },
-    { key: 'active', label: t('categories.active') },
-    { key: 'actions', label: t('common.actions') },
-  ]
+  const handleDeleteClick = useCallback(
+    async (category: ExpenseCategory) => {
+      if ((category.children_count || 0) > 0) return
+      if (window.confirm(t('categories.confirmDelete', { name: category.name }))) {
+        try {
+          await deleteCategory(category.id).unwrap()
+          setOpenMenuId(null)
+        } catch (err) {
+          console.error('Delete failed:', err)
+          toast.error(t('categories.deleteError'))
+        }
+      }
+    },
+    [t, deleteCategory]
+  )
 
-  // Table data
-  const tableData = useMemo(() => {
-    return categories.map((category) => ({
-      name: category.name,
-      parent: category.parent_id ? parentNameMap.get(category.parent_id) || '—' : '—',
-      children: category.children_count || 0,
-      active: category.is_active ? (
-        <span className="badge badge-success">Active</span>
-      ) : (
-        <span className="badge badge-inactive">Inactive</span>
-      ),
-      actions: (
-        <div className="table-actions">
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => setEditingCategory(category)}
-          >
-            {t('common.edit')}
-          </Button>
-          <Button
-            size="small"
-            variant="danger"
-            onClick={() => handleDeleteClick(category)}
-            disabled={(category.children_count || 0) > 0}
-            title={
-              (category.children_count || 0) > 0
-                ? t('categories.cannotDeleteHasChildren')
-                : ''
-            }
-          >
-            {t('common.delete')}
-          </Button>
-        </div>
-      ),
-    }))
-  }, [categories, parentNameMap, t, handleDeleteClick])
-
-  const handleCreateSuccess = () => {
+  const handleCreateSuccess = useCallback(() => {
     setShowCreateModal(false)
-  }
+  }, [])
 
-  const handleEditSuccess = () => {
+  const handleEditSuccess = useCallback(() => {
     setEditingCategory(null)
-  }
+  }, [])
+
+  const isCreateModalOpen = showCreateModal
 
   return (
     <div className="categories-page">
       <div className="page-header">
         <h2>{t('categories.title')}</h2>
-        <Button onClick={() => setShowCreateModal(true)}>
+        <Button
+          onClick={() => setShowCreateModal(true)}
+        >
           {t('categories.create')}
         </Button>
       </div>
 
-      {/* Tabs */}
       <div className="categories-tabs">
         <button
+          type="button"
           className={`tab-button ${selectedScope === 'office' ? 'active' : ''}`}
-          onClick={() => {
-            setSelectedScope('office')
-            setSelectedParent('all')
-          }}
+          onClick={() => setSelectedScope('office')}
         >
           {t('categories.office')}
         </button>
         <button
+          type="button"
           className={`tab-button ${selectedScope === 'project' ? 'active' : ''}`}
-          onClick={() => {
-            setSelectedScope('project')
-            setSelectedParent('all')
-          }}
+          onClick={() => setSelectedScope('project')}
         >
           {t('categories.project')}
         </button>
         <button
+          type="button"
           className={`tab-button ${selectedScope === 'charity' ? 'active' : ''}`}
-          onClick={() => {
-            setSelectedScope('charity')
-            setSelectedParent('all')
-          }}
+          onClick={() => setSelectedScope('charity')}
         >
           {t('categories.charity')}
         </button>
       </div>
 
-      {/* Toolbar */}
       <div className="categories-toolbar">
         <label className="toolbar-checkbox">
           <input
@@ -191,45 +152,78 @@ function CategoriesPage() {
           />
           <span>{t('categories.activeOnly')}</span>
         </label>
-
-        <div className="toolbar-select">
-          <label>{t('categories.filterByParent')}</label>
-          <select
-            value={selectedParent === 'all' ? 'all' : selectedParent === 'root' ? 'root' : selectedParent}
-            onChange={(e) => {
-              const value = e.target.value
-              if (value === 'all') {
-                setSelectedParent('all')
-              } else if (value === 'root') {
-                setSelectedParent('root')
-              } else {
-                setSelectedParent(Number(value))
-              }
-            }}
-          >
-            <option value="all">{t('categories.all')}</option>
-            <option value="root">{t('categories.rootOnly')}</option>
-            {rootCategories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
-      {/* Table */}
       {isLoading ? (
-        <div className="loading">{t('common.loading')}</div>
+        <TableSkeleton columnCount={3} rowCount={8} />
       ) : error ? (
         <div className="error">{t('categories.loadError')}</div>
+      ) : treeRows.length === 0 ? (
+        <div className="categories-empty">{t('categories.noRootCategories')}</div>
       ) : (
-        <Table columns={columns} data={tableData} />
+        <div className="category-tree">
+          {treeRows.map(({ category, depth }) => (
+            <div
+              key={category.id}
+              className={`category-tree-item category-tree-item--${depth === 0 ? 'root' : 'child'}`}
+              style={{ paddingLeft: depth === 0 ? 0 : 24 }}
+            >
+              <span className="category-tree-item__name">
+                {displayCategoryName(category.name)}
+              </span>
+              <span className="category-tree-item__badge">
+                {category.is_active ? (
+                  <span className="badge badge-success">{t('categories.active')}</span>
+                ) : (
+                  <span className="badge badge-inactive">{t('categories.inactive')}</span>
+                )}
+              </span>
+              <div className="category-tree-item__actions" ref={openMenuId === category.id ? menuRef : undefined}>
+                <button
+                  type="button"
+                  className="category-tree-item__menu-trigger"
+                  onClick={() => setOpenMenuId((id) => (id === category.id ? null : category.id))}
+                  aria-label={t('common.actions')}
+                  aria-haspopup="menu"
+                  aria-expanded={openMenuId === category.id}
+                >
+                  ⋮
+                </button>
+                {openMenuId === category.id && (
+                  <div className="category-tree-item__menu" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setEditingCategory(category)
+                        setOpenMenuId(null)
+                      }}
+                    >
+                      {t('common.edit')}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={(category.children_count || 0) > 0}
+                      title={
+                        (category.children_count || 0) > 0
+                          ? t('categories.cannotDeleteHasChildren')
+                          : undefined
+                      }
+                      onClick={() => handleDeleteClick(category)}
+                    >
+                      {t('common.delete')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Modals */}
       <CreateCategoryModal
-        isOpen={showCreateModal}
+        isOpen={isCreateModalOpen}
         onClose={() => setShowCreateModal(false)}
         onSuccess={handleCreateSuccess}
         scope={selectedScope}

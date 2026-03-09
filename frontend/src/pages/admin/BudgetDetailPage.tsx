@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useGetBudgetReportQuery, useUpdateSummaryCommentMutation } from '@/shared/api/budgetsApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { formatDate, formatCurrency, getErrorMessage } from '@/shared/lib/utils'
 import './BudgetDetailPage.css'
 
@@ -40,7 +41,7 @@ function BudgetDetailPage() {
   }
 
   if (isLoading) {
-    return <div className="budget-detail-page loading">Loading...</div>
+    return <LoadingScreen />
   }
 
   if (error) {

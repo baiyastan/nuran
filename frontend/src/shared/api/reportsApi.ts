@@ -97,6 +97,24 @@ export interface DashboardIncomeSourcesParams {
   month: string // YYYY-MM
 }
 
+export type ReportSectionType = 'income_sources' | 'expense_categories'
+export type ReportDetailTarget = number | 'null'
+
+export interface ExportSectionPdfParams {
+  month: string
+  sectionType: ReportSectionType
+}
+
+export interface ExportIncomeSourceDetailPdfParams {
+  month: string
+  sourceId: ReportDetailTarget
+}
+
+export interface ExportExpenseCategoryDetailPdfParams {
+  month: string
+  categoryId: ReportDetailTarget
+}
+
 export const reportsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getMonthlyReport: builder.query<MonthlyReportResponse, MonthlyReportParams>({
@@ -133,6 +151,36 @@ export const reportsApi = baseApi.injectEndpoints({
       }),
       providesTags: ['Report'],
     }),
+    exportSectionPdf: builder.mutation<Blob, ExportSectionPdfParams>({
+      query: ({ month, sectionType }) => ({
+        url: '/reports/export-section-pdf/',
+        params: {
+          month,
+          section_type: sectionType,
+        },
+        responseType: 'blob',
+      }),
+    }),
+    exportIncomeSourceDetailPdf: builder.mutation<Blob, ExportIncomeSourceDetailPdfParams>({
+      query: ({ month, sourceId }) => ({
+        url: '/reports/export-income-source-detail-pdf/',
+        params: {
+          month,
+          source_id: sourceId,
+        },
+        responseType: 'blob',
+      }),
+    }),
+    exportExpenseCategoryDetailPdf: builder.mutation<Blob, ExportExpenseCategoryDetailPdfParams>({
+      query: ({ month, categoryId }) => ({
+        url: '/reports/export-expense-category-detail-pdf/',
+        params: {
+          month,
+          category_id: categoryId,
+        },
+        responseType: 'blob',
+      }),
+    }),
   }),
 })
 
@@ -141,4 +189,7 @@ export const {
   useGetDashboardKpiQuery,
   useGetDashboardExpenseCategoriesQuery,
   useGetDashboardIncomeSourcesQuery,
+  useExportSectionPdfMutation,
+  useExportIncomeSourceDetailPdfMutation,
+  useExportExpenseCategoryDetailPdfMutation,
 } = reportsApi

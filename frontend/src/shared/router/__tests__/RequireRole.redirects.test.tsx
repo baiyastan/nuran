@@ -68,7 +68,7 @@ describe('RequireRole – redirects', () => {
       }
     )
 
-    expect(screen.getByText('common.loading')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
     expect(screen.queryByText('Forbidden')).not.toBeInTheDocument()
   })

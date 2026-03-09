@@ -10,6 +10,7 @@ import { useGetForemenQuery } from '@/shared/api/usersApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { toast } from '@/shared/ui/Toast/toast'
@@ -143,7 +144,7 @@ function ProjectsPage() {
       </div>
       
       {isLoading ? (
-        <div className="loading">{t('projects.loading')}</div>
+        <TableSkeleton columnCount={7} />
       ) : error ? (
         <div className="error">{t('projects.loadError')}</div>
       ) : !data?.results.length ? (

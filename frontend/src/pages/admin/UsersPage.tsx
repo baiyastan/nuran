@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useGetUsersQuery, useUpdateUserRoleMutation } from '@/shared/api/usersApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { UserRoleEditor } from '@/features/user-management/UserRoleEditor'
 import { formatDate } from '@/shared/lib/utils'
 import './UsersPage.css'
@@ -96,7 +97,7 @@ function UsersPage() {
       </div>
       
       {isLoading ? (
-        <div className="loading">{t('users.loading')}</div>
+        <TableSkeleton columnCount={6} />
       ) : !data?.results.length ? (
         <div className="empty-state">
           <p>{t('users.noUsers')}</p>

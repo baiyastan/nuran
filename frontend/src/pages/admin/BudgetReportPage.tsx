@@ -13,6 +13,8 @@ import { useListProjectsQuery } from '@/shared/api/projectsApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatKGS, getErrorMessage } from '@/shared/lib/utils'
 import './BudgetReportPage.css'
 
@@ -232,7 +234,7 @@ function BudgetReportPage() {
       </div>
 
       {plansLoading || isFetchingPlans ? (
-        <div className="loading">{t('budgetReport.loading')}</div>
+        <LoadingScreen compact />
       ) : plans.length === 0 ? (
         <div className="empty-state">{t('budgetReport.noPlansFound')}</div>
       ) : (
@@ -261,7 +263,7 @@ function BudgetReportPage() {
       {selectedPlanId && (
         <>
           {reportLoading || isFetchingReport ? (
-            <div className="loading">{t('budgetReport.loading')}</div>
+            <TableSkeleton columnCount={5} />
           ) : reportData && reportData.plan && reportData.totals ? (
             <>
               <div className="report-section">

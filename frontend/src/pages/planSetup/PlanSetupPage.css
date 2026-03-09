@@ -62,6 +62,20 @@
   color: #666;
 }
 
+.plan-setup-no-plan-message {
+  margin: 16px 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.plan-setup-no-plan-message p {
+  margin: 0 0 4px 0;
+}
+
+.plan-setup-no-plan-message p:last-child {
+  margin-bottom: 0;
+}
+
 .plan-setup-context {
   margin-bottom: 16px;
   color: #666;
@@ -86,4 +100,51 @@
 
 .plan-setup-actions {
   margin-top: 24px;
+}
+
+.plan-setup-save-btn {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 200px;
+}
+
+.plan-setup-category-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.plan-setup-input-amount {
+  max-width: 140px;
+}
+
+.plan-setup-input-comment {
+  min-width: 120px;
+  max-width: 280px;
+}
+
+@media (max-width: 768px) {
+  .plan-setup-page {
+    padding: 12px 16px;
+  }
+
+  .plan-setup-save-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .plan-setup-input,
+  .plan-setup-input-amount,
+  .plan-setup-input-comment {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .plan-setup-filters input[type='month'],
+  .plan-setup-filters select {
+    min-width: 120px;
+  }
 }

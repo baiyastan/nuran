@@ -4,6 +4,7 @@ import { useAuth } from '@/shared/hooks/useAuth'
 import { useAuthBootstrap } from '@/shared/hooks/useAuthBootstrap'
 import { useAppDispatch } from '@/app/hooks'
 import { logout } from '@/features/auth/authSlice'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 function RequireAuth() {
   const { isAuthenticated, isLoadingMe, role } = useAuth()
@@ -17,7 +18,7 @@ function RequireAuth() {
   }, [invalidSession, dispatch])
 
   if (bootstrapping || (isAuthenticated && isLoadingMe)) {
-    return <div className="loading">Loading...</div>
+    return <LoadingScreen />
   }
 
   if (!isAuthenticated || invalidSession) {
@@ -25,7 +26,7 @@ function RequireAuth() {
   }
 
   return (
-    <Suspense fallback={<div className="loading">Loading...</div>}>
+    <Suspense fallback={<LoadingScreen />}>
       <Outlet />
     </Suspense>
   )

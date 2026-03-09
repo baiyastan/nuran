@@ -81,11 +81,12 @@ export const axiosBaseQuery =
       data?: AxiosRequestConfig['data']
       params?: AxiosRequestConfig['params']
       headers?: AxiosRequestConfig['headers']
+      responseType?: AxiosRequestConfig['responseType']
     },
     unknown,
     AxiosBaseQueryError
   > =>
-  async ({ url, method = 'GET', data, params, headers }, api) => {
+  async ({ url, method = 'GET', data, params, headers, responseType }, api) => {
     // Defensive fallback for url
     const requestUrl = url ?? ''
     
@@ -112,6 +113,7 @@ export const axiosBaseQuery =
         method,
         data,
         params,
+        responseType,
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),
           ...headers,

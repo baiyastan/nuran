@@ -72,20 +72,22 @@ def month_period_open(db):
 
 
 @pytest.fixture
-def finance_period_office(month_period_open, db):
+def finance_period_office(month_period_open, admin_user, db):
   return FinancePeriod.objects.create(
       month_period=month_period_open,
       fund_kind='office',
       status='open',
+      created_by=admin_user,
   )
 
 
 @pytest.fixture
-def finance_period_charity(month_period_open, db):
+def finance_period_charity(month_period_open, admin_user, db):
   return FinancePeriod.objects.create(
       month_period=month_period_open,
       fund_kind='charity',
       status='open',
+      created_by=admin_user,
   )
 
 
@@ -150,6 +152,7 @@ class TestDashboardIncomeSourcesAPI:
   def test_sums_and_diff_by_source_across_all_fund_kinds(
       self,
       api_client_admin,
+      admin_user,
       month_period_open,
       finance_period_office,
       finance_period_charity,
@@ -177,7 +180,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("80.00"),
         received_at="2024-02-05",
         comment="Office income 1",
-        created_by=None,
+        created_by=admin_user,
     )
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
@@ -185,7 +188,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("20.00"),
         received_at="2024-02-06",
         comment="Office income 2",
-        created_by=None,
+        created_by=admin_user,
     )
     IncomeEntry.objects.create(
         finance_period=finance_period_charity,
@@ -193,7 +196,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("500.00"),
         received_at="2024-02-07",
         comment="Charity income 1",
-        created_by=None,
+        created_by=admin_user,
     )
 
     # Uncategorized income (no source, no plan)
@@ -203,7 +206,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("50.00"),
         received_at="2024-02-08",
         comment="Uncategorized income",
-        created_by=None,
+        created_by=admin_user,
     )
 
     response = api_client_admin.get(
@@ -250,6 +253,7 @@ class TestDashboardIncomeSourcesAPI:
   def test_plan_only_and_fact_only_sources(
       self,
       api_client_admin,
+      admin_user,
       month_period_open,
       finance_period_office,
       finance_period_charity,
@@ -272,7 +276,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("220.00"),
         received_at="2024-02-09",
         comment="Fact only income",
-        created_by=None,
+        created_by=admin_user,
     )
 
     response = api_client_admin.get(
@@ -297,6 +301,7 @@ class TestDashboardIncomeSourcesAPI:
   def test_share_percent_and_zero_total_fact_behaviour(
       self,
       api_client_admin,
+      admin_user,
       month_period_open,
       finance_period_office,
       income_sources,
@@ -310,7 +315,7 @@ class TestDashboardIncomeSourcesAPI:
         amount=Decimal("100.00"),
         received_at="2024-02-10",
         comment="Income with share",
-        created_by=None,
+        created_by=admin_user,
     )
 
     response = api_client_admin.get(
@@ -334,4 +339,106 @@ class TestDashboardIncomeSourcesAPI:
     assert data_empty["rows"] == []
     assert data_empty["totals"]["plan"] == "0.00"
     assert data_empty["totals"]["fact"] == "0.00"
+
+  def test_export_income_sources_pdf_returns_attachment(
+      self,
+      api_client_admin,
+      admin_user,
+      month_period_open,
+      finance_period_office,
+      income_sources,
+  ):
+    source_a = income_sources["source_a"]
+    IncomePlan.objects.create(
+        period=finance_period_office,
+        source=source_a,
+        amount=Decimal("125.00"),
+    )
+    IncomeEntry.objects.create(
+        finance_period=finance_period_office,
+        source=source_a,
+        amount=Decimal("200.00"),
+        received_at="2024-02-12",
+        comment="Income export row",
+        created_by=admin_user,
+    )
+
+    response = api_client_admin.get(
+        "/api/v1/reports/export-section-pdf/?month=2024-02&section_type=income_sources"
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert 'attachment; filename="2024-02_income_sources_report.pdf"' == response["Content-Disposition"]
+    assert response.content.startswith(b"%PDF")
+
+  def test_export_section_pdf_invalid_section_type_returns_400(
+      self,
+      api_client_admin,
+      month_period_open,
+  ):
+    response = api_client_admin.get(
+        "/api/v1/reports/export-section-pdf/?month=2024-02&section_type=unknown_section"
+    )
+
+    assert response.status_code == 400
+    assert response.data["section_type"] == (
+        "section_type must be one of: income_sources, expense_categories"
+    )
+
+  def test_export_income_source_detail_pdf_returns_attachment(
+      self,
+      api_client_admin,
+      admin_user,
+      finance_period_office,
+      income_sources,
+  ):
+    source_a = income_sources["source_a"]
+    IncomeEntry.objects.create(
+        finance_period=finance_period_office,
+        source=source_a,
+        amount=Decimal("200.00"),
+        received_at="2024-02-12",
+        comment="Income detail export row",
+        created_by=admin_user,
+    )
+
+    response = api_client_admin.get(
+        f"/api/v1/reports/export-income-source-detail-pdf/?month=2024-02&source_id={source_a.id}"
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert (
+        f'attachment; filename="2024-02_income_source_{source_a.id}_detail_report.pdf"'
+        == response["Content-Disposition"]
+    )
+    assert response.content.startswith(b"%PDF")
+
+  def test_export_uncategorized_income_source_detail_pdf_returns_attachment(
+      self,
+      api_client_admin,
+      admin_user,
+      finance_period_office,
+  ):
+    IncomeEntry.objects.create(
+        finance_period=finance_period_office,
+        source=None,
+        amount=Decimal("75.00"),
+        received_at="2024-02-13",
+        comment="Uncategorized income detail export row",
+        created_by=admin_user,
+    )
+
+    response = api_client_admin.get(
+        "/api/v1/reports/export-income-source-detail-pdf/?month=2024-02&source_id=null"
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert (
+        'attachment; filename="2024-02_income_source_uncategorized_detail_report.pdf"'
+        == response["Content-Disposition"]
+    )
+    assert response.content.startswith(b"%PDF")
 

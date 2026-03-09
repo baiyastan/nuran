@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Table } from '@/shared/ui/Table/Table'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatKGS, formatDate } from '@/shared/lib/utils'
 import { ActualExpense } from '@/entities/actual-expense/model'
 import './ReportsTable.css'
@@ -22,7 +23,7 @@ export function ExpenseFactsTable({ items, loading, error }: ExpenseFactsTablePr
 
   // Treat undefined items as loading: do not show empty message
   if (loading || items === undefined) {
-    return <div className="table-loading">{t('expense.tables.actual.loading')}</div>
+    return <TableSkeleton columnCount={4} />
   }
 
   if (error) {

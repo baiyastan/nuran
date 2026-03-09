@@ -13,6 +13,7 @@ import {
 } from '@/shared/api/monthPeriodsApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CreatePlanPeriodModal } from '@/features/plan-period-create/CreatePlanPeriodModal'
 import { PlanPeriod } from '@/entities/plan-period/model'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
@@ -256,7 +257,7 @@ function PlanPeriodsPage() {
 
       {/* Plans List */}
       {isLoading ? (
-        <div className="loading">{t('planPeriods.loading')}</div>
+        <TableSkeleton columnCount={5} />
       ) : error ? (
         <div className="error">
           {errorStatus === 401 ? (

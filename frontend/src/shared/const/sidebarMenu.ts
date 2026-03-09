@@ -17,7 +17,7 @@ export const SIDEBAR_MENU_ITEMS: MenuItem[] = [
   },
   {
     label: 'nav.financePeriods',
-    path: '/finance-periods',
+    path: '/finance',
     icon: '📅',
     roles: ['admin', 'director'],
   },

@@ -9,6 +9,7 @@ import {
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
+import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { CreateActualExpenseModal } from '@/features/actual-expense-create/CreateActualExpenseModal'
 import { EditActualExpenseModal } from '@/features/actual-expense-edit/EditActualExpenseModal'
 import { MonthGateBanner } from '@/features/month-gate/MonthGateBanner'
@@ -104,7 +105,7 @@ function ExpensesPage() {
 
   const tableColumns = [
     { key: 'spent_at', label: t('expensesPage.table.columns.spentAt') },
-    { key: 'category_name', label: t('expensesPage.table.columns.category') || 'Category' },
+    { key: 'category_name', label: t('expensesPage.table.columns.category') },
     { key: 'amount', label: t('expensesPage.table.columns.amount') },
     { key: 'comment', label: t('expensesPage.table.columns.comment') },
     ...(canManageExpenses ? [{ key: 'actions', label: '' }] : []),
@@ -192,7 +193,7 @@ function ExpensesPage() {
         </div>
 
         {isLoadingExpenses ? (
-          <div className="loading">{t('expensesPage.loading')}</div>
+          <TableSkeleton columnCount={5} />
         ) : expenses.length === 0 ? (
           <div className="empty-state">
             <p>{t('expensesPage.empty.noExpenses')}</p>

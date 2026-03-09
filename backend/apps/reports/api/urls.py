@@ -8,6 +8,9 @@ from .views import (
     DashboardKpiView,
     DashboardExpenseCategoriesView,
     DashboardIncomeSourcesView,
+    ExportExpenseCategoryDetailPdfView,
+    ExportIncomeSourceDetailPdfView,
+    ExportSectionPdfView,
 )
 
 urlpatterns = [
@@ -23,6 +26,21 @@ urlpatterns = [
         'dashboard-income-sources/',
         DashboardIncomeSourcesView.as_view(),
         name='dashboard-income-sources',
+    ),
+    path(
+        'export-section-pdf/',
+        ExportSectionPdfView.as_view(),
+        name='export-section-pdf',
+    ),
+    path(
+        'export-income-source-detail-pdf/',
+        ExportIncomeSourceDetailPdfView.as_view(),
+        name='export-income-source-detail-pdf',
+    ),
+    path(
+        'export-expense-category-detail-pdf/',
+        ExportExpenseCategoryDetailPdfView.as_view(),
+        name='export-expense-category-detail-pdf',
     ),
 ]
 
