@@ -23,6 +23,7 @@ export function CreateIncomeEntryModal({
     amount: '',
     received_at: new Date().toISOString().split('T')[0],
     comment: '',
+    account: 'CASH' as 'CASH' | 'BANK',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
@@ -35,6 +36,7 @@ export function CreateIncomeEntryModal({
         amount: '',
         received_at: new Date().toISOString().split('T')[0],
         comment: '',
+        account: 'CASH',
       })
       setErrors({})
       setApiError('')
@@ -79,11 +81,13 @@ export function CreateIncomeEntryModal({
         amount: number
         received_at: string
         comment: string
+        account: 'CASH' | 'BANK'
       } = {
         finance_period: financePeriodId,
         amount: parseFloat(formData.amount),
         received_at: formData.received_at,
         comment: formData.comment.trim(),
+        account: formData.account,
       }
 
       await createIncomeEntry(payload).unwrap()
@@ -113,6 +117,22 @@ export function CreateIncomeEntryModal({
           required
           autoFocus
         />
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('incomeEntries.form.account')}
+          </label>
+          <select
+            className="input"
+            value={formData.account}
+            onChange={(e) =>
+              setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })
+            }
+          >
+            <option value="CASH">{t('incomeEntries.form.accountCash')}</option>
+            <option value="BANK">{t('incomeEntries.form.accountBank')}</option>
+          </select>
+        </div>
 
         <Input
           label={t('incomeEntries.form.receivedAt')}

@@ -24,6 +24,7 @@ const minimalIncomeEntry: IncomeEntry = {
   finance_period_fund_kind: 'office',
   finance_period_month: '2026-02',
   project_name: null,
+  account: 'CASH',
   amount: '200.00',
   received_at: '2026-02-10T00:00:00Z',
   comment: 'Initial comment',

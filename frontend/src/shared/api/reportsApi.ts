@@ -47,6 +47,14 @@ export interface DashboardKpiResponse {
   net_plan: string
   cash_balance: string
   bank_balance: string
+  cash_opening_balance: string
+  bank_opening_balance: string
+  cash_inflow_month: string
+  cash_outflow_month: string
+  bank_inflow_month: string
+  bank_outflow_month: string
+  cash_closing_balance: string
+  bank_closing_balance: string
 }
 
 export interface DashboardKpiParams {
