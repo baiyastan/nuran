@@ -64,6 +64,7 @@ class TestMonthPeriodMissingBlocksWrites:
           "month": "2099-11",  # MonthPeriod with this month does not exist
           "scope": "OFFICE",
           "category": None,
+          "account": "CASH",
           "amount": "100.00",
           "spent_at": "2099-11-10",
           "comment": "Missing month-period actual expense",

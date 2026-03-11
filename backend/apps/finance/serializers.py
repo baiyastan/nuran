@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from decimal import Decimal
 from datetime import date
 from django.shortcuts import get_object_or_404
-from .models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan
+from .models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer, ACCOUNT_CHOICES
 from .services import IncomePlanService
 
 
@@ -88,7 +88,7 @@ class IncomeEntrySerializer(serializers.ModelSerializer):
         model = IncomeEntry
         fields = [
             'id', 'finance_period', 'finance_period_fund_kind', 'finance_period_month',
-            'project_name', 'source', 'source_id', 'amount', 'received_at', 'comment',
+            'project_name', 'source', 'source_id', 'account', 'amount', 'received_at', 'comment',
             'created_by', 'created_by_username',
             'created_at', 'updated_at'
         ]
@@ -105,7 +105,13 @@ class IncomeEntrySerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError("Amount must be greater than zero.")
         return value
-    
+
+    def validate_account(self, value):
+        """Validate account is CASH or BANK (destination for income)."""
+        if value not in dict(ACCOUNT_CHOICES):
+            raise serializers.ValidationError("Account must be CASH or BANK.")
+        return value
+
     def validate(self, data):
         """Validate finance_period is provided."""
         finance_period = data.get('finance_period', self.instance.finance_period if self.instance else None)
@@ -220,4 +226,59 @@ class IncomeSummarySerializer(serializers.Serializer):
     planned_total = serializers.CharField()
     actual_total = serializers.CharField()
     diff_total = serializers.CharField()
+
+
+class TransferSerializer(serializers.ModelSerializer):
+    """Serializer for Transfer (internal cash↔bank movement). Not income, not expense."""
+
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Transfer
+        fields = [
+            'id', 'source_account', 'destination_account', 'amount',
+            'transferred_at', 'comment',
+            'created_by', 'created_by_username',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def validate_amount(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError("Amount must be greater than zero.")
+        return value
+
+    def validate(self, data):
+        src = data.get('source_account') or (self.instance.source_account if self.instance else None)
+        dst = data.get('destination_account') or (self.instance.destination_account if self.instance else None)
+        if src and dst and src == dst:
+            raise serializers.ValidationError(
+                {"destination_account": "Source and destination accounts must be different."}
+            )
+        if src and src not in dict(ACCOUNT_CHOICES):
+            raise serializers.ValidationError({"source_account": "Account must be CASH or BANK."})
+        if dst and dst not in dict(ACCOUNT_CHOICES):
+            raise serializers.ValidationError({"destination_account": "Account must be CASH or BANK."})
+
+        # Insufficient source balance check: source account must have at least amount as of transferred_at
+        amount = data.get('amount')
+        transferred_at = data.get('transferred_at')
+        if self.instance:
+            amount = amount if amount is not None else self.instance.amount
+            transferred_at = transferred_at if transferred_at is not None else self.instance.transferred_at
+        if src is not None and amount is not None and transferred_at is not None:
+            from apps.expenses.services import get_balance_for_account
+            exclude_transfer_id = self.instance.pk if self.instance else None
+            balance = get_balance_for_account(
+                src, transferred_at,
+                exclude_expense_id=None,
+                exclude_transfer_id=exclude_transfer_id,
+            )
+            if balance < amount:
+                label = dict(ACCOUNT_CHOICES).get(src, src)
+                raise serializers.ValidationError({
+                    'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'
+                })
+        return data
+
 

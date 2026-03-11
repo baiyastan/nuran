@@ -177,6 +177,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=source_a,
+        account='CASH',
         amount=Decimal("80.00"),
         received_at="2024-02-05",
         comment="Office income 1",
@@ -185,6 +186,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=source_a,
+        account='CASH',
         amount=Decimal("20.00"),
         received_at="2024-02-06",
         comment="Office income 2",
@@ -193,6 +195,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_charity,
         source=source_b,
+        account='CASH',
         amount=Decimal("500.00"),
         received_at="2024-02-07",
         comment="Charity income 1",
@@ -203,6 +206,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=None,
+        account='CASH',
         amount=Decimal("50.00"),
         received_at="2024-02-08",
         comment="Uncategorized income",
@@ -273,6 +277,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_charity,
         source=source_fact_only,
+        account='CASH',
         amount=Decimal("220.00"),
         received_at="2024-02-09",
         comment="Fact only income",
@@ -312,6 +317,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=source_a,
+        account='CASH',
         amount=Decimal("100.00"),
         received_at="2024-02-10",
         comment="Income with share",
@@ -357,6 +363,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=source_a,
+        account='CASH',
         amount=Decimal("200.00"),
         received_at="2024-02-12",
         comment="Income export row",
@@ -397,6 +404,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=source_a,
+        account='CASH',
         amount=Decimal("200.00"),
         received_at="2024-02-12",
         comment="Income detail export row",
@@ -424,6 +432,7 @@ class TestDashboardIncomeSourcesAPI:
     IncomeEntry.objects.create(
         finance_period=finance_period_office,
         source=None,
+        account='CASH',
         amount=Decimal("75.00"),
         received_at="2024-02-13",
         comment="Uncategorized income detail export row",

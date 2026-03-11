@@ -29,10 +29,11 @@ export interface ActualExpenseListResponse {
   vendor_breakdown?: ActualExpenseVendorBreakdown[]
 }
 
-/** Payload for creating an actual expense: month + scope (backend resolves month_period). */
+/** Payload for creating an actual expense: month + scope + account (backend resolves month_period). */
 export interface CreateActualExpensePayload {
   month: string // YYYY-MM
   scope: ActualExpenseScope
+  account: 'CASH' | 'BANK'
   category?: number | null
   amount: number
   spent_at: string
@@ -60,7 +61,7 @@ export const actualExpensesApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['ActualExpenses', 'Report'],
     }),
-    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<Pick<ActualExpense, 'amount' | 'spent_at' | 'comment' | 'category'>> }>({
+    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<Pick<ActualExpense, 'amount' | 'spent_at' | 'comment' | 'category' | 'account'>> }>({
       query: ({ id, data }) => ({
         url: `/actual-expenses/${id}/`,
         method: 'PATCH',

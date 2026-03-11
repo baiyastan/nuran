@@ -44,6 +44,7 @@ export function EditActualExpenseModal({
   const { t } = useTranslation()
   const [formData, setFormData] = useState({
     categoryId: null as number | null,
+    account: 'CASH' as 'CASH' | 'BANK',
     amount: '',
     spent_at: '',
     comment: '',
@@ -73,6 +74,7 @@ export function EditActualExpenseModal({
       const currentCategoryId = expense.category_id ?? expense.category ?? null
       setFormData({
         categoryId: currentCategoryId,
+        account: expense.account ?? 'CASH',
         amount: expense.amount ?? '',
         spent_at: expense.spent_at ? expense.spent_at.split('T')[0] : '',
         comment: expense.comment ?? '',
@@ -82,6 +84,7 @@ export function EditActualExpenseModal({
     } else if (!isOpen) {
       setFormData({
         categoryId: null,
+        account: 'CASH',
         amount: '',
         spent_at: '',
         comment: '',
@@ -140,6 +143,7 @@ export function EditActualExpenseModal({
           spent_at: formData.spent_at,
           comment: formData.comment.trim(),
           category: formData.categoryId ?? undefined,
+          account: formData.account,
         },
       }).unwrap()
       onSuccess?.()
@@ -162,6 +166,21 @@ export function EditActualExpenseModal({
       closeOnBackdropClick={true}
     >
       <form onSubmit={handleSubmit} className="edit-actual-expense-modal-form">
+        <div className="form-field">
+          <label className="input-label">
+            {t('expenses.form.account')}
+          </label>
+          <select
+            className="input"
+            value={formData.account}
+            onChange={(e) => setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })}
+            disabled={isLoading}
+          >
+            <option value="CASH">{t('expenses.form.accountCash')}</option>
+            <option value="BANK">{t('expenses.form.accountBank')}</option>
+          </select>
+        </div>
+
         <div className="form-field">
           <label className="input-label">
             {t('expenses.form.category')}
@@ -187,8 +206,7 @@ export function EditActualExpenseModal({
           {errors.categoryId && <span className="input-error-text">{errors.categoryId}</span>}
           {leafCategories.length === 0 && (
             <span className="input-error-text">
-              {/* TODO: add i18n key expenses.form.noCategories */}
-              No expense categories for this scope
+              {t('expenses.form.noCategories')}
             </span>
           )}
         </div>

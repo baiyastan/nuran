@@ -9,6 +9,7 @@ export interface IncomeEntry {
     name: string
   } | null
   source_id?: number | null
+  account: 'CASH' | 'BANK'
   amount: string
   received_at: string
   comment: string

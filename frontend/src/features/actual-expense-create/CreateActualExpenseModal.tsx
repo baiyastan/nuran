@@ -39,6 +39,7 @@ export function CreateActualExpenseModal({
   const { t } = useTranslation()
   const [formData, setFormData] = useState({
     categoryId: null as number | null,
+    account: 'CASH' as 'CASH' | 'BANK',
     amount: '',
     spent_at: new Date().toISOString().split('T')[0],
     comment: '',
@@ -76,6 +77,7 @@ export function CreateActualExpenseModal({
     if (!isOpen) {
       setFormData({
         categoryId: null,
+        account: 'CASH',
         amount: '',
         spent_at: new Date().toISOString().split('T')[0],
         comment: '',
@@ -128,6 +130,7 @@ export function CreateActualExpenseModal({
       await createExpense({
         month,
         scope,
+        account: formData.account,
         category: formData.categoryId ?? undefined,
         amount: parseFloat(formData.amount),
         spent_at: formData.spent_at,
@@ -161,6 +164,20 @@ export function CreateActualExpenseModal({
       closeOnBackdropClick={true}
     >
       <form onSubmit={handleSubmit} className="create-actual-expense-modal-form">
+        <div className="form-field">
+          <label className="input-label">
+            {t('expenses.form.account')}
+          </label>
+          <select
+            className="input"
+            value={formData.account}
+            onChange={(e) => setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })}
+          >
+            <option value="CASH">{t('expenses.form.accountCash')}</option>
+            <option value="BANK">{t('expenses.form.accountBank')}</option>
+          </select>
+        </div>
+
         <div className="form-field">
           <label className="input-label">
             {t('expenses.form.category')}

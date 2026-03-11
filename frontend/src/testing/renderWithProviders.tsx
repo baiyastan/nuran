@@ -14,6 +14,12 @@ interface AuthStateSlice {
 }
 
 export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
+  /**
+   * When true (default), wrap children in a MemoryRouter.
+   * Set to false when the tested tree already includes its own Router
+   * (e.g. when using the shared TestRouter helper).
+   */
+  withRouter?: boolean
   initialEntries?: string[]
   preloadedState?: Partial<RootState> & { auth?: AuthStateSlice }
 }
@@ -42,6 +48,7 @@ export function createTestStore(preloadedState?: object) {
 export function renderWithProviders(
   ui: ReactElement,
   {
+    withRouter = true,
     initialEntries = ['/'],
     preloadedState,
     ...renderOptions
@@ -52,7 +59,11 @@ export function renderWithProviders(
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <Provider store={store}>
-        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+        {withRouter ? (
+          <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+        ) : (
+          children
+        )}
       </Provider>
     )
   }

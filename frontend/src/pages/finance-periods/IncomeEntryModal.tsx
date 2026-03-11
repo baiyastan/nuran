@@ -29,6 +29,7 @@ export function IncomeEntryModal({
 
   const [formData, setFormData] = useState({
     source_id: '',
+    account: 'CASH' as 'CASH' | 'BANK',
     amount: '',
     received_at: '',
     comment: '',
@@ -44,11 +45,11 @@ export function IncomeEntryModal({
   // Initialize form data when entry changes
   useEffect(() => {
     if (entry) {
-      // Format date for input (YYYY-MM-DD)
       const dateStr = entry.received_at ? new Date(entry.received_at).toISOString().split('T')[0] : ''
       const sourceId = entry.source?.id || entry.source_id || ''
       setFormData({
         source_id: sourceId ? String(sourceId) : '',
+        account: entry.account ?? 'CASH',
         amount: entry.amount,
         received_at: dateStr,
         comment: entry.comment || '',
@@ -56,6 +57,7 @@ export function IncomeEntryModal({
     } else {
       setFormData({
         source_id: '',
+        account: 'CASH',
         amount: '',
         received_at: '',
         comment: '',
@@ -98,11 +100,13 @@ export function IncomeEntryModal({
           amount: number
           received_at: string
           comment: string
+          account: 'CASH' | 'BANK'
           source_id?: number
         } = {
           amount: amountNum,
           received_at: formData.received_at,
           comment: formData.comment.trim(),
+          account: formData.account,
         }
         if (sourceIdNum !== null) {
           updateData.source_id = sourceIdNum
@@ -117,12 +121,14 @@ export function IncomeEntryModal({
           amount: number
           received_at: string
           comment: string
+          account: 'CASH' | 'BANK'
           source_id?: number
         } = {
           finance_period: financePeriodId,
           amount: amountNum,
           received_at: formData.received_at,
           comment: formData.comment.trim(),
+          account: formData.account,
         }
         if (sourceIdNum !== null) {
           createData.source_id = sourceIdNum
@@ -132,12 +138,12 @@ export function IncomeEntryModal({
 
       onSuccess()
     } catch (err: unknown) {
-      setError(getErrorMessage(err) || t('modal.errors.saveFailed', { defaultValue: 'Failed to save income entry' }))
+      setError(getErrorMessage(err) || t('modal.errors.saveFailed'))
     }
   }
 
   const handleClose = () => {
-    setFormData({ source_id: '', amount: '', received_at: '', comment: '' })
+    setFormData({ source_id: '', account: 'CASH', amount: '', received_at: '', comment: '' })
     setError('')
     onClose()
   }
@@ -153,6 +159,11 @@ export function IncomeEntryModal({
   // Add empty option for placeholder
   const selectOptions = [{ value: '', label: t('incomePlan.selectSource', { ns: 'financePeriods' }) }, ...sourceOptions]
 
+  const accountOptions = [
+    { value: 'CASH', label: t('income.common.accountCash', { ns: 'financePeriods' }) },
+    { value: 'BANK', label: t('income.common.accountBank', { ns: 'financePeriods' }) },
+  ]
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={isEditMode ? t('modal.title.edit', { defaultValue: 'Edit Income Entry' }) : t('modal.title.add', { defaultValue: 'Add Income Entry' })}>
       <form onSubmit={handleSubmit} className="income-entry-modal-form">
@@ -162,6 +173,13 @@ export function IncomeEntryModal({
           value={formData.source_id}
           onChange={(e) => setFormData({ ...formData, source_id: e.target.value })}
           disabled={isLoadingSources}
+        />
+
+        <Select
+          label={t('income.common.destinationAccount', { ns: 'financePeriods' })}
+          options={accountOptions}
+          value={formData.account}
+          onChange={(e) => setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })}
         />
 
         <Input

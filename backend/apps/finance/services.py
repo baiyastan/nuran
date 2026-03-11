@@ -3,6 +3,7 @@ Finance services - business logic layer.
 """
 from datetime import date
 from decimal import Decimal
+from django.db import transaction
 from django.db.models import Sum, Count, Q, Value, DecimalField
 from django.db.models.functions import Coalesce
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -65,13 +66,12 @@ class FinancePeriodService:
         # Check month period is open
         month_period = data.get('month_period')
         assert_month_open(month_period)
-        
+
         data['created_by'] = user
-        finance_period = FinancePeriod.objects.create(**data)
-        
-        # Audit log
-        AuditLogService.log_create(user, finance_period)
-        
+        with transaction.atomic():
+            finance_period = FinancePeriod.objects.create(**data)
+            AuditLogService.log_create(user, finance_period)
+
         return finance_period
     
     @staticmethod
@@ -80,7 +80,7 @@ class FinancePeriodService:
         # Check month period is open (from validated_data or existing instance)
         month_period = data.get('month_period', finance_period.month_period)
         assert_month_open(month_period)
-        
+
         before_state = {}
         for field in finance_period._meta.fields:
             if field.name not in ['id', 'created_at', 'updated_at']:
@@ -90,14 +90,13 @@ class FinancePeriodService:
                         before_state[field.name] = value.pk
                     else:
                         before_state[field.name] = value
-        
-        for key, value in data.items():
-            setattr(finance_period, key, value)
-        finance_period.save()
-        
-        # Audit log
-        AuditLogService.log_update(user, finance_period, before_state)
-        
+
+        with transaction.atomic():
+            for key, value in data.items():
+                setattr(finance_period, key, value)
+            finance_period.save()
+            AuditLogService.log_update(user, finance_period, before_state)
+
         return finance_period
     
     @staticmethod
@@ -105,21 +104,20 @@ class FinancePeriodService:
         """Delete a finance period."""
         # Check month period is open
         assert_month_open(finance_period.month_period)
-        
+
         # Capture object_id BEFORE deletion
         object_id = finance_period.pk
-        
+
         before_state = {
             'id': finance_period.id,
             'month_period_id': finance_period.month_period_id,
             'fund_kind': finance_period.fund_kind,
             'project_id': finance_period.project_id if finance_period.project else None,
         }
-        
-        finance_period.delete()
-        
-        # Audit log - pass object_id_override since instance is deleted
-        AuditLogService.log_delete(user, finance_period, before_state, object_id_override=object_id)
+
+        with transaction.atomic():
+            finance_period.delete()
+            AuditLogService.log_delete(user, finance_period, before_state, object_id_override=object_id)
     
     @staticmethod
     def sync_status_from_month_period(month_period):
@@ -171,13 +169,12 @@ class IncomeEntryService:
         
         # Check that related MonthPeriod exists (OPEN or LOCKED allowed for facts)
         assert_month_exists_for_facts(finance_period.month_period)
-        
+
         data['created_by'] = user
-        income_entry = IncomeEntry.objects.create(**data)
-        
-        # Audit log
-        AuditLogService.log_create(user, income_entry)
-        
+        with transaction.atomic():
+            income_entry = IncomeEntry.objects.create(**data)
+            AuditLogService.log_create(user, income_entry)
+
         return income_entry
     
     @staticmethod
@@ -198,7 +195,7 @@ class IncomeEntryService:
         # Check that related MonthPeriod exists (from validated_data or existing instance)
         finance_period = data.get('finance_period', income_entry.finance_period)
         assert_month_exists_for_facts(finance_period.month_period)
-        
+
         before_state = {}
         for field in income_entry._meta.fields:
             if field.name not in ['id', 'created_at', 'updated_at']:
@@ -208,14 +205,13 @@ class IncomeEntryService:
                         before_state[field.name] = value.pk
                     else:
                         before_state[field.name] = value
-        
-        for key, value in data.items():
-            setattr(income_entry, key, value)
-        income_entry.save()
-        
-        # Audit log
-        AuditLogService.log_update(user, income_entry, before_state)
-        
+
+        with transaction.atomic():
+            for key, value in data.items():
+                setattr(income_entry, key, value)
+            income_entry.save()
+            AuditLogService.log_update(user, income_entry, before_state)
+
         return income_entry
     
     @staticmethod
@@ -223,21 +219,20 @@ class IncomeEntryService:
         """Delete an income entry."""
         # Check that related MonthPeriod exists
         assert_month_exists_for_facts(income_entry.finance_period.month_period)
-        
+
         # Capture object_id BEFORE deletion
         object_id = income_entry.pk
-        
+
         before_state = {
             'id': income_entry.id,
             'finance_period_id': income_entry.finance_period_id,
             'amount': str(income_entry.amount),
             'received_at': str(income_entry.received_at),
         }
-        
-        income_entry.delete()
-        
-        # Audit log - pass object_id_override since instance is deleted
-        AuditLogService.log_delete(user, income_entry, before_state, object_id_override=object_id)
+
+        with transaction.atomic():
+            income_entry.delete()
+            AuditLogService.log_delete(user, income_entry, before_state, object_id_override=object_id)
 
 
 class IncomePlanService:
@@ -386,12 +381,11 @@ class IncomePlanService:
         # Create instance to check period
         income_plan = IncomePlan(**data)
         IncomePlanService.assert_period_open(income_plan)
-        
-        income_plan.save()
-        
-        # Audit log
-        AuditLogService.log_create(user, income_plan)
-        
+
+        with transaction.atomic():
+            income_plan.save()
+            AuditLogService.log_create(user, income_plan)
+
         return income_plan
     
     @staticmethod
@@ -409,7 +403,7 @@ class IncomePlanService:
         
         # Check period is open
         IncomePlanService.assert_period_open(income_plan)
-        
+
         before_state = {}
         for field in income_plan._meta.fields:
             if field.name not in ['id', 'created_at', 'updated_at']:
@@ -419,18 +413,17 @@ class IncomePlanService:
                         before_state[field.name] = value.pk
                     else:
                         before_state[field.name] = value
-        
+
         for key, value in data.items():
             setattr(income_plan, key, value)
-        
+
         # Check period is still open after update (in case period changed)
         IncomePlanService.assert_period_open(income_plan)
-        
-        income_plan.save()
-        
-        # Audit log
-        AuditLogService.log_update(user, income_plan, before_state)
-        
+
+        with transaction.atomic():
+            income_plan.save()
+            AuditLogService.log_update(user, income_plan, before_state)
+
         return income_plan
     
     @staticmethod
@@ -438,21 +431,20 @@ class IncomePlanService:
         """Delete an income plan."""
         # Check period is open
         IncomePlanService.assert_period_open(income_plan)
-        
+
         # Capture object_id BEFORE deletion
         object_id = income_plan.pk
-        
+
         before_state = {
             'id': income_plan.id,
             'period_id': income_plan.period_id,
             'source_id': income_plan.source_id,
             'amount': str(income_plan.amount),
         }
-        
-        income_plan.delete()
-        
-        # Audit log - pass object_id_override since instance is deleted
-        AuditLogService.log_delete(user, income_plan, before_state, object_id_override=object_id)
+
+        with transaction.atomic():
+            income_plan.delete()
+            AuditLogService.log_delete(user, income_plan, before_state, object_id_override=object_id)
 
 
 class IncomeSummaryService:

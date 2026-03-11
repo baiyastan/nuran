@@ -1,69 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderReportsPage } from './helpers'
 import { useAuth } from '@/shared/hooks/useAuth'
-import { useReportsData } from '../hooks/useReportsData'
+import { useGetMonthPeriodQuery } from '@/shared/api/monthPeriodsApi'
 
 vi.mock('@/shared/hooks/useAuth', () => ({ useAuth: vi.fn() }))
-vi.mock('../hooks/useReportsData', () => ({ useReportsData: vi.fn() }))
+vi.mock('@/shared/api/monthPeriodsApi', () => ({
+  useGetMonthPeriodQuery: vi.fn(),
+}))
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 vi.mock('@/features/month-gate/MonthGateBanner', () => ({ MonthGateBanner: () => null }))
 
-describe('ReportsPage – useReportsData hook', () => {
+describe('ReportsPage – month-period hook', () => {
   beforeEach(() => {
     vi.mocked(useAuth).mockClear()
-    vi.mocked(useReportsData).mockClear()
+    vi.mocked(useGetMonthPeriodQuery).mockClear()
+    // Default happy-path month period result so destructuring in ReportsPage never fails
+    vi.mocked(useGetMonthPeriodQuery).mockReturnValue({
+      data: {
+        id: 1,
+        month: '2026-02',
+        status: 'OPEN',
+        created_at: '',
+        updated_at: '',
+      },
+      isLoading: false,
+      error: undefined,
+      isError: false,
+    } as any)
   })
 
-  it('calls useReportsData with selectedMonth, selectedTab, selectedProjectId', () => {
+  it('calls useGetMonthPeriodQuery with selected month from URL', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=office&scope=office&month=2026-02',
     })
-    expect(useReportsData).toHaveBeenCalled()
-    const lastCall = vi.mocked(useReportsData).mock.calls[vi.mocked(useReportsData).mock.calls.length - 1]
-    const args = lastCall[0]
-    expect(args).toMatchObject({
-      selectedMonth: '2026-02',
-      selectedTab: 'office',
-      selectedProjectId: null,
-    })
+    expect(useGetMonthPeriodQuery).toHaveBeenCalled()
+    const args = vi.mocked(useGetMonthPeriodQuery).mock.calls[0][0]
+    expect(args).toBe('2026-02')
   })
 
-  it('calls useReportsData with selectedTab=project for foreman', () => {
+  it('calls useGetMonthPeriodQuery for foreman with month from URL', () => {
     renderReportsPage({
       role: 'foreman',
       initialUrl: '/reports?tab=office&scope=office&month=2026-03',
     })
-    const lastCall = vi.mocked(useReportsData).mock.calls[vi.mocked(useReportsData).mock.calls.length - 1]
-    const args = lastCall[0]
-    expect(args.selectedTab).toBe('project')
-    expect(args.selectedMonth).toBe('2026-03')
-    expect(args.selectedProjectId).toBeNull()
+    const args = vi.mocked(useGetMonthPeriodQuery).mock.calls[0][0]
+    expect(args).toBe('2026-03')
   })
 
-  it('calls useReportsData with default month when month param missing', () => {
+  it('uses default month when month param missing', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports',
     })
-    const lastCall = vi.mocked(useReportsData).mock.calls[vi.mocked(useReportsData).mock.calls.length - 1]
-    const args = lastCall[0]
-    expect(args.selectedMonth).toMatch(/^\d{4}-\d{2}$/)
-    expect(args.selectedTab).toBe('office')
-    expect(args.selectedProjectId).toBeNull()
+    const args = vi.mocked(useGetMonthPeriodQuery).mock.calls[0][0]
+    expect(args).toMatch(/^\d{4}-\d{2}$/)
   })
 
-  it('calls useReportsData with income tab when tab=income', () => {
+  it('still calls month-period query when tab=income is present', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=income&month=2026-02',
     })
-    const lastCall = vi.mocked(useReportsData).mock.calls[vi.mocked(useReportsData).mock.calls.length - 1]
-    const args = lastCall[0]
-    expect(args.selectedTab).toBe('income')
-    expect(args.selectedMonth).toBe('2026-02')
-    expect(args.selectedProjectId).toBeNull()
+    const args = vi.mocked(useGetMonthPeriodQuery).mock.calls[0][0]
+    expect(args).toBe('2026-02')
   })
 })

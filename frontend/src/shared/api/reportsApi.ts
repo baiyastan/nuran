@@ -45,6 +45,8 @@ export interface DashboardKpiResponse {
   income_plan: string
   expense_plan: string
   net_plan: string
+  cash_balance: string
+  bank_balance: string
 }
 
 export interface DashboardKpiParams {

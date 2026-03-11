@@ -82,6 +82,7 @@ class TestIncomeEntryMonthLock:
         payload = {
             "finance_period": finance_period_locked.id,
             "source_id": income_source.id,
+            "account": "CASH",
             "amount": "10000.00",
             "received_at": "2026-03-15",
             "comment": "Director entry in locked month",

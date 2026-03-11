@@ -3,7 +3,7 @@ Finance API filters.
 """
 import django_filters
 from django.core.exceptions import ValidationError
-from .models import IncomeEntry
+from .models import IncomeEntry, ACCOUNT_CHOICES
 
 
 class IncomeEntryFilter(django_filters.FilterSet):
@@ -12,7 +12,8 @@ class IncomeEntryFilter(django_filters.FilterSet):
     month = django_filters.CharFilter(method='filter_by_month', help_text='Filter by month (format: YYYY-MM)')
     fund_kind = django_filters.CharFilter(field_name='finance_period__fund_kind', lookup_expr='exact')
     project = django_filters.NumberFilter(field_name='finance_period__project', lookup_expr='exact')
-    
+    account = django_filters.ChoiceFilter(choices=ACCOUNT_CHOICES)
+
     def filter_by_month(self, queryset, name, value):
         """Filter by received_at year/month from YYYY-MM format."""
         if not value:
@@ -39,5 +40,5 @@ class IncomeEntryFilter(django_filters.FilterSet):
     
     class Meta:
         model = IncomeEntry
-        fields = ['finance_period', 'month', 'fund_kind', 'project']
+        fields = ['finance_period', 'month', 'fund_kind', 'project', 'account']
 

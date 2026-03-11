@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.budgeting.models import MonthPeriod, ExpenseCategory
 from apps.expenses.models import ActualExpense
+from apps.finance.models import FinancePeriod, IncomeEntry
 
 
 User = get_user_model()
@@ -58,10 +59,30 @@ class TestActualExpenseMonthLock:
         token = RefreshToken.for_user(admin_user)
         api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
 
+        # Seed positive CASH balance before the expense date so overdraft
+        # prevention does not block this request. The purpose of this test
+        # is to verify LOCKED month behavior, not negative-balance handling.
+        prev_month = MonthPeriod.objects.create(month="2026-02", status="OPEN")
+        finance_period_office = FinancePeriod.objects.create(
+            month_period=prev_month,
+            fund_kind="office",
+            project=None,
+            created_by=admin_user,
+        )
+        IncomeEntry.objects.create(
+            finance_period=finance_period_office,
+            account="CASH",
+            amount=Decimal("5000.00"),
+            received_at="2026-02-15",
+            comment="Seed CASH balance before locked month",
+            created_by=admin_user,
+        )
+
         payload = {
             "month_period": locked_month_period.id,
             "scope": "OFFICE",
             "category": expense_category_office.id,
+            "account": "CASH",
             "amount": "1234.56",
             "spent_at": "2026-03-10",
             "comment": "Locked month actual expense",

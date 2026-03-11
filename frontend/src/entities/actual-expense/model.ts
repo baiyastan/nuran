@@ -6,6 +6,7 @@ export interface ActualExpense {
   category?: number | null
   category_id?: number | null
   category_name?: string | null
+  account: 'CASH' | 'BANK'
   amount: string
   spent_at: string
   comment: string

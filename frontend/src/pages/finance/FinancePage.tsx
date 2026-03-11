@@ -15,6 +15,11 @@ import {
   useDeleteIncomeEntryMutation,
   IncomeEntry,
 } from '@/shared/api/incomeEntriesApi'
+import {
+  useListTransfersQuery,
+  useDeleteTransferMutation,
+  type Transfer,
+} from '@/shared/api/transfersApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { useToastContext } from '@/shared/ui/Toast/ToastProvider'
 import { Button } from '@/shared/ui/Button/Button'
@@ -24,6 +29,7 @@ import { formatMoneyKGS } from '@/shared/utils/formatMoney'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { IncomePlanModal } from '@/pages/finance-periods/IncomePlanModal'
 import { IncomeEntryModal } from '@/pages/finance-periods/IncomeEntryModal'
+import { TransferModal } from '@/features/transfer-modal/TransferModal'
 import './FinancePage.css'
 
 function FinancePage() {
@@ -83,8 +89,12 @@ function FinancePage() {
     { skip: !officePeriodId }
   )
 
+  const { data: transfersData, isLoading: isLoadingTransfers, error: transfersError } =
+    useListTransfersQuery({ month: selectedMonth })
+
   const [deleteIncomePlan, { isLoading: isDeletingPlan }] = useDeleteIncomePlanMutation()
   const [deleteIncomeEntry, { isLoading: isDeletingEntry }] = useDeleteIncomeEntryMutation()
+  const [deleteTransfer, { isLoading: isDeletingTransfer }] = useDeleteTransferMutation()
 
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [editingPlan, setEditingPlan] = useState<IncomePlan | null>(null)
@@ -92,6 +102,9 @@ function FinancePage() {
   const [showEntryModal, setShowEntryModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState<IncomeEntry | null>(null)
   const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
+  const [deletingTransferId, setDeletingTransferId] = useState<number | null>(null)
 
   const isPeriodOpen = displayStatus === 'open'
   const isPeriodLocked = displayStatus === 'locked'
@@ -207,6 +220,40 @@ function FinancePage() {
     setEditingEntry(null)
   }
 
+  const handleAddTransfer = () => {
+    setEditingTransfer(null)
+    setShowTransferModal(true)
+  }
+  const handleEditTransfer = (tr: Transfer) => {
+    setEditingTransfer(tr)
+    setShowTransferModal(true)
+  }
+  const handleDeleteTransfer = async (transferId: number) => {
+    if (!window.confirm(t('financePeriodDetails.confirm.deleteTransfer'))) return
+    setDeletingTransferId(transferId)
+    try {
+      await deleteTransfer(transferId).unwrap()
+      showSuccess(t('financePeriodDetails.toast.transferDeleted'))
+    } catch (err: unknown) {
+      showError(getErrorMessage(err) || t('financePeriodDetails.toast.transferDeleteError'))
+    } finally {
+      setDeletingTransferId(null)
+    }
+  }
+  const handleTransferModalSuccess = () => {
+    setShowTransferModal(false)
+    setEditingTransfer(null)
+    showSuccess(
+      editingTransfer
+        ? t('financePeriodDetails.toast.transferUpdated')
+        : t('financePeriodDetails.toast.transferCreated')
+    )
+  }
+  const handleTransferModalClose = () => {
+    setShowTransferModal(false)
+    setEditingTransfer(null)
+  }
+
   const planColumns = [
     { key: 'source', label: t('income.common.source', { ns: 'financePeriods' }) },
     { key: 'amount', label: t('financePeriodDetails.plans.amountColumn') },
@@ -287,6 +334,48 @@ function FinancePage() {
     if (column === 'actions' && React.isValidElement(value)) return value
     return value as React.ReactNode
   }
+
+  const transferColumns = [
+    { key: 'date', label: t('income.common.date', { ns: 'financePeriods' }) },
+    { key: 'from', label: t('financePeriodDetails.transfers.from') },
+    { key: 'to', label: t('financePeriodDetails.transfers.to') },
+    { key: 'amount', label: t('income.common.amount', { ns: 'financePeriods' }) },
+    { key: 'comment', label: t('income.common.comment', { ns: 'financePeriods' }) },
+    ...(canManageEntries ? [{ key: 'actions', label: t('actions', { ns: 'common' }) }] : []),
+  ]
+  const transferTableData =
+    transfersData?.results.map((tr) => ({
+      id: tr.id,
+      date: formatDate(tr.transferred_at),
+      from: tr.source_account === 'CASH' ? t('income.common.accountCash', { ns: 'financePeriods' }) : t('income.common.accountBank', { ns: 'financePeriods' }),
+      to: tr.destination_account === 'CASH' ? t('income.common.accountCash', { ns: 'financePeriods' }) : t('income.common.accountBank', { ns: 'financePeriods' }),
+      amount: formatMoneyKGS(tr.amount),
+      comment: tr.comment || '-',
+      ...(canManageEntries && {
+        actions: (
+          <div className="table-actions">
+            <Button
+              size="small"
+              variant="secondary"
+              onClick={() => handleEditTransfer(tr)}
+              disabled={isDeletingTransfer}
+            >
+              {t('financePeriodDetails.actions.edit')}
+            </Button>
+            <Button
+              size="small"
+              variant="danger"
+              onClick={() => handleDeleteTransfer(tr.id)}
+              disabled={isDeletingTransfer || deletingTransferId === tr.id}
+            >
+              {deletingTransferId === tr.id
+                ? t('financePeriodDetails.actions.deleting')
+                : t('financePeriodDetails.actions.delete')}
+            </Button>
+          </div>
+        ),
+      }),
+    })) || []
 
   return (
     <div className="finance-page">
@@ -401,6 +490,35 @@ function FinancePage() {
         )}
       </div>
 
+      {/* Section 3: Internal Transfers (Cash ↔ Bank) */}
+      <div className="details-table transfers-section">
+        <div className="table-header">
+          <h3>{t('financePeriodDetails.transfers.title')}</h3>
+          {canManageEntries && (
+            <Button onClick={handleAddTransfer}>
+              {t('financePeriodDetails.transfers.addButton')}
+            </Button>
+          )}
+        </div>
+        {isLoadingTransfers ? (
+          <TableSkeleton columnCount={5} />
+        ) : transfersError ? (
+          <div className="finance-page-error">
+            {t('financePeriodDetails.error.transfers')}
+          </div>
+        ) : !transfersData?.results.length ? (
+          <div className="finance-page-empty">
+            {t('financePeriodDetails.transfers.empty')}
+          </div>
+        ) : (
+          <Table
+            columns={transferColumns}
+            data={transferTableData}
+            renderCell={renderCell}
+          />
+        )}
+      </div>
+
       {showPlanModal && (
         <IncomePlanModal
           isOpen={showPlanModal}
@@ -419,6 +537,15 @@ function FinancePage() {
           onSuccess={handleEntryModalSuccess}
           entry={editingEntry}
           financePeriodId={officePeriodId}
+        />
+      )}
+
+      {showTransferModal && (
+        <TransferModal
+          isOpen={showTransferModal}
+          onClose={handleTransferModalClose}
+          onSuccess={handleTransferModalSuccess}
+          transfer={editingTransfer}
         />
       )}
     </div>

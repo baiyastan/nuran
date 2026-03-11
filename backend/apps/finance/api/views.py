@@ -3,6 +3,7 @@ Finance API views.
 """
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum, Count, DecimalField, Value, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
@@ -13,8 +14,9 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 
 from apps.budgeting.models import MonthPeriod
+from apps.expenses.services import get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG
-from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan
+from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer, ACCOUNT_CHOICES, AccountLedgerLock
 from ..services import (
     FinancePeriodService,
     IncomeEntryService,
@@ -23,8 +25,8 @@ from ..services import (
     assert_month_open,
     assert_month_exists_for_facts,
 )
-from ..serializers import FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer, IncomePlanSerializer, IncomeSummarySerializer
-from ..permissions import FinancePeriodPermission, IncomeEntryPermission, IncomeSourcePermission, IncomePlanPermission
+from ..serializers import FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer, IncomePlanSerializer, IncomeSummarySerializer, TransferSerializer
+from ..permissions import FinancePeriodPermission, IncomeEntryPermission, IncomeSourcePermission, IncomePlanPermission, TransferPermission
 from ..filters import IncomeEntryFilter
 
 
@@ -425,3 +427,85 @@ class IncomePlanViewSet(viewsets.ModelViewSet):
             },
             'results': serializer.data
         })
+
+
+class TransferViewSet(viewsets.ModelViewSet):
+    """ViewSet for Transfer (internal cash↔bank). Not income, not expense."""
+
+    queryset = Transfer.objects.all()
+    serializer_class = TransferSerializer
+    permission_classes = [TransferPermission]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['source_account', 'destination_account']
+    ordering_fields = ['transferred_at', 'created_at', 'amount']
+    ordering = ['-transferred_at', '-created_at']
+
+    def get_queryset(self):
+        qs = Transfer.objects.select_related('created_by')
+        month = self.request.query_params.get('month')
+        if month:
+            try:
+                year_int = int(month[:4])
+                month_int = int(month[5:7])
+                if 1 <= month_int <= 12:
+                    from datetime import date
+                    from calendar import monthrange
+                    first = date(year_int, month_int, 1)
+                    last_day = monthrange(year_int, month_int)[1]
+                    last = date(year_int, month_int, last_day)
+                    qs = qs.filter(transferred_at__gte=first, transferred_at__lte=last)
+            except (ValueError, IndexError):
+                pass
+        return qs
+
+    def perform_create(self, serializer):
+        src = serializer.validated_data.get('source_account')
+        amount = serializer.validated_data.get('amount')
+        transferred_at = serializer.validated_data.get('transferred_at')
+
+        if src in dict(ACCOUNT_CHOICES) and amount is not None and transferred_at is not None:
+            with transaction.atomic():
+                # Lock per-account row to serialize debits from this source account
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                # Re-check balance inside locked transaction
+                balance = get_balance_for_account(
+                    src,
+                    transferred_at,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=None,
+                )
+                if balance < amount:
+                    label = dict(ACCOUNT_CHOICES).get(src, src)
+                    raise ValidationError(
+                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                    )
+                serializer.save(created_by=self.request.user)
+        else:
+            serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        src = serializer.validated_data.get('source_account', getattr(instance, 'source_account', None))
+        amount = serializer.validated_data.get('amount', getattr(instance, 'amount', None))
+        transferred_at = serializer.validated_data.get('transferred_at', getattr(instance, 'transferred_at', None))
+
+        if src in dict(ACCOUNT_CHOICES) and amount is not None and transferred_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                balance = get_balance_for_account(
+                    src,
+                    transferred_at,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=getattr(instance, 'pk', None),
+                )
+                if balance < amount:
+                    label = dict(ACCOUNT_CHOICES).get(src, src)
+                    raise ValidationError(
+                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                    )
+                serializer.save()
+        else:
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.delete()

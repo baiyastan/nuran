@@ -301,12 +301,12 @@ export function useReportsData({
 
     // Error states
     errors: {
-      financePeriod: financePeriodError ? 'Failed to load finance period' : null,
+      financePeriod: financePeriodError ? t('errors.loadFinancePeriod') : null,
       monthPeriod: null,
-      incomePlanned: incomePlannedError ? 'Failed to load income plans' : null,
-      incomeActual: incomeActualError ? 'Failed to load income entries' : null,
-      expensePlanned: monthlyReportError ? 'Failed to load report' : null,
-      expenseActual: monthlyReportError ? 'Failed to load report' : null,
+      incomePlanned: incomePlannedError ? t('errors.loadIncomePlans') : null,
+      incomeActual: incomeActualError ? t('errors.loadIncomeEntries') : null,
+      expensePlanned: monthlyReportError ? t('errors.loadReport') : null,
+      expenseActual: monthlyReportError ? t('errors.loadReport') : null,
     },
 
     // Warnings

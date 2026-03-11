@@ -8,6 +8,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
+from apps.finance.models import ACCOUNT_CHOICES
+
 
 class ActualExpense(models.Model):
     """Actual expense - real spending keyed by month and scope (OFFICE/PROJECT/CHARITY)."""
@@ -37,6 +39,11 @@ class ActualExpense(models.Model):
         related_name='expense_actual_expenses',
         help_text='Expense category (optional)',
     )
+    account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Source account: Cash (кассадан кетти) or Bank (банктан кетти)',
+    )
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -61,6 +68,7 @@ class ActualExpense(models.Model):
             models.Index(fields=['month_period', 'scope']),
             models.Index(fields=['category']),
             models.Index(fields=['spent_at']),
+            models.Index(fields=['account']),
         ]
 
     def clean(self):
@@ -74,6 +82,8 @@ class ActualExpense(models.Model):
                     {'category': f'Category scope "{self.category.scope}" does not match expense scope "{self.scope}".'}
                 )
             validate_expense_category(self.category, plan_scope=None)
+        if self.account and self.account not in dict(ACCOUNT_CHOICES):
+            raise ValidationError("Account must be CASH or BANK.")
 
     def save(self, *args, **kwargs):
         self.full_clean()

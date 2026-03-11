@@ -3,14 +3,18 @@ Expenses API views.
 """
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
 from apps.expenses.models import ActualExpense
 from apps.expenses.permissions import ActualExpensePermission
+from apps.expenses.services import assert_sufficient_balance
+from apps.finance.models import ACCOUNT_CHOICES, AccountLedgerLock
 from .serializers import ActualExpenseSerializer
 
 
@@ -21,7 +25,7 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [ActualExpensePermission]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     # Scope is handled via filterset; category (including null) is handled explicitly in get_queryset.
-    filterset_fields = ['scope']
+    filterset_fields = ['scope', 'account']
     ordering_fields = ['spent_at', 'created_at', 'amount']
     ordering = ['-spent_at', '-created_at']
 
@@ -94,10 +98,46 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     def perform_create(self, serializer):
-        serializer.save()
+        account = serializer.validated_data.get('account')
+        amount = serializer.validated_data.get('amount')
+        spent_at = serializer.validated_data.get('spent_at')
+
+        # If account is a known ledger account, serialize debits with a per-account lock
+        if account in dict(ACCOUNT_CHOICES) and amount is not None and spent_at is not None:
+            with transaction.atomic():
+                # Acquire per-account lock row (creates row once, then locks it on each use)
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=account)
+                # Re-check balance inside the locked transaction to close TOCTOU window
+                try:
+                    assert_sufficient_balance(account, amount, spent_at, exclude_expense_id=None)
+                except ValueError as e:
+                    raise DRFValidationError({'amount': [str(e)]})
+                serializer.save()
+        else:
+            serializer.save()
 
     def perform_update(self, serializer):
-        serializer.save()
+        # Resolve effective values after patch (fall back to instance for partial updates)
+        instance = serializer.instance
+        account = serializer.validated_data.get('account', getattr(instance, 'account', None))
+        amount = serializer.validated_data.get('amount', getattr(instance, 'amount', None))
+        spent_at = serializer.validated_data.get('spent_at', getattr(instance, 'spent_at', None))
+
+        if account in dict(ACCOUNT_CHOICES) and amount is not None and spent_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=account)
+                try:
+                    assert_sufficient_balance(
+                        account,
+                        amount,
+                        spent_at,
+                        exclude_expense_id=getattr(instance, 'pk', None),
+                    )
+                except ValueError as e:
+                    raise DRFValidationError({'amount': [str(e)]})
+                serializer.save()
+        else:
+            serializer.save()
 
     def perform_destroy(self, instance):
         instance.delete()

@@ -257,6 +257,7 @@ class TestIncomeEntryModel:
         
         income_entry = IncomeEntry(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='',
@@ -277,6 +278,7 @@ class TestIncomeEntryModel:
         # Test zero amount
         income_entry = IncomeEntry(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('0.00'),
             received_at='2024-01-15',
             comment='Test comment',
@@ -288,6 +290,7 @@ class TestIncomeEntryModel:
         # Test negative amount
         income_entry = IncomeEntry(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('-100.00'),
             received_at='2024-01-15',
             comment='Test comment',
@@ -307,6 +310,7 @@ class TestIncomeEntryModel:
         
         income_entry = IncomeEntry(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Test comment',
@@ -375,6 +379,7 @@ class TestIncomeEntryRBAC:
         # Create income entry as admin
         income_entry = IncomeEntry.objects.create(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Test income',
@@ -450,6 +455,7 @@ class TestIncomeEntryRBAC:
         # Create income entries
         assigned_entry = IncomeEntry.objects.create(
             finance_period=assigned_fp,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Assigned project income',
@@ -457,6 +463,7 @@ class TestIncomeEntryRBAC:
         )
         unassigned_entry = IncomeEntry.objects.create(
             finance_period=unassigned_fp,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-15',
             comment='Unassigned project income',
@@ -516,6 +523,7 @@ class TestIncomeEntryRBAC:
         # Create income entries
         project_entry = IncomeEntry.objects.create(
             finance_period=project_fp,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Project income',
@@ -523,6 +531,7 @@ class TestIncomeEntryRBAC:
         )
         office_entry = IncomeEntry.objects.create(
             finance_period=office_fp,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-15',
             comment='Office income',
@@ -530,6 +539,7 @@ class TestIncomeEntryRBAC:
         )
         charity_entry = IncomeEntry.objects.create(
             finance_period=charity_fp,
+            account='CASH',
             amount=Decimal('3000.00'),
             received_at='2024-01-15',
             comment='Charity income',
@@ -572,6 +582,7 @@ class TestIncomeEntryFiltering:
         
         entry1 = IncomeEntry.objects.create(
             finance_period=finance_period1,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Entry 1',
@@ -579,6 +590,7 @@ class TestIncomeEntryFiltering:
         )
         entry2 = IncomeEntry.objects.create(
             finance_period=finance_period2,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-16',
             comment='Entry 2',
@@ -609,6 +621,7 @@ class TestIncomeEntryFiltering:
         
         entry1 = IncomeEntry.objects.create(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='January entry',
@@ -616,6 +629,7 @@ class TestIncomeEntryFiltering:
         )
         entry2 = IncomeEntry.objects.create(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-02-15',
             comment='February entry',
@@ -652,6 +666,7 @@ class TestIncomeEntryFiltering:
         
         project_entry = IncomeEntry.objects.create(
             finance_period=project_fp,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Project income',
@@ -659,6 +674,7 @@ class TestIncomeEntryFiltering:
         )
         office_entry = IncomeEntry.objects.create(
             finance_period=office_fp,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-15',
             comment='Office income',
@@ -706,6 +722,7 @@ class TestIncomeEntryFiltering:
         
         entry1 = IncomeEntry.objects.create(
             finance_period=fp1,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Project 1 income',
@@ -713,6 +730,7 @@ class TestIncomeEntryFiltering:
         )
         entry2 = IncomeEntry.objects.create(
             finance_period=fp2,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-15',
             comment='Project 2 income',
@@ -743,6 +761,7 @@ class TestIncomeEntryFiltering:
         
         entry1 = IncomeEntry.objects.create(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
             comment='Match all filters',
@@ -750,6 +769,7 @@ class TestIncomeEntryFiltering:
         )
         entry2 = IncomeEntry.objects.create(
             finance_period=finance_period,
+            account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-02-15',
             comment='Different month',
@@ -1089,6 +1109,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source,
+            account='CASH',
             amount=Decimal('1200.00'),
             received_at='2024-01-15',
             comment='Test entry',
@@ -1135,6 +1156,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source_entry_only,
+            account='CASH',
             amount=Decimal('300.00'),
             received_at='2024-01-15',
             comment='Unplanned entry',
@@ -1150,6 +1172,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source_both,
+            account='CASH',
             amount=Decimal('1100.00'),
             received_at='2024-01-16',
             comment='Planned entry',
@@ -1226,6 +1249,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source1,
+            account='CASH',
             amount=Decimal('1100.00'),
             received_at='2024-01-15',
             comment='Entry 1',
@@ -1234,6 +1258,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source2,
+            account='CASH',
             amount=Decimal('1900.00'),
             received_at='2024-01-16',
             comment='Entry 2',
@@ -1305,6 +1330,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source_a,
+            account='CASH',
             amount=Decimal('40.00'),
             received_at='2024-01-15',
             comment='Entry for source A',
@@ -1315,6 +1341,7 @@ class TestIncomeSummaryEndpoint:
         IncomeEntry.objects.create(
             finance_period=finance_period,
             source=source_b,
+            account='CASH',
             amount=Decimal('10.00'),
             received_at='2024-01-16',
             comment='Entry for source B',

@@ -188,3 +188,17 @@ class IncomePlanPermission(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         """Object-level permission check."""
         return self.has_permission(request, view)
+
+
+class TransferPermission(permissions.BasePermission):
+    """Permission for Transfer operations - admin and director only."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if _is_admin(request.user) or _is_director(request.user):
+            return True
+        _deny()
+
+    def has_object_permission(self, request, view, obj):
+        return self.has_permission(request, view)

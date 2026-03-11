@@ -9,6 +9,9 @@ import ruTranslations from './resources/ru'
 const kyCommon = kyTranslations.common || {}
 const ruCommon = ruTranslations.common || {}
 
+const kyTransfers = kyTranslations.transfers || {}
+const ruTransfers = ruTranslations.transfers || {}
+
 const kyFinancePeriods = kyTranslations.financePeriods || {}
 const ruFinancePeriods = ruTranslations.financePeriods || {}
 
@@ -49,6 +52,7 @@ i18n
       ky: {
         translation: kyTranslations,
         common: kyCommon,
+        transfers: kyTransfers,
         financePeriods: kyFinancePeriods,
         incomeEntries: kyIncomeEntries,
         financePeriodDetails: kyFinancePeriodDetails,
@@ -59,6 +63,7 @@ i18n
       ru: {
         translation: ruTranslations,
         common: ruCommon,
+        transfers: ruTransfers,
         financePeriods: ruFinancePeriods,
         incomeEntries: ruIncomeEntries,
         financePeriodDetails: ruFinancePeriodDetails,

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useGetBudgetReportQuery, useUpdateSummaryCommentMutation } from '@/shared/api/budgetsApi'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
@@ -8,6 +9,7 @@ import { formatDate, formatCurrency, getErrorMessage } from '@/shared/lib/utils'
 import './BudgetDetailPage.css'
 
 function BudgetDetailPage() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const budgetId = id ? parseInt(id, 10) : 0
   const { data: report, isLoading, error, refetch } = useGetBudgetReportQuery(budgetId)
@@ -24,7 +26,7 @@ function BudgetDetailPage() {
 
   const handleSaveComment = async () => {
     if (!summaryComment.trim()) {
-      setCommentError('Comment is required')
+      setCommentError(t('budgetReport.detail.commentRequired'))
       return
     }
 
@@ -36,7 +38,7 @@ function BudgetDetailPage() {
       }).unwrap()
       refetch()
     } catch (err: unknown) {
-      setCommentError(getErrorMessage(err) || 'Failed to save comment')
+      setCommentError(getErrorMessage(err) || t('budgetReport.detail.saveFailed'))
     }
   }
 
@@ -45,11 +47,11 @@ function BudgetDetailPage() {
   }
 
   if (error) {
-    return <div className="budget-detail-page error">Error loading budget report</div>
+    return <div className="budget-detail-page error">{t('budgetReport.detail.errorLoading')}</div>
   }
 
   if (!report) {
-    return <div className="budget-detail-page error">Budget not found</div>
+    return <div className="budget-detail-page error">{t('budgetReport.detail.notFound')}</div>
   }
 
   const plannedTotal = parseFloat(report.planned_total)
@@ -57,15 +59,15 @@ function BudgetDetailPage() {
   const delta = parseFloat(report.delta)
 
   const totalsColumns = [
-    { key: 'label', label: 'Metric' },
-    { key: 'value', label: 'Amount' },
+    { key: 'label', label: t('budgetReport.detail.metric') },
+    { key: 'value', label: t('budgetReport.detail.amount') },
   ]
 
   const totalsData = [
-    { label: 'Planned Total', value: formatCurrency(plannedTotal) },
-    { label: 'Actual Total', value: formatCurrency(actualTotal) },
+    { label: t('budgetReport.detail.plannedTotal'), value: formatCurrency(plannedTotal) },
+    { label: t('budgetReport.detail.actualTotal'), value: formatCurrency(actualTotal) },
     {
-      label: 'Delta',
+      label: t('budgetReport.detail.delta'),
       value: (
         <span style={{ color: delta > 0 ? '#dc3545' : delta < 0 ? '#198754' : '#6c757d' }}>
           {formatCurrency(delta)}
@@ -73,20 +75,20 @@ function BudgetDetailPage() {
       ),
     },
     {
-      label: 'Over Budget',
+      label: t('budgetReport.detail.overBudget'),
       value: report.over_budget ? (
-        <span style={{ color: '#dc3545', fontWeight: 'bold' }}>Yes</span>
+        <span style={{ color: '#dc3545', fontWeight: 'bold' }}>{t('budgetReport.detail.yes')}</span>
       ) : (
-        <span style={{ color: '#198754' }}>No</span>
+        <span style={{ color: '#198754' }}>{t('budgetReport.detail.no')}</span>
       ),
     },
   ]
 
   const categoryColumns = [
-    { key: 'category_name', label: 'Category' },
-    { key: 'planned', label: 'Planned' },
-    { key: 'actual', label: 'Actual' },
-    { key: 'delta', label: 'Delta' },
+    { key: 'category_name', label: t('budgetReport.detail.category') },
+    { key: 'planned', label: t('budgetReport.detail.planned') },
+    { key: 'actual', label: t('budgetReport.detail.actual') },
+    { key: 'delta', label: t('budgetReport.detail.delta') },
   ]
 
   const categoryData = report.per_category.map((cat) => ({
@@ -105,11 +107,11 @@ function BudgetDetailPage() {
   }))
 
   const expensesColumns = [
-    { key: 'date', label: 'Date' },
-    { key: 'category_name', label: 'Category' },
-    { key: 'amount', label: 'Amount' },
-    { key: 'comment', label: 'Comment' },
-    { key: 'created_by', label: 'Created By' },
+    { key: 'date', label: t('budgetReport.detail.date') },
+    { key: 'category_name', label: t('budgetReport.detail.category') },
+    { key: 'amount', label: t('budgetReport.detail.amount') },
+    { key: 'comment', label: t('budgetReport.detail.comment') },
+    { key: 'created_by', label: t('budgetReport.detail.createdBy') },
   ]
 
   const expensesData = report.expenses.map((expense) => ({
@@ -121,34 +123,34 @@ function BudgetDetailPage() {
   return (
     <div className="budget-detail-page">
       <div className="page-header">
-        <h2>Budget Plan Report</h2>
+        <h2>{t('budgetReport.detail.reportTitle')}</h2>
       </div>
 
       <div className="summary-section">
-        <h3>Summary</h3>
+        <h3>{t('budgetReport.detail.summary')}</h3>
         <Table columns={totalsColumns} data={totalsData} />
       </div>
 
       <div className="category-section">
-        <h3>Per Category Breakdown</h3>
+        <h3>{t('budgetReport.detail.perCategoryBreakdown')}</h3>
         {report.per_category.length === 0 ? (
-          <div className="empty-state">No categories found</div>
+          <div className="empty-state">{t('budgetReport.detail.noCategoriesFound')}</div>
         ) : (
           <Table columns={categoryColumns} data={categoryData} />
         )}
       </div>
 
       <div className="expenses-section">
-        <h3>Expenses</h3>
+        <h3>{t('budgetReport.detail.expenses')}</h3>
         {report.expenses.length === 0 ? (
-          <div className="empty-state">No expenses found</div>
+          <div className="empty-state">{t('budgetReport.detail.noExpensesFound')}</div>
         ) : (
           <Table columns={expensesColumns} data={expensesData} />
         )}
       </div>
 
       <div className="summary-comment-section">
-        <h3>Final Comment</h3>
+        <h3>{t('budgetReport.detail.finalComment')}</h3>
         <textarea
           className={`summary-comment-textarea ${commentError ? 'error' : ''}`}
           value={summaryComment}
@@ -157,7 +159,7 @@ function BudgetDetailPage() {
             setCommentError('')
           }}
           rows={6}
-          placeholder="Enter final comment for this budget plan..."
+          placeholder={t('budgetReport.detail.finalCommentPlaceholder')}
         />
         {commentError && <div className="error-message">{commentError}</div>}
         <div className="comment-actions">
@@ -165,7 +167,7 @@ function BudgetDetailPage() {
             onClick={handleSaveComment}
             disabled={isSavingComment || !summaryComment.trim()}
           >
-            {isSavingComment ? 'Saving...' : 'Save Comment'}
+            {isSavingComment ? t('budgetReport.detail.saving') : t('budgetReport.detail.saveComment')}
           </Button>
         </div>
       </div>

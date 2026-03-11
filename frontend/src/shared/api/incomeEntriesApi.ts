@@ -28,6 +28,7 @@ export interface IncomeEntryListResponse {
 
 export interface CreateIncomeEntryRequest {
   finance_period: number
+  account: 'CASH' | 'BANK'
   source_id?: number | null
   amount: number
   received_at: string
@@ -35,6 +36,7 @@ export interface CreateIncomeEntryRequest {
 }
 
 export interface UpdateIncomeEntryRequest {
+  account?: 'CASH' | 'BANK'
   source_id?: number
   amount?: number
   received_at?: string

@@ -6,6 +6,39 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 
 
+# Money account / location: Касса (Cash) or Банк (Bank). Used for income destination and expense source.
+ACCOUNT_CHOICES = [
+    ('CASH', 'Cash'),   # Касса
+    ('BANK', 'Bank'),   # Банк
+]
+
+
+class AccountLedgerLock(models.Model):
+    """
+    Per-account ledger lock row used for concurrency control.
+
+    We lock one row per logical account (CASH/BANK) with SELECT ... FOR UPDATE
+    to serialize debits (expenses, transfers) to that account and prevent
+    concurrent overdrafts.
+    """
+    account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        unique=True,
+        help_text='Logical money account (CASH or BANK) used for locking',
+    )
+
+    class Meta:
+        verbose_name = 'Account ledger lock'
+        verbose_name_plural = 'Account ledger locks'
+        indexes = [
+            models.Index(fields=['account']),
+        ]
+
+    def __str__(self):
+        return f'Lock[{self.account}]'
+
+
 class FinancePeriod(models.Model):
     """Finance period model - manages financial periods by fund_kind (project/office/charity)."""
     
@@ -156,7 +189,7 @@ class IncomePlan(models.Model):
 
 class IncomeEntry(models.Model):
     """Income entry model - tracks incoming money linked to finance periods."""
-    
+
     finance_period = models.ForeignKey(
         FinancePeriod,
         on_delete=models.CASCADE,
@@ -170,6 +203,11 @@ class IncomeEntry(models.Model):
         blank=True,
         related_name='income_entries',
         help_text='Income source for this entry'
+    )
+    account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Destination account: Cash (кассага келди) or Bank (банкка келди)'
     )
     amount = models.DecimalField(
         max_digits=12,
@@ -198,6 +236,7 @@ class IncomeEntry(models.Model):
             models.Index(fields=['finance_period', 'received_at']),
             models.Index(fields=['received_at']),
             models.Index(fields=['source']),
+            models.Index(fields=['account']),
         ]
     
     def clean(self):
@@ -205,10 +244,14 @@ class IncomeEntry(models.Model):
         # Comment is required and cannot be empty
         if not self.comment or not self.comment.strip():
             raise ValidationError("Comment is required and cannot be empty.")
-        
+
         # Amount must be positive
         if self.amount <= 0:
             raise ValidationError("Amount must be greater than zero.")
+
+        # Destination account is required (касса or банк)
+        if self.account not in dict(ACCOUNT_CHOICES):
+            raise ValidationError("Account must be CASH or BANK.")
     
     def save(self, *args, **kwargs):
         """Override save to call clean()."""
@@ -217,4 +260,60 @@ class IncomeEntry(models.Model):
     
     def __str__(self):
         return f"{self.finance_period} - {self.amount} on {self.received_at}"
+
+
+class Transfer(models.Model):
+    """
+    Internal transfer between Cash and Bank.
+    Not income, not expense — only moves money between accounts.
+    Must not affect profit, total income, or total expense in reports.
+    """
+    source_account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Source account: Cash or Bank (where money leaves)',
+    )
+    destination_account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Destination account: Cash or Bank (where money arrives)',
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='Amount transferred',
+    )
+    transferred_at = models.DateField(help_text='Date of transfer')
+    comment = models.TextField(blank=True, help_text='Optional comment')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_transfers',
+        help_text='User who created this transfer',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-transferred_at', '-created_at']
+        indexes = [
+            models.Index(fields=['transferred_at']),
+            models.Index(fields=['source_account', 'destination_account']),
+        ]
+
+    def clean(self):
+        if self.amount <= 0:
+            raise ValidationError("Amount must be greater than zero.")
+        if self.source_account == self.destination_account:
+            raise ValidationError("Source and destination accounts must be different.")
+        if self.source_account not in dict(ACCOUNT_CHOICES) or self.destination_account not in dict(ACCOUNT_CHOICES):
+            raise ValidationError("Both accounts must be CASH or BANK.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.source_account} → {self.destination_account} {self.amount} on {self.transferred_at}"
 

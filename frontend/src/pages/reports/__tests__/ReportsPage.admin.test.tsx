@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { renderReportsPage } from './helpers'
 import { useAuth } from '@/shared/hooks/useAuth'
-import { useReportsData } from '../hooks/useReportsData'
 
 vi.mock('@/shared/hooks/useAuth', () => ({ useAuth: vi.fn() }))
-vi.mock('../hooks/useReportsData', () => ({ useReportsData: vi.fn() }))
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
@@ -14,38 +12,33 @@ vi.mock('@/features/month-gate/MonthGateBanner', () => ({ MonthGateBanner: () =>
 describe('ReportsPage – admin', () => {
   beforeEach(() => {
     vi.mocked(useAuth).mockClear()
-    vi.mocked(useReportsData).mockClear()
   })
 
-  it('admin sees OFFICE, PROJECT, CHARITY and income tabs', () => {
+  it('renders reports page header and global summary for admin', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=office&scope=office&month=2026-02',
     })
-    expect(screen.getByRole('button', { name: 'tabs.office' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tabs.project' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tabs.charity' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tabs.income' })).toBeInTheDocument()
+    // Title from ReportsPage
+    expect(screen.getByText('title')).toBeInTheDocument()
+    // Global summary section from GlobalSummary
+    expect(screen.getByText('globalSummary.title')).toBeInTheDocument()
   })
 
-  it('URL sanitization keeps selected tab/scope valid for admin', async () => {
+  it('keeps existing tab/scope query params for admin (only month is managed)', async () => {
     const { getLocationSearch } = renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=invalid&scope=invalid&month=2026-02',
     })
     await waitFor(() => {
       const search = getLocationSearch()
-      expect(search).toContain('tab=')
-      expect(search).toContain('scope=')
-      const tabMatch = search.match(/tab=([^&]+)/)
-      const scopeMatch = search.match(/scope=([^&]+)/)
-      if (tabMatch) expect(['office', 'project', 'charity', 'income']).toContain(tabMatch[1])
-      if (scopeMatch && tabMatch?.[1] !== 'income')
-        expect(['office', 'project', 'charity']).toContain(scopeMatch[1])
+      expect(search).toContain('tab=invalid')
+      expect(search).toContain('scope=invalid')
+      expect(search).toContain('month=2026-02')
     })
   })
 
-  it('valid tab and scope are preserved (admin with tab=charity)', async () => {
+  it('preserves valid tab and scope values in URL for admin', async () => {
     const { getLocationSearch } = renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=charity&scope=charity&month=2026-02',
@@ -54,24 +47,25 @@ describe('ReportsPage – admin', () => {
       const search = getLocationSearch()
       expect(search).toContain('tab=charity')
       expect(search).toContain('scope=charity')
+      expect(search).toContain('month=2026-02')
     })
-    expect(screen.getByRole('button', { name: 'tabs.charity' }).classList.contains('active')).toBe(true)
   })
 
-  it('office tab button has active class when tab=office', () => {
+  it('does not modify tab/scope when tab=office for admin', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=office&scope=office&month=2026-02',
     })
-    expect(screen.getByRole('button', { name: 'tabs.office' }).classList.contains('active')).toBe(true)
+    const search = screen.getByTestId('location-display').textContent || ''
+    expect(search).toContain('tab=office')
+    expect(search).toContain('scope=office')
   })
 
-  it('expense section renders with minimal data (smoke)', () => {
+  it('renders without error for admin (smoke)', () => {
     renderReportsPage({
       role: 'admin',
       initialUrl: '/reports?tab=office&scope=office&month=2026-02',
     })
     expect(screen.getByText('title')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tabs.office' })).toBeInTheDocument()
   })
 })

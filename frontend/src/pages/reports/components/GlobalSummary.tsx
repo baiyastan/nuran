@@ -20,7 +20,7 @@ interface GlobalSummaryProps {
   month: string
 }
 
-type OpenPanel = 'income' | 'expense' | 'net' | null
+type OpenPanel = 'income' | 'expense' | 'net' | 'balance' | null
 type ExportSectionType = 'income_sources' | 'expense_categories'
 type ExportDetailType = 'income_source_detail' | 'expense_category_detail'
 
@@ -168,6 +168,10 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const incomeActualTotal = kpiData ? parseFloat(kpiData.income_fact) : 0
   const expenseActualTotal = kpiData ? parseFloat(kpiData.expense_fact) : 0
   const net = kpiData ? parseFloat(kpiData.net) : 0
+  const cashBalance = kpiData ? parseFloat(kpiData.cash_balance ?? '0') : 0
+  const bankBalance = kpiData ? parseFloat(kpiData.bank_balance ?? '0') : 0
+  const cashClosing = kpiData ? parseFloat(kpiData.cash_closing_balance ?? kpiData.cash_balance ?? '0') : 0
+  const bankClosing = kpiData ? parseFloat(kpiData.bank_closing_balance ?? kpiData.bank_balance ?? '0') : 0
 
   const incomeBySource = useMemo(() => {
     if (!incomeSourcesData) return []
@@ -307,74 +311,102 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
         )}
         {hasError && !isLoading && (
           <div className="summary-error">
-            {t('errors.generic', { defaultValue: 'Failed to load summary' })}
+            {t('errors.loadSummary')}
           </div>
         )}
         {!isLoading && !hasError && (
-          <div className="summary-grid">
+          <>
+            <div className="summary-grid">
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.incomeActual')}:</span>
+                <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
+                <button
+                  type="button"
+                  className={`summary-kpi-chevron-button${
+                    openPanel === 'income' ? ' summary-kpi-chevron-button--open' : ''
+                  }`}
+                  aria-label={t('globalSummary.actions.viewIncomeBreakdown')}
+                  aria-expanded={openPanel === 'income'}
+                  title={t('globalSummary.actions.viewIncomeBreakdown')}
+                  onClick={() =>
+                    setOpenPanel((current) => (current === 'income' ? null : 'income'))
+                  }
+                >
+                  <ChevronIcon />
+                </button>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
+                <span className="summary-value">
+                  {formatKGS(expenseActualTotal)}
+                </span>
+                <button
+                  type="button"
+                  className={`summary-kpi-chevron-button${
+                    openPanel === 'expense' ? ' summary-kpi-chevron-button--open' : ''
+                  }`}
+                  aria-label={t('globalSummary.actions.viewExpenseBreakdown')}
+                  aria-expanded={openPanel === 'expense'}
+                  title={t('globalSummary.actions.viewExpenseBreakdown')}
+                  onClick={() =>
+                    setOpenPanel((current) => (current === 'expense' ? null : 'expense'))
+                  }
+                >
+                  <ChevronIcon />
+                </button>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.net')}:</span>
+                <span
+                  className={`summary-value ${
+                    net >= 0 ? 'positive' : 'negative'
+                  }`}
+                >
+                  {formatKGS(net)}
+                </span>
+                <button
+                  type="button"
+                  className={`summary-kpi-chevron-button${
+                    openPanel === 'net' ? ' summary-kpi-chevron-button--open' : ''
+                  }`}
+                  aria-label={t('globalSummary.actions.viewNetBreakdown')}
+                  aria-expanded={openPanel === 'net'}
+                  title={t('globalSummary.actions.viewNetBreakdown')}
+                  onClick={() =>
+                    setOpenPanel((current) => (current === 'net' ? null : 'net'))
+                  }
+                >
+                  <ChevronIcon />
+                </button>
+              </div>
             <div className="summary-item">
-              <span className="summary-label">{t('globalSummary.labels.incomeActual')}:</span>
-              <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
+              <span className="summary-label">{t('globalSummary.labels.cashBalance')}:</span>
+              <span className="summary-value">{formatKGS(cashBalance)}</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">{t('globalSummary.labels.bankBalance')}:</span>
+              <span className="summary-value">{formatKGS(bankBalance)}</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">Общая сумма:</span>
+              <span className="summary-value">{formatKGS(cashClosing + bankClosing)}</span>
               <button
                 type="button"
                 className={`summary-kpi-chevron-button${
-                  openPanel === 'income' ? ' summary-kpi-chevron-button--open' : ''
+                  openPanel === 'balance' ? ' summary-kpi-chevron-button--open' : ''
                 }`}
-                aria-label={t('globalSummary.actions.viewIncomeBreakdown')}
-                aria-expanded={openPanel === 'income'}
-                title={t('globalSummary.actions.viewIncomeBreakdown')}
+                aria-label="Показать детализацию остатков по счетам"
+                aria-expanded={openPanel === 'balance'}
+                title="Показать детализацию остатков по счетам"
                 onClick={() =>
-                  setOpenPanel((current) => (current === 'income' ? null : 'income'))
+                  setOpenPanel((current) => (current === 'balance' ? null : 'balance'))
                 }
               >
                 <ChevronIcon />
               </button>
             </div>
-            <div className="summary-item">
-              <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
-              <span className="summary-value">
-                {formatKGS(expenseActualTotal)}
-              </span>
-              <button
-                type="button"
-                className={`summary-kpi-chevron-button${
-                  openPanel === 'expense' ? ' summary-kpi-chevron-button--open' : ''
-                }`}
-                aria-label={t('globalSummary.actions.viewExpenseBreakdown')}
-                aria-expanded={openPanel === 'expense'}
-                title={t('globalSummary.actions.viewExpenseBreakdown')}
-                onClick={() =>
-                  setOpenPanel((current) => (current === 'expense' ? null : 'expense'))
-                }
-              >
-                <ChevronIcon />
-              </button>
             </div>
-            <div className="summary-item">
-              <span className="summary-label">{t('globalSummary.labels.net')}:</span>
-              <span
-                className={`summary-value ${
-                  net >= 0 ? 'positive' : 'negative'
-                }`}
-              >
-                {formatKGS(net)}
-              </span>
-              <button
-                type="button"
-                className={`summary-kpi-chevron-button${
-                  openPanel === 'net' ? ' summary-kpi-chevron-button--open' : ''
-                }`}
-                aria-label={t('globalSummary.actions.viewNetBreakdown')}
-                aria-expanded={openPanel === 'net'}
-                title={t('globalSummary.actions.viewNetBreakdown')}
-                onClick={() =>
-                  setOpenPanel((current) => (current === 'net' ? null : 'net'))
-                }
-              >
-                <ChevronIcon />
-              </button>
-            </div>
-          </div>
+          </>
         )}
         {openPanel === 'income' && !isLoading && !hasError && incomeBySource.length > 0 && (
           <div className="global-summary-breakdown">
@@ -390,7 +422,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 { key: 'plan', label: t('income.labels.plan') },
                 { key: 'fact', label: t('income.labels.actual') },
                 { key: 'diff', label: t('income.labels.diff') },
-                { key: 'count', label: t('common.count', { defaultValue: 'Count' }) },
+                { key: 'count', label: t('count', { ns: 'common' }) },
                 { key: 'sharePercent', label: t('income.labels.sharePercent') },
               ]}
               data={incomeBySource.map((row) => {
@@ -464,7 +496,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
 
                 {incomeDetailsError && !loadingIncomeDetails && (
                   <div className="summary-error">
-                    {t('errors.generic', { defaultValue: 'Failed to load details' })}
+                    {t('errors.loadDetails')}
                   </div>
                 )}
 
@@ -546,7 +578,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 { key: 'plan', label: t('expense.labels.plan') },
                 { key: 'fact', label: t('expense.labels.actual') },
                 { key: 'diff', label: t('expense.labels.diff') },
-                { key: 'count', label: t('common.count', { defaultValue: 'Count' }) },
+                { key: 'count', label: t('count', { ns: 'common' }) },
                 { key: 'sharePercent', label: t('expense.labels.sharePercent') },
               ]}
               data={expenseByCategory.map((row) => {
@@ -620,7 +652,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
 
                 {expenseDetailsError && !loadingExpenseDetails && (
                   <div className="summary-error">
-                    {t('errors.generic', { defaultValue: 'Failed to load details' })}
+                    {t('errors.loadDetails')}
                   </div>
                 )}
 
@@ -694,6 +726,12 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 net: formatKGS(net),
               })}
             </p>
+          </div>
+        )}
+        {openPanel === 'balance' && (
+          <div className="global-summary-breakdown balance-breakdown">
+            <p>Касса: {formatKGS(cashClosing)}</p>
+            <p>Банк: {formatKGS(bankClosing)}</p>
           </div>
         )}
       </div>

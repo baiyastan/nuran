@@ -1,7 +1,9 @@
 """
 Reports API views.
 """
+import calendar
 import re
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -15,9 +17,10 @@ from rest_framework.response import Response
 
 from apps.budgeting.models import BudgetLine, BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
-from apps.expenses.services import aggregate_by_category, sum_expenses
+from apps.planning.models import ActualExpense as PlanningActualExpense
+from apps.expenses.services import aggregate_by_category, sum_expenses, get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
-from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource
+from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource, Transfer
 from apps.reports.services.pdf import build_report_detail_pdf, build_report_section_pdf
 
 from .serializers import BudgetPlanReportSerializer
@@ -812,11 +815,16 @@ class DashboardKpiView(views.APIView):
         )
         income_total = income_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
-        # Expense Fact: sum of all ActualExpense.amount for this month (all scopes, categories)
+        # Expense Fact: sum of expenses.ActualExpense + planning.ActualExpense for this month
         expense_qs = ExpenseActualExpense.objects.filter(
             month_period=month_period,
         )
         expense_total = expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        planning_expense_qs = PlanningActualExpense.objects.filter(
+            finance_period__month_period=month_period,
+        )
+        planning_expense_total = planning_expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        expense_total = expense_total + planning_expense_total
 
         # Income Plan: sum of all IncomePlan.amount for this month across all fund_kinds
         income_plan_qs = IncomePlan.objects.filter(
@@ -836,6 +844,108 @@ class DashboardKpiView(views.APIView):
         def to_decimal_str(value: Decimal) -> str:
             return str(value.quantize(Decimal('0.00')))
 
+        # Opening/closing balances and monthly inflows/outflows per account
+        try:
+            year_int = int(month[:4])
+            month_int = int(month[5:7])
+            first_day = date(year_int, month_int, 1)
+            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
+            prev_day = first_day.replace(day=1) - timedelta(days=1)
+        except (ValueError, IndexError):
+            # Fallback to zeros if parsing fails (should not happen due to earlier validation)
+            cash_opening_balance = Decimal('0.00')
+            bank_opening_balance = Decimal('0.00')
+            cash_closing_balance = Decimal('0.00')
+            bank_closing_balance = Decimal('0.00')
+            cash_inflow_month = Decimal('0.00')
+            cash_outflow_month = Decimal('0.00')
+            bank_inflow_month = Decimal('0.00')
+            bank_outflow_month = Decimal('0.00')
+        else:
+            # Opening and closing balances using shared helper
+            cash_opening_balance = get_balance_for_account('CASH', prev_day)
+            bank_opening_balance = get_balance_for_account('BANK', prev_day)
+            cash_closing_balance = get_balance_for_account('CASH', last_day)
+            bank_closing_balance = get_balance_for_account('BANK', last_day)
+
+            # Monthly inflows/outflows for CASH
+            income_cash_month = (
+                IncomeEntry.objects.filter(
+                    account='CASH',
+                    received_at__gte=first_day,
+                    received_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            transfers_in_cash_month = (
+                Transfer.objects.filter(
+                    destination_account='CASH',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            cash_inflow_month = income_cash_month + transfers_in_cash_month
+
+            expenses_cash_month = (
+                ExpenseActualExpense.objects.filter(
+                    account='CASH',
+                    spent_at__gte=first_day,
+                    spent_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            transfers_out_cash_month = (
+                Transfer.objects.filter(
+                    source_account='CASH',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            cash_outflow_month = expenses_cash_month + transfers_out_cash_month
+
+            # Monthly inflows/outflows for BANK
+            income_bank_month = (
+                IncomeEntry.objects.filter(
+                    account='BANK',
+                    received_at__gte=first_day,
+                    received_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            transfers_in_bank_month = (
+                Transfer.objects.filter(
+                    destination_account='BANK',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            bank_inflow_month = income_bank_month + transfers_in_bank_month
+
+            expenses_bank_month = (
+                ExpenseActualExpense.objects.filter(
+                    account='BANK',
+                    spent_at__gte=first_day,
+                    spent_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            transfers_out_bank_month = (
+                Transfer.objects.filter(
+                    source_account='BANK',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            bank_outflow_month = expenses_bank_month + transfers_out_bank_month
+
+        # Backward-compatible aliases for closing balances
+        cash_balance = cash_closing_balance
+        bank_balance = bank_closing_balance
+
         return Response(
             {
                 'month': month,
@@ -845,6 +955,16 @@ class DashboardKpiView(views.APIView):
                 'income_plan': to_decimal_str(income_plan_total),
                 'expense_plan': to_decimal_str(expense_plan_total),
                 'net_plan': to_decimal_str(net_plan_total),
+                'cash_opening_balance': to_decimal_str(cash_opening_balance),
+                'bank_opening_balance': to_decimal_str(bank_opening_balance),
+                'cash_inflow_month': to_decimal_str(cash_inflow_month),
+                'cash_outflow_month': to_decimal_str(cash_outflow_month),
+                'bank_inflow_month': to_decimal_str(bank_inflow_month),
+                'bank_outflow_month': to_decimal_str(bank_outflow_month),
+                'cash_closing_balance': to_decimal_str(cash_closing_balance),
+                'bank_closing_balance': to_decimal_str(bank_closing_balance),
+                'cash_balance': to_decimal_str(cash_balance),
+                'bank_balance': to_decimal_str(bank_balance),
             },
             status=status.HTTP_200_OK,
         )
