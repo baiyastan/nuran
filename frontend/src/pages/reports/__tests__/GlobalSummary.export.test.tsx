@@ -191,6 +191,51 @@ describe('GlobalSummary section PDF export', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders previous month balance block collapsed by default and expands with formatted values', async () => {
+    vi.mocked(useGetDashboardKpiQuery).mockReturnValue({
+      data: {
+        month: '2026-03',
+        income_fact: '1000.00',
+        expense_fact: '400.00',
+        net: '600.00',
+        income_plan: '800.00',
+        expense_plan: '300.00',
+        net_plan: '500.00',
+        cash_balance: '500.00',
+        bank_balance: '200.00',
+        cash_opening_balance: '150.00',
+        bank_opening_balance: '250.00',
+        cash_inflow_month: '0.00',
+        cash_outflow_month: '0.00',
+        bank_inflow_month: '0.00',
+        bank_outflow_month: '0.00',
+        cash_closing_balance: '0.00',
+        bank_closing_balance: '0.00',
+      },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    // Block header is present, content is hidden by default
+    const headerButton = screen.getByRole('button', { name: /Мурунку айдан остаток/i })
+    expect(headerButton).toBeInTheDocument()
+    expect(screen.queryByText(/Касса:/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Банк:/i)).not.toBeInTheDocument()
+
+    // Expand
+    fireEvent.click(headerButton)
+
+    // Values are formatted with formatKGS (contains "сом")
+    await waitFor(() => {
+      expect(screen.getByText(/Касса:/i)).toBeInTheDocument()
+      expect(screen.getByText(/Банк:/i)).toBeInTheDocument()
+      expect(screen.getByText(/150.*сом/i)).toBeInTheDocument()
+      expect(screen.getByText(/250.*сом/i)).toBeInTheDocument()
+    })
+  })
+
   it('exports the income section PDF with loading state and download filename', async () => {
     let resolveExport!: (blob: Blob) => void
     const exportPromise = new Promise<Blob>((resolve) => {

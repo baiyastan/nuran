@@ -101,8 +101,10 @@ export const axiosBaseQuery =
       }
     }
     
-    // Skip refresh retry for auth endpoints to prevent infinite loops
-    const authEndpoints = ['/auth/refresh/', '/auth/login/', '/auth/register/', '/auth/me/']
+    // Skip refresh retry for auth endpoints that would cause loops
+    // /auth/me/ is intentionally NOT excluded so it participates in the standard
+    // 401 -> refresh -> retry flow like other protected endpoints.
+    const authEndpoints = ['/auth/refresh/', '/auth/login/', '/auth/register/']
     const shouldSkipRefresh = authEndpoints.some(endpoint => 
       typeof requestUrl === 'string' && requestUrl.startsWith(endpoint)
     )

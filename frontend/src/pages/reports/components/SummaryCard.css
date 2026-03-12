@@ -345,3 +345,11 @@
   font-size: 0.95rem;
   color: #444;
 }
+
+.previous-month-block__value {
+  font-weight: 600;
+}
+
+.previous-month-block__value--negative {
+  color: #b91c1c;
+}

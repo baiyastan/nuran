@@ -411,26 +411,52 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
               </button>
             </div>
             </div>
-            <div className="previous-month-block">
-              <button
-                type="button"
-                className={`previous-month-block__header${previousMonthOpen ? ' previous-month-block__header--open' : ''}`}
-                onClick={() => setPreviousMonthOpen((open) => !open)}
-                aria-expanded={previousMonthOpen}
-                aria-label={previousMonthOpen ? 'Свернуть' : 'Развернуть'}
-              >
-                <span className="previous-month-block__label">Мурунку айдан остаток</span>
-                <span className="previous-month-block__chevron" aria-hidden>
-                  <ChevronIcon />
-                </span>
-              </button>
-              {previousMonthOpen && (
-                <div className="previous-month-block__content">
-                  <div>Касса: {formatKGS(previousMonthCash)}</div>
-                  <div>Банк: {formatKGS(previousMonthBank)}</div>
-                </div>
-              )}
-            </div>
+            {kpiData && (
+              <div className="previous-month-block">
+                <button
+                  type="button"
+                  className={`previous-month-block__header${
+                    previousMonthOpen ? ' previous-month-block__header--open' : ''
+                  }`}
+                  onClick={() => setPreviousMonthOpen((open) => !open)}
+                  aria-expanded={previousMonthOpen}
+                  aria-controls="previous-month-balance"
+                  aria-label={previousMonthOpen ? 'Свернуть' : 'Развернуть'}
+                >
+                  <span className="previous-month-block__label">Мурунку айдан остаток</span>
+                  <span className="previous-month-block__chevron" aria-hidden>
+                    <ChevronIcon />
+                  </span>
+                </button>
+                {previousMonthOpen && (
+                  <div
+                    className="previous-month-block__content"
+                    id="previous-month-balance"
+                  >
+                    <div>
+                      Касса:{' '}
+                      <span
+                        className={`previous-month-block__value${
+                          previousMonthCash < 0 ? ' previous-month-block__value--negative' : ''
+                        }`}
+                      >
+                        {formatKGS(previousMonthCash)}
+                      </span>
+                    </div>
+                    <div>
+                      Банк:{' '}
+                      <span
+                        className={`previous-month-block__value${
+                          previousMonthBank < 0 ? ' previous-month-block__value--negative' : ''
+                        }`}
+                      >
+                        {formatKGS(previousMonthBank)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
         {openPanel === 'income' && !isLoading && !hasError && incomeBySource.length > 0 && (

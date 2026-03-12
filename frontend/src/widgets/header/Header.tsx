@@ -4,6 +4,7 @@ import { useAuth } from '@/shared/hooks/useAuth'
 import { useAppDispatch } from '@/app/hooks'
 import { useLogoutMutation } from '@/shared/api/authApi'
 import { logout } from '@/features/auth/authSlice'
+import { baseApi } from '@/shared/api/baseApi'
 import { Button } from '@/shared/ui/Button/Button'
 import LanguageSwitcher from '@/shared/ui/LanguageSwitcher/LanguageSwitcher'
 import './Header.css'
@@ -46,8 +47,9 @@ function Header() {
       // Even if logout fails, clear local state
       console.error('Logout error:', error)
     } finally {
-      // Clear local state and localStorage
+      // Clear local state, RTK Query cache and localStorage
       dispatch(logout())
+      dispatch(baseApi.util.resetApiState())
       // logout() reducer already clears localStorage, but ensure it's cleared here too
       try {
         localStorage.removeItem('accessToken')
