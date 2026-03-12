@@ -245,3 +245,64 @@
   color: #6b7280;
   font-weight: 400;
 }
+
+/* Previous month balance block (collapsible) */
+.previous-month-block {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.previous-month-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  gap: 0.5rem;
+}
+
+.previous-month-block__header:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.previous-month-block__label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.previous-month-block__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.previous-month-block__chevron svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.15s ease;
+}
+
+.previous-month-block__header--open .previous-month-block__chevron svg {
+  transform: rotate(180deg);
+}
+
+.previous-month-block__content {
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: #444;
+}

@@ -99,6 +99,7 @@ function downloadBlob(blob: Blob, filename: string) {
 export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
+  const [previousMonthOpen, setPreviousMonthOpen] = useState(false)
   const [exportSectionPdf] = useExportSectionPdfMutation()
   const [exportIncomeSourceDetailPdf] = useExportIncomeSourceDetailPdfMutation()
   const [exportExpenseCategoryDetailPdf] = useExportExpenseCategoryDetailPdfMutation()
@@ -172,6 +173,8 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const bankBalance = kpiData ? parseFloat(kpiData.bank_balance ?? '0') : 0
   const cashClosing = kpiData ? parseFloat(kpiData.cash_closing_balance ?? kpiData.cash_balance ?? '0') : 0
   const bankClosing = kpiData ? parseFloat(kpiData.bank_closing_balance ?? kpiData.bank_balance ?? '0') : 0
+  const previousMonthCash = kpiData ? parseFloat(kpiData.cash_opening_balance ?? '0') : 0
+  const previousMonthBank = kpiData ? parseFloat(kpiData.bank_opening_balance ?? '0') : 0
 
   const incomeBySource = useMemo(() => {
     if (!incomeSourcesData) return []
@@ -405,6 +408,26 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 <ChevronIcon />
               </button>
             </div>
+            </div>
+            <div className="previous-month-block">
+              <button
+                type="button"
+                className={`previous-month-block__header${previousMonthOpen ? ' previous-month-block__header--open' : ''}`}
+                onClick={() => setPreviousMonthOpen((open) => !open)}
+                aria-expanded={previousMonthOpen}
+                aria-label={previousMonthOpen ? 'Свернуть' : 'Развернуть'}
+              >
+                <span className="previous-month-block__label">{t('globalSummary.previousMonthBalance')}</span>
+                <span className="previous-month-block__chevron" aria-hidden>
+                  <ChevronIcon />
+                </span>
+              </button>
+              {previousMonthOpen && (
+                <div className="previous-month-block__content">
+                  <div>{t('globalSummary.labels.cashBalance')}: {formatKGS(previousMonthCash)}</div>
+                  <div>{t('globalSummary.labels.bankBalance')}: {formatKGS(previousMonthBank)}</div>
+                </div>
+              )}
             </div>
           </>
         )}

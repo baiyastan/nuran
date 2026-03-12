@@ -1302,8 +1302,8 @@ export default {
         incomeActual: 'Факт доходов',
         expenseActual: 'Факт расходов',
         net: 'Чистый',
-        cashBalance: 'Остаток в кассе',
-        bankBalance: 'Остаток на банковском счёте',
+        cashBalance: 'Касса',
+        bankBalance: 'Банк',
       },
       actions: {
         viewIncomeBreakdown: 'Показать детализацию доходов по источникам',
@@ -1325,6 +1325,7 @@ export default {
       incomeSourcesSummaryTitle: 'Итоги по источникам доходов',
       expenseCategoriesSummaryTitle: 'Итоги по категориям расходов',
       exportError: 'Не удалось экспортировать PDF',
+      previousMonthBalance: 'Остаток с прошлого месяца',
     },
   },
   planSetup: {

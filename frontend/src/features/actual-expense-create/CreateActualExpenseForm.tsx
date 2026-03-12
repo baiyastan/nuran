@@ -41,6 +41,8 @@ export function CreateActualExpenseForm({
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [apiError, setApiError] = useState('')
   const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false)
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false)
+  const [categorySearch, setCategorySearch] = useState('')
 
   const [createExpense, { isLoading }] = useCreateActualExpenseMutation()
 
@@ -156,6 +158,11 @@ export function CreateActualExpenseForm({
     return null
   }
 
+  const filteredRootCategories =
+    rootCategories?.results.filter((cat) =>
+      cat.name.toLowerCase().includes(categorySearch.toLowerCase())
+    ) ?? []
+
   return (
     <>
       <form onSubmit={handleSubmit} className="create-actual-expense-form">
@@ -197,24 +204,55 @@ export function CreateActualExpenseForm({
               {t('categories.create')}
             </Button>
           </div>
-          <select
-            className={`input ${errors.categoryId ? 'input-error' : ''}`}
-            value={formData.categoryId || ''}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                categoryId: e.target.value ? Number(e.target.value) : null,
-                subcategoryId: null,
-              })
-            }
-          >
-            <option value="">{t('expenses.form.selectCategory')}</option>
-            {rootCategories?.results.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+          <div className="category-dropdown">
+            <button
+              type="button"
+              className={`category-dropdown__control input ${
+                errors.categoryId ? 'input-error' : ''
+              }`}
+              onClick={() => setIsCategoryOpen((open) => !open)}
+            >
+              {formData.categoryId
+                ? rootCategories?.results.find((c) => c.id === formData.categoryId)?.name ??
+                  t('expenses.form.selectCategory')
+                : t('expenses.form.selectCategory')}
+            </button>
+            {isCategoryOpen && (
+              <div className="category-dropdown__panel">
+                <input
+                  className="category-dropdown__search input"
+                  type="text"
+                  placeholder={t('common.search')}
+                  value={categorySearch}
+                  onChange={(e) => setCategorySearch(e.target.value)}
+                />
+                <div className="category-dropdown__list">
+                  {filteredRootCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      className="category-dropdown__option"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          categoryId: cat.id,
+                          subcategoryId: null,
+                        })
+                        setIsCategoryOpen(false)
+                      }}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                  {filteredRootCategories.length === 0 && (
+                    <div className="category-dropdown__empty">
+                      {t('expenses.form.noCategories')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           {errors.categoryId && <span className="input-error-text">{errors.categoryId}</span>}
         </div>
 

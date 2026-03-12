@@ -1305,8 +1305,8 @@ export default {
         incomeActual: 'Киреше чыныгы',
         expenseActual: 'Чыгым чыныгы',
         net: 'Таза',
-        cashBalance: 'Остаток в кассе',
-        bankBalance: 'Остаток на банковском счёте',
+        cashBalance: 'Касса',
+        bankBalance: 'Банк',
       },
       actions: {
         viewIncomeBreakdown: 'Булактар боюнча деталдуу көрүү',
@@ -1328,6 +1328,7 @@ export default {
       incomeSourcesSummaryTitle: 'Киреше булактары боюнча жыйынтык',
       expenseCategoriesSummaryTitle: 'Чыгым категориялары боюнча жыйынтык',
       exportError: 'PDF экспорттоодо ката кетти',
+      previousMonthBalance: 'Мурунку айдан калган калдык',
     },
   },
   planSetup: {
