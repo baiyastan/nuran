@@ -58,7 +58,9 @@ def _get_validated_month_period(month_param: str | None) -> tuple[tuple[str, Mon
     return (month, month_period), None
 
 
-def _build_dashboard_expense_categories_data(month: str, month_period: MonthPeriod) -> dict[str, Any]:
+def _build_dashboard_expense_categories_data(
+    month: str, month_period: MonthPeriod, account: str | None = None
+) -> dict[str, Any]:
     plan_qs = BudgetLine.objects.filter(
         plan__period=month_period,
     ).values('category_id', 'category__name').annotate(
@@ -76,7 +78,10 @@ def _build_dashboard_expense_categories_data(month: str, month_period: MonthPeri
 
     fact_qs = ExpenseActualExpense.objects.filter(
         month_period=month_period,
-    ).values('category_id', 'category__name').annotate(
+    )
+    if account in ('CASH', 'BANK'):
+        fact_qs = fact_qs.filter(account=account)
+    fact_qs = fact_qs.values('category_id', 'category__name').annotate(
         fact=Sum('amount'),
         count=Count('id'),
     )
@@ -122,6 +127,13 @@ def _build_dashboard_expense_categories_data(month: str, month_period: MonthPeri
             'count': count,
         })
 
+    if account in ('CASH', 'BANK'):
+        rows = [r for r in rows if r['fact'] != Decimal('0.00') or r['count'] != 0]
+
+    if account in ('CASH', 'BANK'):
+        total_plan = sum(r['plan'] for r in rows)
+        total_fact = sum(r['fact'] for r in rows)
+
     for row in rows:
         fact = row['fact']
         if total_fact > 0:
@@ -154,7 +166,9 @@ def _build_dashboard_expense_categories_data(month: str, month_period: MonthPeri
     }
 
 
-def _build_dashboard_income_sources_data(month: str, month_period: MonthPeriod) -> dict[str, Any]:
+def _build_dashboard_income_sources_data(
+    month: str, month_period: MonthPeriod, account: str | None = None
+) -> dict[str, Any]:
     plan_qs = IncomePlan.objects.filter(
         period__month_period=month_period,
     ).values('source_id', 'source__name').annotate(
@@ -172,7 +186,10 @@ def _build_dashboard_income_sources_data(month: str, month_period: MonthPeriod) 
 
     fact_qs = IncomeEntry.objects.filter(
         finance_period__month_period=month_period,
-    ).values('source_id', 'source__name').annotate(
+    )
+    if account in ('CASH', 'BANK'):
+        fact_qs = fact_qs.filter(account=account)
+    fact_qs = fact_qs.values('source_id', 'source__name').annotate(
         fact=Sum('amount'),
         count=Count('id'),
     )
@@ -219,6 +236,13 @@ def _build_dashboard_income_sources_data(month: str, month_period: MonthPeriod) 
                 'count': count,
             }
         )
+
+    if account in ('CASH', 'BANK'):
+        rows = [r for r in rows if r['fact'] != Decimal('0.00') or r['count'] != 0]
+
+    if account in ('CASH', 'BANK'):
+        total_plan = sum(r['plan'] for r in rows)
+        total_fact = sum(r['fact'] for r in rows)
 
     for row in rows:
         fact_value = row['fact']
@@ -281,12 +305,16 @@ def _build_income_source_detail_pdf_data(
     month_period: MonthPeriod,
     source_id: int | None,
     is_uncategorized: bool,
+    account: str | None = None,
 ) -> dict[str, Any]:
     queryset = (
         IncomeEntry.objects.select_related('source')
         .filter(finance_period__month_period=month_period)
         .order_by('-received_at', '-created_at')
     )
+
+    if account in ('CASH', 'BANK'):
+        queryset = queryset.filter(account=account)
 
     if is_uncategorized:
         queryset = queryset.filter(source__isnull=True)
@@ -307,7 +335,8 @@ def _build_income_source_detail_pdf_data(
         'total_amount': _to_decimal_str(total_amount),
         'rows': [
             {
-                'date': entry.received_at.strftime('%Y-%m-%d'),
+                'date': entry.received_at.strftime('%d.%m.%Y'),
+                'account': entry.account,
                 'amount': _to_decimal_str(entry.amount),
                 'name': entry.source.name if entry.source else '',
                 'comment': entry.comment,
@@ -322,12 +351,16 @@ def _build_expense_category_detail_pdf_data(
     month_period: MonthPeriod,
     category_id: int | None,
     is_uncategorized: bool,
+    account: str | None = None,
 ) -> dict[str, Any]:
     queryset = (
         ExpenseActualExpense.objects.select_related('category')
         .filter(month_period=month_period)
         .order_by('-spent_at', '-created_at')
     )
+
+    if account in ('CASH', 'BANK'):
+        queryset = queryset.filter(account=account)
 
     if is_uncategorized:
         queryset = queryset.filter(category__isnull=True)
@@ -348,7 +381,8 @@ def _build_expense_category_detail_pdf_data(
         'total_amount': _to_decimal_str(total_amount),
         'rows': [
             {
-                'date': expense.spent_at.strftime('%Y-%m-%d'),
+                'date': expense.spent_at.strftime('%d.%m.%Y'),
+                'account': expense.account,
                 'amount': _to_decimal_str(expense.amount),
                 'name': expense.category.name if expense.category else '',
                 'comment': expense.comment,
@@ -626,7 +660,9 @@ class DashboardExpenseCategoriesView(views.APIView):
             return error_response
 
         month, month_period = validated
-        response_data = _build_dashboard_expense_categories_data(month, month_period)
+        account_param = (request.query_params.get('account') or '').strip().upper()
+        account = account_param if account_param in ('CASH', 'BANK') else None
+        response_data = _build_dashboard_expense_categories_data(month, month_period, account=account)
         return Response(
             {
                 'month': response_data['month'],
@@ -655,7 +691,9 @@ class DashboardIncomeSourcesView(views.APIView):
             return error_response
 
         month, month_period = validated
-        response_data = _build_dashboard_income_sources_data(month, month_period)
+        account_param = (request.query_params.get('account') or '').strip().upper()
+        account = account_param if account_param in ('CASH', 'BANK') else None
+        response_data = _build_dashboard_income_sources_data(month, month_period, account=account)
         return Response(
             {
                 'month': response_data['month'],
@@ -690,9 +728,23 @@ class ExportSectionPdfView(views.APIView):
 
         month, month_period = validated
         if section_type == 'income_sources':
-            section_data = _build_dashboard_income_sources_data(month, month_period)
+            account_param = (request.query_params.get('account') or '').strip().upper()
+            account = account_param if account_param in ('CASH', 'BANK') else None
+            section_data = _build_dashboard_income_sources_data(
+                month, month_period, account=account
+            )
+            section_data['account_filter_label'] = (
+                'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
+            )
         else:
-            section_data = _build_dashboard_expense_categories_data(month, month_period)
+            account_param = (request.query_params.get('account') or '').strip().upper()
+            account = account_param if account_param in ('CASH', 'BANK') else None
+            section_data = _build_dashboard_expense_categories_data(
+                month, month_period, account=account
+            )
+            section_data['account_filter_label'] = (
+                'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
+            )
 
         pdf_content = build_report_section_pdf(section_type, section_data)
         response = HttpResponse(pdf_content, content_type='application/pdf')
@@ -722,12 +774,18 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
             return target_error
 
         month, month_period = validated
+        account_param = (request.query_params.get('account') or '').strip().upper()
+        account = account_param if account_param in ('CASH', 'BANK') else None
         source_id, is_uncategorized = parsed_target
         detail_data = _build_income_source_detail_pdf_data(
             month,
             month_period,
             source_id,
             is_uncategorized,
+            account=account,
+        )
+        detail_data['account_filter_label'] = (
+            'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
         )
         pdf_content = build_report_detail_pdf('income_source', detail_data)
         response = HttpResponse(pdf_content, content_type='application/pdf')
@@ -758,12 +816,18 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
             return target_error
 
         month, month_period = validated
+        account_param = (request.query_params.get('account') or '').strip().upper()
+        account = account_param if account_param in ('CASH', 'BANK') else None
         category_id, is_uncategorized = parsed_target
         detail_data = _build_expense_category_detail_pdf_data(
             month,
             month_period,
             category_id,
             is_uncategorized,
+            account=account,
+        )
+        detail_data['account_filter_label'] = (
+            'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
         )
         pdf_content = build_report_detail_pdf('expense_category', detail_data)
         response = HttpResponse(pdf_content, content_type='application/pdf')

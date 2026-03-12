@@ -10,6 +10,7 @@ export interface ActualExpenseListParams {
   spent_at?: string
   ordering?: string
   page?: number
+  account?: 'CASH' | 'BANK'
 }
 
 export interface ActualExpenseVendorBreakdown {

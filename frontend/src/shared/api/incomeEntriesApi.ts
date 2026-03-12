@@ -10,6 +10,7 @@ export interface IncomeEntryListParams {
   ordering?: string
   page?: number
   source?: number | 'null'
+  account?: 'CASH' | 'BANK'
 }
 
 export interface IncomeEntryListResponse {

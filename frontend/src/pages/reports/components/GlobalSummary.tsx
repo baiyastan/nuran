@@ -20,7 +20,7 @@ interface GlobalSummaryProps {
   month: string
 }
 
-type OpenPanel = 'income' | 'expense' | 'net' | 'balance' | null
+type OpenPanel = 'income' | 'expense' | 'balance' | null
 type ExportSectionType = 'income_sources' | 'expense_categories'
 type ExportDetailType = 'income_source_detail' | 'expense_category_detail'
 
@@ -67,22 +67,27 @@ function ChevronIcon() {
   )
 }
 
-function getExportFilename(month: string, sectionType: ExportSectionType) {
-  return `${month}_${sectionType}_report.pdf`
+function getExportFilename(
+  month: string,
+  sectionType: ExportSectionType,
+  account: 'ALL' | 'CASH' | 'BANK'
+) {
+  return `${month}_${sectionType}_${account}_report.pdf`
 }
 
 function getDetailExportFilename(
   month: string,
   detailType: ExportDetailType,
-  targetId: number | null
+  targetId: number | null,
+  account: 'ALL' | 'CASH' | 'BANK'
 ) {
   const target = targetId === null ? 'uncategorized' : String(targetId)
 
   if (detailType === 'income_source_detail') {
-    return `${month}_income_source_${target}_detail_report.pdf`
+    return `${month}_income_source_${target}_${account}_detail_report.pdf`
   }
 
-  return `${month}_expense_category_${target}_detail_report.pdf`
+  return `${month}_expense_category_${target}_${account}_detail_report.pdf`
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -113,6 +118,10 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState<number | null | undefined>(undefined)
   const [selectedExpenseCategoryName, setSelectedExpenseCategoryName] = useState<string>('')
   const [expenseDetailPage, setExpenseDetailPage] = useState<number>(1)
+  const [expenseAccountFilter, setExpenseAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
+  const [incomeAccountFilter, setIncomeAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
+  const [incomeDetailAccountFilter, setIncomeDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
+  const [expenseDetailAccountFilter, setExpenseDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
 
   const {
     data: kpiData,
@@ -124,13 +133,19 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     data: expenseCategoriesData,
     isLoading: loadingExpenseCategories,
     error: expenseCategoriesError,
-  } = useGetDashboardExpenseCategoriesQuery({ month })
+  } = useGetDashboardExpenseCategoriesQuery({
+    month,
+    ...(expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
+  })
 
   const {
     data: incomeSourcesData,
     isLoading: loadingIncomeSources,
     error: incomeSourcesError,
-  } = useGetDashboardIncomeSourcesQuery({ month })
+  } = useGetDashboardIncomeSourcesQuery({
+    month,
+    ...(incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
+  })
 
   const {
     data: incomeDetailsData,
@@ -143,6 +158,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           month,
           source: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
           page: incomeDetailPage,
+          ...(incomeDetailAccountFilter !== 'ALL' && { account: incomeDetailAccountFilter }),
         },
     {
       skip: selectedIncomeSourceId === undefined,
@@ -160,6 +176,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           month,
           category: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
           page: expenseDetailPage,
+          ...(expenseDetailAccountFilter !== 'ALL' && { account: expenseDetailAccountFilter }),
         },
     {
       skip: selectedExpenseCategoryId === undefined,
@@ -225,8 +242,17 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     setExportingSection(sectionType)
 
     try {
-      const blob = await exportSectionPdf({ month, sectionType }).unwrap()
-      downloadBlob(blob, getExportFilename(month, sectionType))
+      const blob = await exportSectionPdf({
+        month,
+        sectionType,
+        ...(sectionType === 'expense_categories' &&
+          expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
+        ...(sectionType === 'income_sources' &&
+          incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
+      }).unwrap()
+      const accountForFilename =
+        sectionType === 'expense_categories' ? expenseAccountFilter : incomeAccountFilter
+      downloadBlob(blob, getExportFilename(month, sectionType, accountForFilename))
     } catch {
       setExportErrorSection(sectionType)
     } finally {
@@ -246,10 +272,16 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       const blob = await exportIncomeSourceDetailPdf({
         month,
         sourceId: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
+        ...(incomeDetailAccountFilter !== 'ALL' && { account: incomeDetailAccountFilter }),
       }).unwrap()
       downloadBlob(
         blob,
-        getDetailExportFilename(month, 'income_source_detail', selectedIncomeSourceId)
+        getDetailExportFilename(
+          month,
+          'income_source_detail',
+          selectedIncomeSourceId,
+          incomeDetailAccountFilter
+        )
       )
     } catch {
       setExportErrorDetail('income_source_detail')
@@ -270,10 +302,16 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       const blob = await exportExpenseCategoryDetailPdf({
         month,
         categoryId: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
+        ...(expenseDetailAccountFilter !== 'ALL' && { account: expenseDetailAccountFilter }),
       }).unwrap()
       downloadBlob(
         blob,
-        getDetailExportFilename(month, 'expense_category_detail', selectedExpenseCategoryId)
+        getDetailExportFilename(
+          month,
+          'expense_category_detail',
+          selectedExpenseCategoryId,
+          expenseDetailAccountFilter
+        )
       )
     } catch {
       setExportErrorDetail('expense_category_detail')
@@ -281,28 +319,6 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       setExportingDetail(null)
     }
   }
-
-  const renderSectionHeader = (title: string, sectionType: ExportSectionType) => (
-    <div className="global-summary-section-header">
-      <h4 className="global-summary-section-title">{title}</h4>
-      <Button
-        type="button"
-        variant="secondary"
-        size="small"
-        className="global-summary-export-button"
-        disabled={exportingSection !== null}
-        title={t('globalSummary.actions.exportPdf')}
-        aria-label={`${title} ${t('globalSummary.actions.exportPdf')}`}
-        onClick={() => {
-          void handleSectionExport(sectionType)
-        }}
-      >
-        {exportingSection === sectionType
-          ? t('globalSummary.actions.exportingPdf')
-          : t('globalSummary.actions.exportPdf')}
-      </Button>
-    </div>
-  )
 
   return (
     <div className="report-section global-summary-section">
@@ -338,11 +354,16 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <ChevronIcon />
                 </button>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
-                <span className="summary-value">
-                  {formatKGS(expenseActualTotal)}
-                </span>
+            <div className="summary-item">
+              <span className="summary-label">
+                {t('globalSummary.labels.expenseActual')}:
+              </span>
+              <span
+                className="summary-value"
+                title="Факт расходов за месяц может включать плановые корректировки и расходы из разных модулей"
+              >
+                {formatKGS(expenseActualTotal)}
+              </span>
                 <button
                   type="button"
                   className={`summary-kpi-chevron-button${
@@ -358,30 +379,6 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <ChevronIcon />
                 </button>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">{t('globalSummary.labels.net')}:</span>
-                <span
-                  className={`summary-value ${
-                    net >= 0 ? 'positive' : 'negative'
-                  }`}
-                >
-                  {formatKGS(net)}
-                </span>
-                <button
-                  type="button"
-                  className={`summary-kpi-chevron-button${
-                    openPanel === 'net' ? ' summary-kpi-chevron-button--open' : ''
-                  }`}
-                  aria-label={t('globalSummary.actions.viewNetBreakdown')}
-                  aria-expanded={openPanel === 'net'}
-                  title={t('globalSummary.actions.viewNetBreakdown')}
-                  onClick={() =>
-                    setOpenPanel((current) => (current === 'net' ? null : 'net'))
-                  }
-                >
-                  <ChevronIcon />
-                </button>
-              </div>
             <div className="summary-item">
               <span className="summary-label">{t('globalSummary.labels.cashBalance')}:</span>
               <span className="summary-value">{formatKGS(cashBalance)}</span>
@@ -391,7 +388,12 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
               <span className="summary-value">{formatKGS(bankBalance)}</span>
             </div>
             <div className="summary-item">
-              <span className="summary-label">Общая сумма:</span>
+              <span
+                className="summary-label"
+                title="Общий остаток денежных средств на кассе и банковских счетах на конец месяца"
+              >
+                Общий остаток:
+              </span>
               <span className="summary-value">{formatKGS(cashClosing + bankClosing)}</span>
               <button
                 type="button"
@@ -417,15 +419,15 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 aria-expanded={previousMonthOpen}
                 aria-label={previousMonthOpen ? 'Свернуть' : 'Развернуть'}
               >
-                <span className="previous-month-block__label">{t('globalSummary.previousMonthBalance')}</span>
+                <span className="previous-month-block__label">Мурунку айдан остаток</span>
                 <span className="previous-month-block__chevron" aria-hidden>
                   <ChevronIcon />
                 </span>
               </button>
               {previousMonthOpen && (
                 <div className="previous-month-block__content">
-                  <div>{t('globalSummary.labels.cashBalance')}: {formatKGS(previousMonthCash)}</div>
-                  <div>{t('globalSummary.labels.bankBalance')}: {formatKGS(previousMonthBank)}</div>
+                  <div>Касса: {formatKGS(previousMonthCash)}</div>
+                  <div>Банк: {formatKGS(previousMonthBank)}</div>
                 </div>
               )}
             </div>
@@ -433,7 +435,45 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
         )}
         {openPanel === 'income' && !isLoading && !hasError && incomeBySource.length > 0 && (
           <div className="global-summary-breakdown">
-            {renderSectionHeader(t('globalSummary.incomeSourcesSummaryTitle'), 'income_sources')}
+            <div className="global-summary-section-header">
+              <h4 className="global-summary-section-title">
+                {t('globalSummary.incomeSourcesSummaryTitle')}
+              </h4>
+              <div className="global-summary-section-header__actions">
+                <div className="expense-categories-filter expense-categories-filter--inline">
+                  <label htmlFor="income-account-filter" className="expense-categories-filter__label">
+                    {t('globalSummary.incomeAccountFilterLabel')}:
+                  </label>
+                  <select
+                    id="income-account-filter"
+                    className="expense-categories-filter__select"
+                    value={incomeAccountFilter}
+                    onChange={(e) => setIncomeAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')}
+                    aria-label={t('globalSummary.incomeAccountFilterLabel')}
+                  >
+                    <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                    <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                    <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  className="global-summary-export-button"
+                  disabled={exportingSection !== null}
+                  title={t('globalSummary.actions.exportPdf')}
+                  aria-label={`${t('globalSummary.incomeSourcesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                  onClick={() => {
+                    void handleSectionExport('income_sources')
+                  }}
+                >
+                  {exportingSection === 'income_sources'
+                    ? t('globalSummary.actions.exportingPdf')
+                    : t('globalSummary.actions.exportPdf')}
+                </Button>
+              </div>
+            </div>
             {exportErrorSection === 'income_sources' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
@@ -488,22 +528,45 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <h4 className="expense-details-title">
                     {selectedIncomeSourceName} – {t('globalSummary.details')}
                   </h4>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    className="global-summary-export-button"
-                    disabled={exportingDetail !== null}
-                    title={t('globalSummary.actions.exportPdf')}
-                    aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
-                    onClick={() => {
-                      void handleIncomeDetailExport()
-                    }}
-                  >
-                    {exportingDetail === 'income_source_detail'
-                      ? t('globalSummary.actions.exportingPdf')
-                      : t('globalSummary.actions.exportPdf')}
-                  </Button>
+                  <div className="global-summary-section-header__actions">
+                    <div className="expense-categories-filter expense-categories-filter--inline">
+                      <label
+                        htmlFor="income-detail-account-filter"
+                        className="expense-categories-filter__label"
+                      >
+                        {t('globalSummary.incomeAccountFilterLabel')}:
+                      </label>
+                      <select
+                        id="income-detail-account-filter"
+                        className="expense-categories-filter__select"
+                        value={incomeDetailAccountFilter}
+                        onChange={(e) =>
+                          setIncomeDetailAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
+                        }
+                        aria-label={t('globalSummary.incomeAccountFilterLabel')}
+                      >
+                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                      </select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      className="global-summary-export-button"
+                      disabled={exportingDetail !== null}
+                      title={t('globalSummary.actions.exportPdf')}
+                      aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
+                      onClick={() => {
+                        void handleIncomeDetailExport()
+                      }}
+                    >
+                      {exportingDetail === 'income_source_detail'
+                        ? t('globalSummary.actions.exportingPdf')
+                        : t('globalSummary.actions.exportPdf')}
+                    </Button>
+                  </div>
                 </div>
                 {exportErrorDetail === 'income_source_detail' && (
                   <div className="summary-error">
@@ -541,6 +604,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                           columns={[
                             { key: 'date', label: t('globalSummary.date') },
                             { key: 'vendor', label: t('globalSummary.vendor') },
+                            { key: 'account', label: t('globalSummary.incomeAccountFilterLabel') },
                             { key: 'amount', label: t('globalSummary.amount') },
                             { key: 'comment', label: t('globalSummary.comment') },
                           ]}
@@ -550,6 +614,12 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                               (entry.source && entry.source.name) ||
                               entry.created_by_username ||
                               '—',
+                            account:
+                              entry.account === 'CASH'
+                                ? 'Касса'
+                                : entry.account === 'BANK'
+                                ? 'Банк'
+                                : '—',
                             amount: formatKGS(entry.amount),
                             comment: entry.comment || '—',
                           }))}
@@ -589,7 +659,45 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
         )}
         {openPanel === 'expense' && expenseByCategory.length > 0 && (
           <div className="global-summary-breakdown">
-            {renderSectionHeader(t('globalSummary.expenseCategoriesSummaryTitle'), 'expense_categories')}
+            <div className="global-summary-section-header">
+              <h4 className="global-summary-section-title">
+                {t('globalSummary.expenseCategoriesSummaryTitle')}
+              </h4>
+              <div className="global-summary-section-header__actions">
+                <div className="expense-categories-filter expense-categories-filter--inline">
+                  <label htmlFor="expense-account-filter" className="expense-categories-filter__label">
+                    {t('globalSummary.expenseAccountFilterLabel')}:
+                  </label>
+                  <select
+                    id="expense-account-filter"
+                    className="expense-categories-filter__select"
+                    value={expenseAccountFilter}
+                    onChange={(e) => setExpenseAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')}
+                    aria-label={t('globalSummary.expenseAccountFilterLabel')}
+                  >
+                    <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                    <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                    <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  className="global-summary-export-button"
+                  disabled={exportingSection !== null}
+                  title={t('globalSummary.actions.exportPdf')}
+                  aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                  onClick={() => {
+                    void handleSectionExport('expense_categories')
+                  }}
+                >
+                  {exportingSection === 'expense_categories'
+                    ? t('globalSummary.actions.exportingPdf')
+                    : t('globalSummary.actions.exportPdf')}
+                </Button>
+              </div>
+            </div>
             {exportErrorSection === 'expense_categories' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
@@ -644,22 +752,45 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <h4 className="expense-details-title">
                     {selectedExpenseCategoryName} – {t('globalSummary.details')}
                   </h4>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    className="global-summary-export-button"
-                    disabled={exportingDetail !== null}
-                    title={t('globalSummary.actions.exportPdf')}
-                    aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
-                    onClick={() => {
-                      void handleExpenseDetailExport()
-                    }}
-                  >
-                    {exportingDetail === 'expense_category_detail'
-                      ? t('globalSummary.actions.exportingPdf')
-                      : t('globalSummary.actions.exportPdf')}
-                  </Button>
+                  <div className="global-summary-section-header__actions">
+                    <div className="expense-categories-filter expense-categories-filter--inline">
+                      <label
+                        htmlFor="expense-detail-account-filter"
+                        className="expense-categories-filter__label"
+                      >
+                        {t('globalSummary.expenseAccountFilterLabel')}:
+                      </label>
+                      <select
+                        id="expense-detail-account-filter"
+                        className="expense-categories-filter__select"
+                        value={expenseDetailAccountFilter}
+                        onChange={(e) =>
+                          setExpenseDetailAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
+                        }
+                        aria-label={t('globalSummary.expenseAccountFilterLabel')}
+                      >
+                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                      </select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      className="global-summary-export-button"
+                      disabled={exportingDetail !== null}
+                      title={t('globalSummary.actions.exportPdf')}
+                      aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
+                      onClick={() => {
+                        void handleExpenseDetailExport()
+                      }}
+                    >
+                      {exportingDetail === 'expense_category_detail'
+                        ? t('globalSummary.actions.exportingPdf')
+                        : t('globalSummary.actions.exportPdf')}
+                    </Button>
+                  </div>
                 </div>
                 {exportErrorDetail === 'expense_category_detail' && (
                   <div className="summary-error">
@@ -697,12 +828,19 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                           columns={[
                             { key: 'date', label: t('globalSummary.date') },
                             { key: 'vendor', label: t('globalSummary.vendor') },
+                            { key: 'account', label: t('globalSummary.expenseAccountFilterLabel') },
                             { key: 'amount', label: t('globalSummary.amount') },
                             { key: 'comment', label: t('globalSummary.comment') },
                           ]}
                           data={expenseDetailsData.results.map((expense) => ({
                             date: formatDate(expense.spent_at),
                             vendor: expense.created_by_username || '—',
+                            account:
+                              expense.account === 'CASH'
+                                ? 'Касса'
+                                : expense.account === 'BANK'
+                                ? 'Банк'
+                                : '—',
                             amount: formatKGS(expense.amount),
                             comment: expense.comment || '—',
                           }))}
@@ -740,8 +878,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             )}
           </div>
         )}
-        {openPanel === 'net' && (
-          <div className="global-summary-breakdown net-breakdown">
+        {openPanel === 'balance' && (
+          <div className="global-summary-breakdown balance-breakdown">
+            <p>Касса: {formatKGS(cashClosing)}</p>
+            <p>Банк: {formatKGS(bankClosing)}</p>
+            <p className={net >= 0 ? 'positive' : 'negative'}>
+              {t('globalSummary.labels.net')}: {formatKGS(net)}
+            </p>
             <p>
               {t('globalSummary.netExplanation', {
                 income: formatKGS(incomeActualTotal),
@@ -749,12 +892,6 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 net: formatKGS(net),
               })}
             </p>
-          </div>
-        )}
-        {openPanel === 'balance' && (
-          <div className="global-summary-breakdown balance-breakdown">
-            <p>Касса: {formatKGS(cashClosing)}</p>
-            <p>Банк: {formatKGS(bankClosing)}</p>
           </div>
         )}
       </div>

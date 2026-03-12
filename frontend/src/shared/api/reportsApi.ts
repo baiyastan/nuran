@@ -82,6 +82,7 @@ export interface DashboardExpenseCategoriesResponse {
 
 export interface DashboardExpenseCategoriesParams {
   month: string // YYYY-MM
+  account?: 'CASH' | 'BANK' // optional; omit or don't send for "all"
 }
 
 export interface DashboardIncomeSourceRow {
@@ -105,6 +106,7 @@ export interface DashboardIncomeSourcesResponse {
 
 export interface DashboardIncomeSourcesParams {
   month: string // YYYY-MM
+  account?: 'CASH' | 'BANK' // optional; omit for "all"
 }
 
 export type ReportSectionType = 'income_sources' | 'expense_categories'
@@ -113,16 +115,20 @@ export type ReportDetailTarget = number | 'null'
 export interface ExportSectionPdfParams {
   month: string
   sectionType: ReportSectionType
+  /** When sectionType is expense_categories, pass to export filtered data; omit for "Все" */
+  account?: 'CASH' | 'BANK'
 }
 
 export interface ExportIncomeSourceDetailPdfParams {
   month: string
   sourceId: ReportDetailTarget
+  account?: 'CASH' | 'BANK'
 }
 
 export interface ExportExpenseCategoryDetailPdfParams {
   month: string
   categoryId: ReportDetailTarget
+  account?: 'CASH' | 'BANK'
 }
 
 export const reportsApi = baseApi.injectEndpoints({
@@ -145,9 +151,9 @@ export const reportsApi = baseApi.injectEndpoints({
       DashboardExpenseCategoriesResponse,
       DashboardExpenseCategoriesParams
     >({
-      query: ({ month }) => ({
+      query: ({ month, account }) => ({
         url: '/reports/dashboard-expense-categories/',
-        params: { month },
+        params: account ? { month, account } : { month },
       }),
       providesTags: ['Report'],
     }),
@@ -155,38 +161,42 @@ export const reportsApi = baseApi.injectEndpoints({
       DashboardIncomeSourcesResponse,
       DashboardIncomeSourcesParams
     >({
-      query: ({ month }) => ({
+      query: ({ month, account }) => ({
         url: '/reports/dashboard-income-sources/',
-        params: { month },
+        params: account ? { month, account } : { month },
       }),
       providesTags: ['Report'],
     }),
     exportSectionPdf: builder.mutation<Blob, ExportSectionPdfParams>({
-      query: ({ month, sectionType }) => ({
+      query: ({ month, sectionType, account }) => ({
         url: '/reports/export-section-pdf/',
         params: {
           month,
           section_type: sectionType,
+          ...(sectionType === 'expense_categories' && account && { account }),
+          ...(sectionType === 'income_sources' && account && { account }),
         },
         responseType: 'blob',
       }),
     }),
     exportIncomeSourceDetailPdf: builder.mutation<Blob, ExportIncomeSourceDetailPdfParams>({
-      query: ({ month, sourceId }) => ({
+      query: ({ month, sourceId, account }) => ({
         url: '/reports/export-income-source-detail-pdf/',
         params: {
           month,
           source_id: sourceId,
+          ...(account && { account }),
         },
         responseType: 'blob',
       }),
     }),
     exportExpenseCategoryDetailPdf: builder.mutation<Blob, ExportExpenseCategoryDetailPdfParams>({
-      query: ({ month, categoryId }) => ({
+      query: ({ month, categoryId, account }) => ({
         url: '/reports/export-expense-category-detail-pdf/',
         params: {
           month,
           category_id: categoryId,
+          ...(account && { account }),
         },
         responseType: 'blob',
       }),

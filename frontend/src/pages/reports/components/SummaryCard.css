@@ -20,6 +20,13 @@
   gap: 0.75rem;
 }
 
+.global-summary-section-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
 .global-summary-section-header--detail {
   margin: 0;
 }
@@ -160,6 +167,38 @@
 
 .global-summary-breakdown {
   margin-top: 1.25rem;
+}
+
+.expense-categories-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.expense-categories-filter--inline {
+  margin-bottom: 0;
+}
+
+.expense-categories-filter__label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.expense-categories-filter__select {
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  color: #111827;
+  min-width: 8rem;
+}
+
+.expense-categories-filter__select:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
 }
 
 .global-summary-breakdown.net-breakdown p {

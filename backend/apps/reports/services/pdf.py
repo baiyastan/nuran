@@ -36,13 +36,13 @@ DETAIL_CONFIG = {
     "income_source": {
         "report_title": "Детализация по источнику дохода",
         "item_label": "Источник",
-        "columns": ["Дата", "Сумма", "Источник", "Комментарий"],
+        "columns": ["Дата", "Контрагент", "Счёт", "Сумма", "Комментарий"],
         "empty_label": "Нет данных",
     },
     "expense_category": {
         "report_title": "Детализация по категории расходов",
         "item_label": "Категория",
-        "columns": ["Дата", "Сумма", "Категория", "Комментарий"],
+        "columns": ["Дата", "Категория", "Счёт", "Сумма", "Комментарий"],
         "empty_label": "Нет данных",
     },
 }
@@ -129,13 +129,16 @@ def build_report_section_pdf(section_type: str, section_data: dict) -> bytes:
         Paragraph(config["section_title"], heading_style),
         Spacer(1, 6),
         Paragraph(f"Месяц: {section_data['month']}", body_style),
-        Paragraph(f"Статус месяца: {section_data['month_status']}", body_style),
+    ]
+    if section_data.get("account_filter_label"):
+        story.append(Paragraph(f"Счёт: {section_data['account_filter_label']}", body_style))
+    story.extend([
         Paragraph(f"План: {format_pdf_amount(section_data['totals']['plan'])}", body_style),
         Paragraph(f"Факт: {format_pdf_amount(section_data['totals']['fact'])}", body_style),
         Spacer(1, 10),
-    ]
+    ])
 
-    table_data = [[config["name_label"], "План", "Факт", "Разница", "Кол-во", "Доля %"]]
+    table_data = [[config["name_label"], "План", "Факт", "Разница", "Кол-во", "%"]]
     for row in rows:
         table_data.append(
             [
@@ -191,20 +194,34 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
         Paragraph(config["report_title"], heading_style),
         Spacer(1, 6),
         Paragraph(f"Месяц: {detail_data['month']}", body_style),
-        Paragraph(f"Статус месяца: {detail_data['month_status']}", body_style),
-        Paragraph(f"{config['item_label']}: {_display_name(detail_data['item_name'])}", body_style),
-        Paragraph(f"Кол-во: {detail_data['total_count']}", body_style),
-        Paragraph(f"Сумма: {format_pdf_amount(detail_data['total_amount'])}", body_style),
-        Spacer(1, 10),
     ]
+    if detail_data.get("account_filter_label"):
+        story.append(Paragraph(f"Счёт: {detail_data['account_filter_label']}", body_style))
+    story.extend(
+        [
+            Paragraph(f"{config['item_label']}: {_display_name(detail_data['item_name'])}", body_style),
+            Paragraph(f"Кол-во: {detail_data['total_count']}", body_style),
+            Paragraph(f"Сумма: {format_pdf_amount(detail_data['total_amount'])}", body_style),
+            Spacer(1, 10),
+        ]
+    )
 
     table_data = [config["columns"]]
     for row in detail_data["rows"]:
+        account_raw = row.get("account")
+        if account_raw == "CASH":
+            account_label = "Касса"
+        elif account_raw == "BANK":
+            account_label = "Банк"
+        else:
+            account_label = "—"
+
         table_data.append(
             [
                 row["date"],
-                format_pdf_amount(row["amount"]),
                 _display_name(row["name"]),
+                account_label,
+                format_pdf_amount(row["amount"]),
                 row["comment"] or "—",
             ]
         )
@@ -215,7 +232,9 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
     table = Table(
         table_data,
         repeatRows=1,
-        colWidths=[28 * mm, 28 * mm, 48 * mm, 68 * mm],
+        # 5 columns: Дата, Контрагент/Категория, Счёт, Сумма, Комментарий
+        # Total width ~= 178 mm (210 - 2*16 margins)
+        colWidths=[22 * mm, 42 * mm, 22 * mm, 32 * mm, 60 * mm],
     )
     table.setStyle(
         TableStyle(
@@ -224,15 +243,16 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
                 ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
                 ("FONTNAME", (0, 1), (-1, -1), FONT_REGULAR),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                # Slightly smaller font to keep 5-column table readable
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
                 ("ALIGN", (0, 0), (0, -1), "LEFT"),
                 ("ALIGN", (2, 0), (-1, -1), "LEFT"),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
