@@ -64,6 +64,18 @@ describe('GlobalSummary section PDF export', () => {
         income_plan: '800.00',
         expense_plan: '300.00',
         net_plan: '500.00',
+        cash_balance: '0.00',
+        bank_balance: '0.00',
+        cash_opening_balance: '0.00',
+        bank_opening_balance: '0.00',
+        cash_inflow_month: '0.00',
+        cash_outflow_month: '0.00',
+        bank_inflow_month: '0.00',
+        bank_outflow_month: '0.00',
+        cash_closing_balance: '0.00',
+        bank_closing_balance: '0.00',
+        bank_to_cash_month: '0.00',
+        cash_to_bank_month: '0.00',
       },
       isLoading: false,
       error: null,
@@ -269,6 +281,161 @@ describe('GlobalSummary section PDF export', () => {
       expect(anchorClickSpy).toHaveBeenCalled()
       expect(revokeObjectUrlMock).toHaveBeenCalled()
     })
+  })
+
+  it('renders transfer summary and clarifying helper text', () => {
+    vi.mocked(useGetDashboardKpiQuery).mockReturnValue({
+      data: {
+        month: '2026-03',
+        income_fact: '1000.00',
+        expense_fact: '400.00',
+        net: '600.00',
+        income_plan: '800.00',
+        expense_plan: '300.00',
+        net_plan: '500.00',
+        cash_balance: '100.00',
+        bank_balance: '200.00',
+        cash_opening_balance: '50.00',
+        bank_opening_balance: '150.00',
+        cash_inflow_month: '0.00',
+        cash_outflow_month: '0.00',
+        bank_inflow_month: '0.00',
+        bank_outflow_month: '0.00',
+        cash_closing_balance: '100.00',
+        bank_closing_balance: '200.00',
+        bank_to_cash_month: '30.00',
+        cash_to_bank_month: '10.00',
+      },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    // Helper text / explanations
+    expect(
+      screen.getByText(/Факт расходов может включать плановые корректировки/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Чистый результат — это показатель P&L/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Остаток на счетах — это итоговый баланс кассы и банковских счетов/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Переводы между счетами не изменяют чистый результат/i)
+    ).toBeInTheDocument()
+
+    // Transfer summary table at the bottom of the card
+    expect(screen.getByText(/Переводы между счетами/i)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Направление/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Сумма/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Комментарий/i })).toBeInTheDocument()
+    expect(screen.getByText(/Банк → Касса/i)).toBeInTheDocument()
+    expect(screen.getByText(/Касса → Банк/i)).toBeInTheDocument()
+  })
+
+  it('expands transfer details per direction and shows empty state', async () => {
+    vi.mocked(useGetDashboardKpiQuery).mockReturnValue({
+      data: {
+        month: '2026-03',
+        income_fact: '0.00',
+        expense_fact: '0.00',
+        net: '0.00',
+        income_plan: '0.00',
+        expense_plan: '0.00',
+        net_plan: '0.00',
+        cash_balance: '0.00',
+        bank_balance: '0.00',
+        cash_opening_balance: '0.00',
+        bank_opening_balance: '0.00',
+        cash_inflow_month: '0.00',
+        cash_outflow_month: '0.00',
+        bank_inflow_month: '0.00',
+        bank_outflow_month: '0.00',
+        cash_closing_balance: '0.00',
+        bank_closing_balance: '0.00',
+        bank_to_cash_month: '100.00',
+        cash_to_bank_month: '0.00',
+      },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    // Mock transfer details hook
+    vi.mocked(useGetTransferDetailsQuery as any).mockReturnValue({
+      data: {
+        month: '2026-03',
+        bank_to_cash: [
+          {
+            id: 1,
+            transferred_at: '2026-03-05',
+            source_account: 'BANK',
+            destination_account: 'CASH',
+            amount: '100.00',
+            comment: 'B->C',
+            created_by_username: 'admin',
+          },
+        ],
+        cash_to_bank: [],
+      },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    // Open BANK -> CASH details
+    fireEvent.click(screen.getByRole('button', { name: /Показать/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Дата/i)).toBeInTheDocument()
+      expect(screen.getByText(/Откуда/i)).toBeInTheDocument()
+      expect(screen.getByText(/Куда/i)).toBeInTheDocument()
+      expect(screen.getByText(/Сумма/i)).toBeInTheDocument()
+      expect(screen.getByText(/Комментарий/i)).toBeInTheDocument()
+      expect(screen.getByText(/B->C/i)).toBeInTheDocument()
+    })
+
+    // Toggle to CASH -> BANK direction (empty state)
+    const buttons = screen.getAllByRole('button', { name: /Показать/i })
+    fireEvent.click(buttons[1])
+
+    await waitFor(() => {
+      expect(screen.getByText(/Операций нет/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows total balance equal to sum of cash and bank closing balances', () => {
+    vi.mocked(useGetDashboardKpiQuery).mockReturnValue({
+      data: {
+        month: '2026-03',
+        income_fact: '0.00',
+        expense_fact: '0.00',
+        net: '0.00',
+        income_plan: '0.00',
+        expense_plan: '0.00',
+        net_plan: '0.00',
+        cash_balance: '0.00',
+        bank_balance: '0.00',
+        cash_opening_balance: '0.00',
+        bank_opening_balance: '0.00',
+        cash_inflow_month: '0.00',
+        cash_outflow_month: '0.00',
+        bank_inflow_month: '0.00',
+        bank_outflow_month: '0.00',
+        cash_closing_balance: '150.00',
+        bank_closing_balance: '250.00',
+        bank_to_cash_month: '0.00',
+        cash_to_bank_month: '0.00',
+      },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    // Label renamed to "Остаток на счетах" and value is sum of cash + bank closing
+    expect(screen.getByText(/Остаток на счетах:/i)).toBeInTheDocument()
+    expect(screen.getByText(/400.*сом/i)).toBeInTheDocument()
   })
 
   it('exports the expense section with the expense section type', async () => {

@@ -21,7 +21,11 @@ from apps.planning.models import ActualExpense as PlanningActualExpense
 from apps.expenses.services import aggregate_by_category, sum_expenses, get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
 from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource, Transfer
-from apps.reports.services.pdf import build_report_detail_pdf, build_report_section_pdf
+from apps.reports.services.pdf import (
+    build_report_detail_pdf,
+    build_report_section_pdf,
+    build_transfer_direction_pdf,
+)
 
 from .serializers import BudgetPlanReportSerializer
 
@@ -925,12 +929,34 @@ class DashboardKpiView(views.APIView):
             cash_outflow_month = Decimal('0.00')
             bank_inflow_month = Decimal('0.00')
             bank_outflow_month = Decimal('0.00')
+            bank_to_cash_month = Decimal('0.00')
+            cash_to_bank_month = Decimal('0.00')
         else:
             # Opening and closing balances using shared helper
             cash_opening_balance = get_balance_for_account('CASH', prev_day)
             bank_opening_balance = get_balance_for_account('BANK', prev_day)
             cash_closing_balance = get_balance_for_account('CASH', last_day)
             bank_closing_balance = get_balance_for_account('BANK', last_day)
+
+            # Monthly transfer totals between BANK and CASH (do not affect profit/loss)
+            bank_to_cash_month = (
+                Transfer.objects.filter(
+                    source_account='BANK',
+                    destination_account='CASH',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
+            cash_to_bank_month = (
+                Transfer.objects.filter(
+                    source_account='CASH',
+                    destination_account='BANK',
+                    transferred_at__gte=first_day,
+                    transferred_at__lte=last_day,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0.00')
+            )
 
             # Monthly inflows/outflows for CASH
             income_cash_month = (
@@ -1029,9 +1055,155 @@ class DashboardKpiView(views.APIView):
                 'bank_closing_balance': to_decimal_str(bank_closing_balance),
                 'cash_balance': to_decimal_str(cash_balance),
                 'bank_balance': to_decimal_str(bank_balance),
+                'bank_to_cash_month': to_decimal_str(bank_to_cash_month),
+                'cash_to_bank_month': to_decimal_str(cash_to_bank_month),
             },
             status=status.HTTP_200_OK,
         )
+
+
+class TransferDetailsView(views.APIView):
+    """
+    List internal transfers between CASH and BANK for a given month, grouped by direction.
+
+    GET /api/v1/reports/transfer-details/?month=YYYY-MM
+    - Admin, director: allowed
+    - Other roles: 403 (owner-level view)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        month, month_period = validated
+
+        # Use the same month parsing semantics as DashboardKpiView
+        try:
+            year_int = int(month[:4])
+            month_int = int(month[5:7])
+            first_day = date(year_int, month_int, 1)
+            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
+        except (ValueError, IndexError):
+            return Response(
+                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        base_qs = Transfer.objects.select_related('created_by').filter(
+            transferred_at__gte=first_day,
+            transferred_at__lte=last_day,
+        )
+
+        bank_to_cash_qs = base_qs.filter(source_account='BANK', destination_account='CASH')
+        cash_to_bank_qs = base_qs.filter(source_account='CASH', destination_account='BANK')
+
+        def serialize_transfer(t: Transfer) -> dict[str, object]:
+            return {
+                'id': t.id,
+                'transferred_at': t.transferred_at.isoformat(),
+                'source_account': t.source_account,
+                'destination_account': t.destination_account,
+                'amount': _to_decimal_str(t.amount),
+                'comment': t.comment or '',
+                'created_by_username': t.created_by.username if t.created_by else None,
+            }
+
+        return Response(
+            {
+                'month': month,
+                'bank_to_cash': [serialize_transfer(t) for t in bank_to_cash_qs],
+                'cash_to_bank': [serialize_transfer(t) for t in cash_to_bank_qs],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ExportTransfersDirectionPdfView(views.APIView):
+    """
+    Export transfers for a single direction as PDF.
+
+    GET /api/v1/reports/transfers-direction-pdf/?month=YYYY-MM&direction=BANK_TO_CASH|CASH_TO_BANK
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _ensure_owner_dashboard_access(request)
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        month, month_period = validated
+
+        raw_direction = (request.query_params.get('direction') or '').strip().upper()
+        if raw_direction not in ('BANK_TO_CASH', 'CASH_TO_BANK'):
+            return Response(
+                {'direction': 'direction must be one of: BANK_TO_CASH, CASH_TO_BANK'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if raw_direction == 'BANK_TO_CASH':
+            source_account = 'BANK'
+            destination_account = 'CASH'
+            direction_label = 'Банк → Касса'
+            filename_direction = 'bank_to_cash'
+        else:
+            source_account = 'CASH'
+            destination_account = 'BANK'
+            direction_label = 'Касса → Банк'
+            filename_direction = 'cash_to_bank'
+
+        # Parse month (YYYY-MM) into first/last day
+        try:
+            year_int = int(month[:4])
+            month_int = int(month[5:7])
+            first_day = date(year_int, month_int, 1)
+            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
+        except (ValueError, IndexError):
+            return Response(
+                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = (
+            Transfer.objects.filter(
+                source_account=source_account,
+                destination_account=destination_account,
+                transferred_at__gte=first_day,
+                transferred_at__lte=last_day,
+            )
+            .order_by('transferred_at', 'id')
+        )
+
+        total_amount = qs.aggregate(t=Sum('amount'))['t'] or Decimal('0.00')
+
+        detail_rows = [
+            {
+                'transferred_at': t.transferred_at.isoformat(),
+                'source_account': t.source_account,
+                'destination_account': t.destination_account,
+                'amount': t.amount,
+                'comment': t.comment or '',
+            }
+            for t in qs
+        ]
+
+        pdf_bytes = build_transfer_direction_pdf(
+            month=month,
+            direction_label=direction_label,
+            total_amount=total_amount,
+            detail_rows=detail_rows,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = (
+            f'attachment; filename="transfers_{filename_direction}_{month}.pdf"'
+        )
+        return response
 
 
 # Manual test (curl):

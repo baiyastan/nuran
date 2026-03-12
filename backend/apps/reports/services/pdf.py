@@ -122,21 +122,37 @@ def build_report_section_pdf(section_type: str, section_data: dict) -> bytes:
         key=lambda row: _display_name(row.get("source_name") or row.get("category_name")).lower(),
     )
 
+    # Unified PDF header: start with "Отчёты" for all reports
     story = [
-        Paragraph("Nuran", title_style),
+        Paragraph("Отчёты", title_style),
         Spacer(1, 6),
-        Paragraph("Отчёты", heading_style),
         Paragraph(config["section_title"], heading_style),
         Spacer(1, 6),
-        Paragraph(f"Месяц: {section_data['month']}", body_style),
+        Paragraph(
+            f'<font name="{FONT_BOLD}">Месяц:</font> {section_data["month"]}',
+            body_style,
+        ),
     ]
     if section_data.get("account_filter_label"):
-        story.append(Paragraph(f"Счёт: {section_data['account_filter_label']}", body_style))
-    story.extend([
-        Paragraph(f"План: {format_pdf_amount(section_data['totals']['plan'])}", body_style),
-        Paragraph(f"Факт: {format_pdf_amount(section_data['totals']['fact'])}", body_style),
-        Spacer(1, 10),
-    ])
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Счёт:</font> {section_data["account_filter_label"]}',
+                body_style,
+            )
+        )
+    story.extend(
+        [
+            Paragraph(
+                f'<font name="{FONT_BOLD}">План:</font> {format_pdf_amount(section_data["totals"]["plan"])}',
+                body_style,
+            ),
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Факт:</font> {format_pdf_amount(section_data["totals"]["fact"])}',
+                body_style,
+            ),
+            Spacer(1, 10),
+        ]
+    )
 
     table_data = [[config["name_label"], "План", "Факт", "Разница", "Кол-во", "%"]]
     for row in rows:
@@ -187,21 +203,38 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
     document = _build_pdf_document(buffer)
     title_style, heading_style, body_style = _build_pdf_styles()
 
+    # Unified PDF header: start with "Отчёты" for all reports
     story = [
-        Paragraph("Nuran", title_style),
+        Paragraph("Отчёты", title_style),
         Spacer(1, 6),
-        Paragraph("Отчёты", heading_style),
         Paragraph(config["report_title"], heading_style),
         Spacer(1, 6),
-        Paragraph(f"Месяц: {detail_data['month']}", body_style),
+        Paragraph(
+            f'<font name="{FONT_BOLD}">Месяц:</font> {detail_data["month"]}',
+            body_style,
+        ),
     ]
     if detail_data.get("account_filter_label"):
-        story.append(Paragraph(f"Счёт: {detail_data['account_filter_label']}", body_style))
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Счёт:</font> {detail_data["account_filter_label"]}',
+                body_style,
+            )
+        )
     story.extend(
         [
-            Paragraph(f"{config['item_label']}: {_display_name(detail_data['item_name'])}", body_style),
-            Paragraph(f"Кол-во: {detail_data['total_count']}", body_style),
-            Paragraph(f"Сумма: {format_pdf_amount(detail_data['total_amount'])}", body_style),
+            Paragraph(
+                f'<font name="{FONT_BOLD}">{config["item_label"]}:</font> {_display_name(detail_data["item_name"])}',
+                body_style,
+            ),
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Кол-во:</font> {detail_data["total_count"]}',
+                body_style,
+            ),
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Сумма:</font> {format_pdf_amount(detail_data["total_amount"])}',
+                body_style,
+            ),
             Spacer(1, 10),
         ]
     )
@@ -257,6 +290,101 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
         )
     )
     story.append(table)
+
+    document.build(story)
+    return buffer.getvalue()
+
+
+def build_transfer_direction_pdf(
+    month: str,
+    direction_label: str,
+    total_amount: Decimal,
+    detail_rows: list[dict],
+) -> bytes:
+    """
+    Build a standalone PDF for transfers in a single direction for a given month.
+    """
+    _register_pdf_fonts()
+    buffer = BytesIO()
+    document = _build_pdf_document(buffer)
+    title_style, heading_style, body_style = _build_pdf_styles()
+
+    # Unified header: "Отчёты" + direction title + month
+    story: list = [
+        Paragraph("Отчёты", title_style),
+        Spacer(1, 6),
+        Paragraph(f"Переводы между счетами: {direction_label}", heading_style),
+        Spacer(1, 6),
+        Paragraph(f"Месяц: {month}", body_style),
+        Spacer(1, 10),
+    ]
+
+    # Detail section (no summary table for direction-specific export)
+    story.append(Paragraph("Детализация переводов", heading_style))
+
+    if not detail_rows:
+        story.append(
+            Paragraph(
+                "За выбранный месяц операций по данному направлению не было.",
+                body_style,
+            )
+        )
+    else:
+        detail_table_data = [["Дата", "Откуда", "Куда", "Сумма", "Комментарий"]]
+        for row in detail_rows:
+            source_raw = row.get("source_account")
+            dest_raw = row.get("destination_account")
+
+            if source_raw == "CASH":
+                source_label = "Касса"
+            elif source_raw == "BANK":
+                source_label = "Банк"
+            else:
+                source_label = "—"
+
+            if dest_raw == "CASH":
+                dest_label = "Касса"
+            elif dest_raw == "BANK":
+                dest_label = "Банк"
+            else:
+                dest_label = "—"
+
+            detail_table_data.append(
+                [
+                    row.get("transferred_at") or "",
+                    source_label,
+                    dest_label,
+                    format_pdf_amount(row.get("amount") or "0"),
+                    Paragraph(str(row.get("comment") or ""), body_style),
+                ]
+            )
+
+        detail_table = Table(
+            detail_table_data,
+            repeatRows=1,
+            colWidths=[22 * mm, 32 * mm, 32 * mm, 24 * mm, 70 * mm],
+        )
+        detail_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+                    ("FONTNAME", (0, 1), (-1, -1), FONT_REGULAR),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+                    ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                    ("ALIGN", (1, 0), (2, -1), "LEFT"),
+                    ("ALIGN", (4, 0), (4, -1), "LEFT"),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(detail_table)
 
     document.build(story)
     return buffer.getvalue()

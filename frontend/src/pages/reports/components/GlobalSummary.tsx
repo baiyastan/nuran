@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
@@ -11,8 +11,10 @@ import {
   useGetDashboardIncomeSourcesQuery,
   useGetDashboardKpiQuery,
   useExportSectionPdfMutation,
+  useGetTransferDetailsQuery,
 } from '@/shared/api/reportsApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
+import { useAuth } from '@/shared/hooks/useAuth'
 import { formatDate, formatKGS } from '@/shared/lib/utils'
 import './SummaryCard.css'
 
@@ -103,6 +105,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
+  const { accessToken } = useAuth()
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [previousMonthOpen, setPreviousMonthOpen] = useState(false)
   const [exportSectionPdf] = useExportSectionPdfMutation()
@@ -122,6 +125,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const [incomeAccountFilter, setIncomeAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
   const [incomeDetailAccountFilter, setIncomeDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
   const [expenseDetailAccountFilter, setExpenseDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
+  const [openTransferDirection, setOpenTransferDirection] = useState<'BANK_TO_CASH' | 'CASH_TO_BANK' | null>(null)
 
   const {
     data: kpiData,
@@ -183,15 +187,31 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     }
   )
 
+  const {
+    data: transferDetails,
+    isLoading: loadingTransfers,
+    error: transferError,
+  } = useGetTransferDetailsQuery({ month })
+
   const incomeActualTotal = kpiData ? parseFloat(kpiData.income_fact) : 0
   const expenseActualTotal = kpiData ? parseFloat(kpiData.expense_fact) : 0
   const net = kpiData ? parseFloat(kpiData.net) : 0
   const cashBalance = kpiData ? parseFloat(kpiData.cash_balance ?? '0') : 0
   const bankBalance = kpiData ? parseFloat(kpiData.bank_balance ?? '0') : 0
-  const cashClosing = kpiData ? parseFloat(kpiData.cash_closing_balance ?? kpiData.cash_balance ?? '0') : 0
-  const bankClosing = kpiData ? parseFloat(kpiData.bank_closing_balance ?? kpiData.bank_balance ?? '0') : 0
+  const cashClosing = kpiData
+    ? parseFloat(kpiData.cash_closing_balance ?? kpiData.cash_balance ?? '0')
+    : 0
+  const bankClosing = kpiData
+    ? parseFloat(kpiData.bank_closing_balance ?? kpiData.bank_balance ?? '0')
+    : 0
   const previousMonthCash = kpiData ? parseFloat(kpiData.cash_opening_balance ?? '0') : 0
   const previousMonthBank = kpiData ? parseFloat(kpiData.bank_opening_balance ?? '0') : 0
+  const bankToCashMonth = kpiData ? parseFloat(kpiData.bank_to_cash_month ?? '0') : 0
+  const cashToBankMonth = kpiData ? parseFloat(kpiData.cash_to_bank_month ?? '0') : 0
+
+  const totalClosingBalance = cashClosing + bankClosing
+  const totalOpeningBalance = previousMonthCash + previousMonthBank
+  const balanceChange = totalClosingBalance - totalOpeningBalance
 
   const incomeBySource = useMemo(() => {
     if (!incomeSourcesData) return []
@@ -337,7 +357,9 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           <>
             <div className="summary-grid">
               <div className="summary-item">
-                <span className="summary-label">{t('globalSummary.labels.incomeActual')}:</span>
+                <span className="summary-label">
+                  {t('globalSummary.labels.incomeActual')}:
+                </span>
                 <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
                 <button
                   type="button"
@@ -354,16 +376,14 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <ChevronIcon />
                 </button>
               </div>
-            <div className="summary-item">
-              <span className="summary-label">
-                {t('globalSummary.labels.expenseActual')}:
-              </span>
-              <span
-                className="summary-value"
-                title="Факт расходов за месяц может включать плановые корректировки и расходы из разных модулей"
-              >
-                {formatKGS(expenseActualTotal)}
-              </span>
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.expenseActual')}:</span>
+                <span
+                  className="summary-value"
+                  title="Факт расходов за месяц может включать плановые корректировки и расходы из разных модулей"
+                >
+                  {formatKGS(expenseActualTotal)}
+                </span>
                 <button
                   type="button"
                   className={`summary-kpi-chevron-button${
@@ -379,84 +399,39 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   <ChevronIcon />
                 </button>
               </div>
-            <div className="summary-item">
-              <span className="summary-label">{t('globalSummary.labels.cashBalance')}:</span>
-              <span className="summary-value">{formatKGS(cashBalance)}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">{t('globalSummary.labels.bankBalance')}:</span>
-              <span className="summary-value">{formatKGS(bankBalance)}</span>
-            </div>
-            <div className="summary-item">
-              <span
-                className="summary-label"
-                title="Общий остаток денежных средств на кассе и банковских счетах на конец месяца"
-              >
-                Общий остаток:
-              </span>
-              <span className="summary-value">{formatKGS(cashClosing + bankClosing)}</span>
-              <button
-                type="button"
-                className={`summary-kpi-chevron-button${
-                  openPanel === 'balance' ? ' summary-kpi-chevron-button--open' : ''
-                }`}
-                aria-label="Показать детализацию остатков по счетам"
-                aria-expanded={openPanel === 'balance'}
-                title="Показать детализацию остатков по счетам"
-                onClick={() =>
-                  setOpenPanel((current) => (current === 'balance' ? null : 'balance'))
-                }
-              >
-                <ChevronIcon />
-              </button>
-            </div>
-            </div>
-            {kpiData && (
-              <div className="previous-month-block">
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.cashBalance')}:</span>
+                <span className="summary-value">{formatKGS(cashBalance)}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">{t('globalSummary.labels.bankBalance')}:</span>
+                <span className="summary-value">{formatKGS(bankBalance)}</span>
+              </div>
+              <div className="summary-item">
+                <span
+                  className="summary-label"
+                  title="Остаток на счетах (касса + банк) на конец месяца"
+                >
+                  Остаток на счетах:
+                </span>
+                <span className="summary-value">{formatKGS(totalClosingBalance)}</span>
                 <button
                   type="button"
-                  className={`previous-month-block__header${
-                    previousMonthOpen ? ' previous-month-block__header--open' : ''
+                  className={`summary-kpi-chevron-button${
+                    openPanel === 'balance' ? ' summary-kpi-chevron-button--open' : ''
                   }`}
-                  onClick={() => setPreviousMonthOpen((open) => !open)}
-                  aria-expanded={previousMonthOpen}
-                  aria-controls="previous-month-balance"
-                  aria-label={previousMonthOpen ? 'Свернуть' : 'Развернуть'}
+                  aria-label="Показать детализацию остатков по счетам"
+                  aria-expanded={openPanel === 'balance'}
+                  title="Показать детализацию остатков по счетам"
+                  onClick={() =>
+                    setOpenPanel((current) => (current === 'balance' ? null : 'balance'))
+                  }
                 >
-                  <span className="previous-month-block__label">Мурунку айдан остаток</span>
-                  <span className="previous-month-block__chevron" aria-hidden>
-                    <ChevronIcon />
-                  </span>
+                  <ChevronIcon />
                 </button>
-                {previousMonthOpen && (
-                  <div
-                    className="previous-month-block__content"
-                    id="previous-month-balance"
-                  >
-                    <div>
-                      Касса:{' '}
-                      <span
-                        className={`previous-month-block__value${
-                          previousMonthCash < 0 ? ' previous-month-block__value--negative' : ''
-                        }`}
-                      >
-                        {formatKGS(previousMonthCash)}
-                      </span>
-                    </div>
-                    <div>
-                      Банк:{' '}
-                      <span
-                        className={`previous-month-block__value${
-                          previousMonthBank < 0 ? ' previous-month-block__value--negative' : ''
-                        }`}
-                      >
-                        {formatKGS(previousMonthBank)}
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
-            )}
+            </div>
+            {/* helper text removed for compact summary */}
           </>
         )}
         {openPanel === 'income' && !isLoading && !hasError && incomeBySource.length > 0 && (
@@ -905,19 +880,212 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           </div>
         )}
         {openPanel === 'balance' && (
-          <div className="global-summary-breakdown balance-breakdown">
-            <p>Касса: {formatKGS(cashClosing)}</p>
-            <p>Банк: {formatKGS(bankClosing)}</p>
-            <p className={net >= 0 ? 'positive' : 'negative'}>
-              {t('globalSummary.labels.net')}: {formatKGS(net)}
+          <div className="global-summary-breakdown global-summary-balance-details">
+            <h4 className="global-summary-balance-details__heading">Мурунку айдан остаток</h4>
+            <p>
+              Касса:{' '}
+              <span className="global-summary-balance-details__value">
+                {formatKGS(previousMonthCash)}
+              </span>
             </p>
             <p>
-              {t('globalSummary.netExplanation', {
-                income: formatKGS(incomeActualTotal),
-                expense: formatKGS(expenseActualTotal),
-                net: formatKGS(net),
-              })}
+              Банк:{' '}
+              <span className="global-summary-balance-details__value">
+                {formatKGS(previousMonthBank)}
+              </span>
             </p>
+            <p>
+              Чистый результат:{' '}
+              <span
+                className={
+                  net >= 0 ? 'global-summary-balance-details__value positive' : 'global-summary-balance-details__value negative'
+                }
+              >
+                {formatKGS(net)}
+              </span>
+            </p>
+            <p>
+              Изменение остатка за месяц:{' '}
+              <span className="global-summary-balance-details__value">
+                {formatKGS(balanceChange)}
+              </span>
+            </p>
+          </div>
+        )}
+        {!isLoading && !hasError && kpiData && (
+          <div className="global-summary-transfers">
+            <div className="global-summary-section-header">
+              <div className="global-summary-section-header__info">
+                <h4 className="global-summary-section-title">Переводы между счетами</h4>
+                <p className="global-summary-transfers__hint">
+                  Внутренние переводы между кассой и банком. Не влияют на доходы и расходы (P&amp;L).
+                </p>
+              </div>
+              <div className="global-summary-section-header__actions" />
+            </div>
+            <div className="transfer-summary-table-wrapper">
+              <table className="transfer-summary-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Направление</th>
+                    <th scope="col">Сумма</th>
+                    <th scope="col">Комментарий</th>
+                    <th scope="col">Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(['BANK_TO_CASH', 'CASH_TO_BANK'] as const).map((directionKey) => {
+                    const isOpen = openTransferDirection === directionKey
+                    const isBankToCash = directionKey === 'BANK_TO_CASH'
+                    const total = isBankToCash ? bankToCashMonth : cashToBankMonth
+                    const directionLabel = isBankToCash ? 'Банк → Касса' : 'Касса → Банк'
+                    const shortComment =
+                      total === 0 ? 'Переводов не было' : 'Внутренний перевод (не влияет на P&L)'
+
+                    const details =
+                      transferDetails &&
+                      (isBankToCash
+                        ? transferDetails.bank_to_cash
+                        : transferDetails.cash_to_bank)
+
+                    return (
+                      <Fragment key={directionKey}>
+                        <tr className={isOpen ? 'transfer-summary-row transfer-summary-row--open' : 'transfer-summary-row'}>
+                          <td>{directionLabel}</td>
+                          <td className="transfer-summary-amount">
+                            {formatKGS(total)}
+                          </td>
+                          <td title="Внутренний перевод между счетами. Не влияет на доходы и расходы.">
+                            {shortComment}
+                          </td>
+                          <td className="transfer-summary-actions">
+                            <button
+                              type="button"
+                              className="transfer-action-btn"
+                              onClick={() =>
+                                setOpenTransferDirection((current) =>
+                                  current === directionKey ? null : directionKey
+                                )
+                              }
+                            >
+                              <span className="transfer-toggle-icon">
+                                {isOpen ? '▴' : '▾'}
+                              </span>
+                              <span className="transfer-toggle-label">
+                                {isOpen ? 'Скрыть' : 'Показать'}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="transfer-action-btn transfer-action-btn--secondary"
+                              onClick={() => {
+                                const mappedDirection =
+                                  directionKey === 'BANK_TO_CASH'
+                                    ? 'BANK_TO_CASH'
+                                    : 'CASH_TO_BANK'
+
+                                void (async () => {
+                                  const resp = await fetch(
+                                    `/api/v1/reports/transfers-direction-pdf/?month=${month}&direction=${mappedDirection}`,
+                                    {
+                                      method: 'GET',
+                                      headers: {
+                                        ...(accessToken && {
+                                          Authorization: `Bearer ${accessToken}`,
+                                        }),
+                                      },
+                                      credentials: 'include',
+                                    },
+                                  )
+                                  if (!resp.ok) {
+                                    return
+                                  }
+                                  const blob = await resp.blob()
+                                  const url = URL.createObjectURL(blob)
+                                  const link = document.createElement('a')
+                                  link.href = url
+                                  link.download =
+                                    mappedDirection === 'BANK_TO_CASH'
+                                      ? `transfers_bank_to_cash_${month}.pdf`
+                                      : `transfers_cash_to_bank_${month}.pdf`
+                                  document.body.appendChild(link)
+                                  link.click()
+                                  document.body.removeChild(link)
+                                  URL.revokeObjectURL(url)
+                                })()
+                              }}
+                            >
+                              PDF
+                            </button>
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr className="transfer-details-row">
+                            <td colSpan={4}>
+                              <div className="transfer-details-panel">
+                                {loadingTransfers && !transferError && (
+                                  <div className="summary-loading">
+                                    {t('loading')}
+                                  </div>
+                                )}
+                                {transferError && !loadingTransfers && (
+                                  <div className="summary-error">
+                                    {t('errors.loadDetails')}
+                                  </div>
+                                )}
+                                {!loadingTransfers && !transferError && (
+                                  <>
+                                    <div className="transfer-details-header">
+                                      <span className="transfer-details-title">
+                                        Операции по направлению: {directionLabel}
+                                      </span>
+                                    </div>
+                                    {details && details.length > 0 ? (
+                                      <table className="transfer-details-table">
+                                        <thead>
+                                          <tr>
+                                            <th scope="col">Дата</th>
+                                            <th scope="col">Откуда</th>
+                                            <th scope="col">Куда</th>
+                                            <th scope="col">Сумма</th>
+                                            <th scope="col">Комментарий</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {details.map((item) => (
+                                            <tr key={item.id}>
+                                              <td>{formatDate(item.transferred_at)}</td>
+                                              <td>
+                                                {item.source_account === 'CASH' ? 'Касса' : 'Банк'}
+                                              </td>
+                                              <td>
+                                                {item.destination_account === 'CASH'
+                                                  ? 'Касса'
+                                                  : 'Банк'}
+                                              </td>
+                                              <td className="transfer-details-amount">
+                                                {formatKGS(parseFloat(item.amount))}
+                                              </td>
+                                              <td>{item.comment || '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <div className="summary-no-data">Операций нет</div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

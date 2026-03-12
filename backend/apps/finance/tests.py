@@ -6,7 +6,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from apps.budgeting.models import MonthPeriod
 from apps.projects.models import Project, ProjectAssignment
-from .models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan
+from .models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 from decimal import Decimal
 
 User = get_user_model()
@@ -1079,6 +1081,141 @@ class TestFinancePeriodFiltering:
         assert finance_period.id in finance_period_ids
 
 
+class TestDashboardKpiTransfers:
+    """Tests for /api/v1/reports/dashboard-kpis/ transfer-aware KPIs."""
+
+    @pytest.fixture
+    def api_client(self, admin_user):
+        client = APIClient()
+        token = RefreshToken.for_user(admin_user)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        return client
+
+    @pytest.fixture
+    def open_month(self, db):
+        return MonthPeriod.objects.create(month='2026-03', status='OPEN')
+
+    def test_transfer_totals_returned_and_do_not_change_income_or_expense(self, api_client, admin_user, open_month):
+        """bank_to_cash_month and cash_to_bank_month are returned, while income/expense totals ignore transfers."""
+        # Set up one finance period so IncomeEntry can be created
+        finance_period = FinancePeriod.objects.create(
+            month_period=open_month,
+            fund_kind='office',
+            project=None,
+            created_by=admin_user,
+        )
+
+        # One income and one expense in CASH to have non-zero fact values
+        IncomeEntry.objects.create(
+            finance_period=finance_period,
+            account='CASH',
+            amount=Decimal('1000.00'),
+            received_at='2026-03-05',
+            comment='Income',
+            created_by=admin_user,
+        )
+
+        # Two internal transfers within the same month
+        Transfer.objects.create(
+            source_account='BANK',
+            destination_account='CASH',
+            amount=Decimal('300.00'),
+            transferred_at='2026-03-10',
+            comment='Bank to cash',
+            created_by=admin_user,
+        )
+        Transfer.objects.create(
+            source_account='CASH',
+            destination_account='BANK',
+            amount=Decimal('120.00'),
+            transferred_at='2026-03-15',
+            comment='Cash to bank',
+            created_by=admin_user,
+        )
+
+        response = api_client.get('/api/v1/reports/dashboard-kpis/?month=2026-03')
+        assert response.status_code == 200
+
+        data = response.json()
+
+        # Income/expense facts must not be affected by internal transfers
+        assert data['income_fact'] == '1000.00'
+        # No expenses created in this test, stays zero
+        assert data['expense_fact'] == '0.00'
+
+        # Transfer totals reflect only internal movements
+        assert data['bank_to_cash_month'] == '300.00'
+        assert data['cash_to_bank_month'] == '120.00'
+
+    def test_closing_balances_still_respect_transfers(self, api_client, admin_user, open_month):
+        """Closing balances include transfer effects while profit metrics do not."""
+        finance_period = FinancePeriod.objects.create(
+            month_period=open_month,
+            fund_kind='office',
+            project=None,
+            created_by=admin_user,
+        )
+
+        # Starting point: assume zero opening balance; add external income into BANK
+        IncomeEntry.objects.create(
+            finance_period=finance_period,
+            account='BANK',
+            amount=Decimal('500.00'),
+            received_at='2026-03-01',
+            comment='Initial income',
+            created_by=admin_user,
+        )
+
+        # Internal transfer BANK -> CASH 200
+        Transfer.objects.create(
+            source_account='BANK',
+            destination_account='CASH',
+            amount=Decimal('200.00'),
+            transferred_at='2026-03-05',
+            comment='Move to cash',
+            created_by=admin_user,
+        )
+
+        response = api_client.get('/api/v1/reports/dashboard-kpis/?month=2026-03')
+        assert response.status_code == 200
+        data = response.json()
+
+        # Profit is based only on external income
+        assert data['income_fact'] == '500.00'
+        assert data['expense_fact'] == '0.00'
+
+        # Transfer KPI fields are present
+        assert data['bank_to_cash_month'] == '200.00'
+        assert data['cash_to_bank_month'] == '0.00'
+
+        # Closing balances from helper must reflect that 200 left BANK and arrived to CASH.
+        # The exact invariants implemented in DashboardKpiView are:
+        #
+        #   cash_closing = cash_opening + cash_inflow_month - cash_outflow_month
+        #   bank_closing = bank_opening + bank_inflow_month - bank_outflow_month
+        #
+        # where inflow/outflow already include both external movements and internal transfers.
+        cash_opening = Decimal(data['cash_opening_balance'])
+        bank_opening = Decimal(data['bank_opening_balance'])
+        cash_closing = Decimal(data['cash_closing_balance'])
+        bank_closing = Decimal(data['bank_closing_balance'])
+        cash_inflow = Decimal(data['cash_inflow_month'])
+        cash_outflow = Decimal(data['cash_outflow_month'])
+        bank_inflow = Decimal(data['bank_inflow_month'])
+        bank_outflow = Decimal(data['bank_outflow_month'])
+
+        assert cash_closing == cash_opening + cash_inflow - cash_outflow
+        assert bank_closing == bank_opening + bank_inflow - bank_outflow
+
+        # Combined total balance identity (independent of internal transfers):
+        total_opening = cash_opening + bank_opening
+        total_closing = cash_closing + bank_closing
+        total_inflow = cash_inflow + bank_inflow
+        total_outflow = cash_outflow + bank_outflow
+
+        assert total_closing == total_opening + total_inflow - total_outflow
+
+
 class TestIncomeSummaryEndpoint:
     """Test income summary endpoint."""
     
@@ -1608,4 +1745,69 @@ class TestIncomePlanMonthPeriodValidation:
             IncomePlanService.assert_period_open(income_plan)
         
         assert "Period is closed" in str(exc_info.value)
+
+
+class TestTransferDetailsReportEndpoint:
+    """Tests for /api/v1/reports/transfer-details/ endpoint."""
+
+    def test_transfer_details_grouped_by_direction_and_month(self, admin_user, month_period):
+        """Transfers are grouped into bank_to_cash and cash_to_bank for the requested month."""
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        # Create transfers in the target month
+        Transfer.objects.create(
+            source_account='BANK',
+            destination_account='CASH',
+            amount=Decimal('100.00'),
+            transferred_at='2024-01-05',
+            comment='B->C in month',
+            created_by=admin_user,
+        )
+        Transfer.objects.create(
+            source_account='CASH',
+            destination_account='BANK',
+            amount=Decimal('200.00'),
+            transferred_at='2024-01-10',
+            comment='C->B in month',
+            created_by=admin_user,
+        )
+
+        # Transfer in a different month should be excluded
+        Transfer.objects.create(
+            source_account='BANK',
+            destination_account='CASH',
+            amount=Decimal('300.00'),
+            transferred_at='2024-02-01',
+            comment='Other month',
+            created_by=admin_user,
+        )
+
+        client = APIClient()
+        token = RefreshToken.for_user(admin_user)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        response = client.get('/api/v1/reports/transfer-details/?month=2024-01')
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data['month'] == '2024-01'
+
+        # Grouping by direction
+        assert len(data['bank_to_cash']) == 1
+        assert len(data['cash_to_bank']) == 1
+
+        btc = data['bank_to_cash'][0]
+        ctb = data['cash_to_bank'][0]
+
+        assert btc['source_account'] == 'BANK'
+        assert btc['destination_account'] == 'CASH'
+        assert btc['amount'] == '100.00'
+        assert btc['comment'] == 'B->C in month'
+        assert btc['created_by_username'] == admin_user.username
+
+        assert ctb['source_account'] == 'CASH'
+        assert ctb['destination_account'] == 'BANK'
+        assert ctb['amount'] == '200.00'
+        assert ctb['comment'] == 'C->B in month'
 

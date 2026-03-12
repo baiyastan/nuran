@@ -11,6 +11,8 @@ from .views import (
     ExportExpenseCategoryDetailPdfView,
     ExportIncomeSourceDetailPdfView,
     ExportSectionPdfView,
+    TransferDetailsView,
+    ExportTransfersDirectionPdfView,
 )
 
 urlpatterns = [
@@ -41,6 +43,16 @@ urlpatterns = [
         'export-expense-category-detail-pdf/',
         ExportExpenseCategoryDetailPdfView.as_view(),
         name='export-expense-category-detail-pdf',
+    ),
+    path(
+        'transfer-details/',
+        TransferDetailsView.as_view(),
+        name='transfer-details',
+    ),
+    path(
+        'transfers-direction-pdf/',
+        ExportTransfersDirectionPdfView.as_view(),
+        name='transfers-direction-pdf',
     ),
 ]
 

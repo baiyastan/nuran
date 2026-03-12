@@ -42,6 +42,34 @@ class TestReportPdfFormatting:
                         "sharePercent": 0.0,
                     },
                 ],
+                "transfers": [
+                    {
+                        "direction": "Банк → Касса",
+                        "amount": "300.00",
+                        "comment": "Внутренний перевод между счетами. Не влияет на доходы и расходы.",
+                    },
+                    {
+                        "direction": "Касса → Банк",
+                        "amount": "0.00",
+                        "comment": "Переводов не было",
+                    },
+                ],
+                "transfer_details": [
+                    {
+                        "transferred_at": "2026-03-01",
+                        "source_account": "BANK",
+                        "destination_account": "CASH",
+                        "amount": "300.00",
+                        "comment": "Комментарий 1",
+                    },
+                    {
+                        "transferred_at": "2026-03-02",
+                        "source_account": "CASH",
+                        "destination_account": "BANK",
+                        "amount": "100.00",
+                        "comment": "Комментарий 2",
+                    },
+                ],
             },
         )
 

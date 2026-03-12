@@ -55,6 +55,8 @@ export interface DashboardKpiResponse {
   bank_outflow_month: string
   cash_closing_balance: string
   bank_closing_balance: string
+  bank_to_cash_month: string
+  cash_to_bank_month: string
 }
 
 export interface DashboardKpiParams {
@@ -131,6 +133,26 @@ export interface ExportExpenseCategoryDetailPdfParams {
   account?: 'CASH' | 'BANK'
 }
 
+export interface TransferDetailItem {
+  id: number
+  transferred_at: string
+  source_account: 'CASH' | 'BANK'
+  destination_account: 'CASH' | 'BANK'
+  amount: string
+  comment: string
+  created_by_username: string | null
+}
+
+export interface TransferDetailsResponse {
+  month: string
+  bank_to_cash: TransferDetailItem[]
+  cash_to_bank: TransferDetailItem[]
+}
+
+export interface TransferDetailsParams {
+  month: string
+}
+
 export const reportsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getMonthlyReport: builder.query<MonthlyReportResponse, MonthlyReportParams>({
@@ -201,6 +223,13 @@ export const reportsApi = baseApi.injectEndpoints({
         responseType: 'blob',
       }),
     }),
+    getTransferDetails: builder.query<TransferDetailsResponse, TransferDetailsParams>({
+      query: ({ month }) => ({
+        url: '/reports/transfer-details/',
+        params: { month },
+      }),
+      providesTags: ['Report'],
+    }),
   }),
 })
 
@@ -212,4 +241,5 @@ export const {
   useExportSectionPdfMutation,
   useExportIncomeSourceDetailPdfMutation,
   useExportExpenseCategoryDetailPdfMutation,
+  useGetTransferDetailsQuery,
 } = reportsApi
