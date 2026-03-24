@@ -109,13 +109,16 @@ function FinancePage() {
   const isPeriodOpen = displayStatus === 'open'
   const isPeriodLocked = displayStatus === 'locked'
   const canManagePlans = role === 'admin' && isPeriodOpen
-  const canManageEntries =
-    (role === 'admin' || role === 'director') && (isPeriodOpen || isPeriodLocked)
+  /** Income entries + transfers: admin only. Director/foreman are read-only on this page. */
+  const canManageEntries = role === 'admin' && (isPeriodOpen || isPeriodLocked)
 
   const canCreateOfficePeriod =
     role === 'admin' &&
     monthPeriod?.status === 'OPEN' &&
     !officePeriod
+
+  /** Director: view-only data; hide month gate / period status affordances (badge + disabled banners). */
+  const showMonthStatusUi = role !== 'director'
 
   const getStatusBadge = (status: string) => {
     const statusLower = status.toLowerCase()
@@ -183,6 +186,13 @@ function FinancePage() {
   const handlePlanModalClose = () => {
     setShowPlanModal(false)
     setEditingPlan(null)
+  }
+  const handleEditExistingPlan = () => {
+    const existingPlans = incomePlansData?.results ?? []
+    const firstPlan = existingPlans[0]
+    if (!firstPlan) return
+    setEditingPlan(firstPlan)
+    setShowPlanModal(true)
   }
 
   const handleAddEntry = () => {
@@ -289,6 +299,12 @@ function FinancePage() {
         ),
       }),
     })) || []
+  const usedPlanSourceIds = useMemo(() => {
+    const plans = incomePlansData?.results ?? []
+    return plans
+      .map((plan) => plan.source?.id)
+      .filter((id): id is number => typeof id === 'number')
+  }, [incomePlansData])
 
   const entryColumns = [
     { key: 'date', label: t('income.common.date', { ns: 'financePeriods' }) },
@@ -394,13 +410,15 @@ function FinancePage() {
               className="month-selector__input"
             />
           </div>
-          <div className="finance-page-status">
-            {getStatusBadge(displayStatus)}
-          </div>
+          {showMonthStatusUi && (
+            <div className="finance-page-status">
+              {getStatusBadge(displayStatus)}
+            </div>
+          )}
         </div>
       </div>
 
-      {!isPeriodOpen && (
+      {showMonthStatusUi && !isPeriodOpen && (
         <div className="period-locked-message">
           {t('financePeriodDetails.plans.disabled')}
         </div>
@@ -416,13 +434,13 @@ function FinancePage() {
             </Button>
           )}
         </div>
-        {!isPeriodOpen && (
+        {showMonthStatusUi && !isPeriodOpen && (
           <div className="income-plans-disabled">
             {t('financePeriodDetails.plans.disabled')}
           </div>
         )}
         {isLoadingIncomePlans ? (
-          <TableSkeleton columnCount={3} />
+          <TableSkeleton columnCount={planColumns.length} />
         ) : incomePlansError ? (
           <div className="finance-page-error">
             {t('financePeriodDetails.error.plans')}
@@ -472,7 +490,7 @@ function FinancePage() {
             )}
           </div>
         ) : isLoadingEntries ? (
-          <TableSkeleton columnCount={5} />
+          <TableSkeleton columnCount={entryColumns.length} />
         ) : entriesError ? (
           <div className="finance-page-error">
             {t('financePeriodDetails.error.entries')}
@@ -501,7 +519,7 @@ function FinancePage() {
           )}
         </div>
         {isLoadingTransfers ? (
-          <TableSkeleton columnCount={5} />
+          <TableSkeleton columnCount={transferColumns.length} />
         ) : transfersError ? (
           <div className="finance-page-error">
             {t('financePeriodDetails.error.transfers')}
@@ -524,7 +542,9 @@ function FinancePage() {
           isOpen={showPlanModal}
           onClose={handlePlanModalClose}
           onSuccess={handlePlanModalSuccess}
+          onEditExistingPlan={handleEditExistingPlan}
           plan={editingPlan}
+          usedSourceIds={usedPlanSourceIds}
           year={year}
           month={month}
         />

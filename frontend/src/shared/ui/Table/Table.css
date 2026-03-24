@@ -2,6 +2,7 @@
   overflow-x: auto;
   border: 1px solid #ddd;
   border-radius: 4px;
+  min-width: 0;
 }
 
 .table {
@@ -21,6 +22,7 @@
 .table td {
   padding: 12px;
   border-bottom: 1px solid #eee;
+  vertical-align: top;
 }
 
 .table tbody tr:hover {
@@ -31,5 +33,117 @@
   text-align: center;
   color: #999;
   padding: 40px !important;
+}
+
+.table-mobile-label {
+  display: none;
+}
+
+.table-mobile-value {
+  display: block;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .table-wrapper {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .table {
+    display: block;
+    background: transparent;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .table tbody tr {
+    display: block;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+
+  .table tbody tr:hover {
+    background: #fff;
+  }
+
+  .table tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f1f3f5;
+  }
+
+  .table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .table-mobile-label {
+    display: block;
+    flex: 0 0 42%;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .table-mobile-value {
+    flex: 1 1 auto;
+    text-align: right;
+    font-size: 14px;
+    color: #111827;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .table tbody td[data-column*='amount'] .table-mobile-value,
+  .table tbody td[data-column*='plan'] .table-mobile-value,
+  .table tbody td[data-column*='fact'] .table-mobile-value {
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .table tbody td[data-column='actions'] .table-mobile-value,
+  .table tbody td[data-column='actions'] .table-mobile-value > div {
+    width: 100%;
+    text-align: left;
+  }
+
+  .table tbody td[data-column='actions'] .table-mobile-value button {
+    min-height: 40px;
+  }
+
+  .table tbody td[data-column='date'] .table-mobile-value,
+  .table tbody td[data-column='spent_at'] .table-mobile-value,
+  .table tbody td[data-column='category_name'] .table-mobile-value,
+  .table tbody td[data-column='source'] .table-mobile-value {
+    font-size: 13px;
+    color: #4b5563;
+  }
+
+  .table tbody td .table-mobile-value input,
+  .table tbody td .table-mobile-value select,
+  .table tbody td .table-mobile-value textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 }
 

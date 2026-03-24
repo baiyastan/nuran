@@ -13,9 +13,17 @@ const STORAGE_KEY = 'sidebar_collapsed'
 
 interface SidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void
+  isMobile?: boolean
+  isMobileOpen?: boolean
+  onMobileOpenChange?: (open: boolean) => void
 }
 
-export default function Sidebar({ onCollapsedChange }: SidebarProps) {
+export default function Sidebar({
+  onCollapsedChange,
+  isMobile = false,
+  isMobileOpen = false,
+  onMobileOpenChange,
+}: SidebarProps) {
   const { t } = useTranslation()
   const { isAuthenticated, role } = useAuth()
   const dispatch = useAppDispatch()
@@ -83,18 +91,39 @@ export default function Sidebar({ onCollapsedChange }: SidebarProps) {
     setIsCollapsed((prev) => !prev)
   }
 
+  const closeMobileSidebar = () => {
+    onMobileOpenChange?.(false)
+  }
+
+  const sidebarClassName = [
+    'sidebar',
+    isCollapsed ? 'sidebar--collapsed' : '',
+    isMobile ? 'sidebar--mobile' : '',
+    isMobile && isMobileOpen ? 'sidebar--mobile-open' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <aside className={`sidebar ${isCollapsed ? 'sidebar--collapsed' : ''}`} aria-label="Main navigation">
+    <aside
+      id={isMobile ? 'mobile-app-sidebar' : undefined}
+      className={sidebarClassName}
+      aria-label="Main navigation"
+      role={isMobile && isMobileOpen ? 'dialog' : undefined}
+      aria-modal={isMobile && isMobileOpen ? true : undefined}
+    >
       <div className="sidebar__header">
         {!isCollapsed && <div className="sidebar__logo">{t('header.title')}</div>}
-        <button
-          className="sidebar__toggle"
-          onClick={toggleCollapse}
-          aria-label={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-          type="button"
-        >
-          <span className="sidebar__toggle-icon">{isCollapsed ? '→' : '←'}</span>
-        </button>
+        {!isMobile && (
+          <button
+            className="sidebar__toggle"
+            onClick={toggleCollapse}
+            aria-label={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            type="button"
+          >
+            <span className="sidebar__toggle-icon">{isCollapsed ? '→' : '←'}</span>
+          </button>
+        )}
       </div>
       
       <nav className="sidebar__nav" role="navigation">
@@ -104,6 +133,11 @@ export default function Sidebar({ onCollapsedChange }: SidebarProps) {
               <NavLink
                 to={item.path}
                 end={item.path === '/admin'}
+                onClick={() => {
+                  if (isMobile) {
+                    closeMobileSidebar()
+                  }
+                }}
                 className={({ isActive }) =>
                   `sidebar__item ${isActive ? 'active' : ''}`
                 }

@@ -37,3 +37,20 @@ class BudgetPlanReportSerializer(serializers.Serializer):
     expenses = ExpenseItemSerializer(many=True)
     summary_comment = serializers.CharField(allow_null=True)
 
+
+class ForemanProjectSummaryItemSerializer(serializers.Serializer):
+    """Serializer for per-project foreman summary row."""
+
+    project_id = serializers.IntegerField()
+    project_name = serializers.CharField()
+    planned_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    actual_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    difference = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class ForemanProjectSummaryDataSerializer(serializers.Serializer):
+    """Serializer for foreman project summary payload."""
+
+    month = serializers.CharField()
+    projects = ForemanProjectSummaryItemSerializer(many=True)
+

@@ -84,7 +84,12 @@ function Header() {
                 <span className="header-user-email">{user.email}</span>
                 <span className="header-user-role">({t('header.userRole', { role: user.role })})-</span>
               </span>
-              <Button onClick={handleLogout} variant="secondary" size="small">
+              <Button
+                onClick={handleLogout}
+                variant="secondary"
+                size="small"
+                className="header-logout-btn"
+              >
                 {t('common.logout')}
               </Button>
             </>

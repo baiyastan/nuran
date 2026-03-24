@@ -2,6 +2,7 @@
   padding: 2rem;
   max-width: 1400px;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .reports-header {
@@ -22,6 +23,10 @@
   padding: 1rem;
   background: #f8f9fa;
   border-radius: 8px;
+}
+
+.reports-filters > * {
+  min-width: 0;
 }
 
 .scope-selector {
@@ -79,5 +84,32 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   font-size: 1.125rem;
   color: #666;
+}
+
+@media (max-width: 1024px) {
+  .reports-page {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .reports-header {
+    margin-bottom: 1rem;
+  }
+
+  .reports-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .reports-filters {
+    gap: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .reports-page {
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  }
 }
 

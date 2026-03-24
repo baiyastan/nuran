@@ -105,7 +105,8 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
-  const { accessToken } = useAuth()
+  const { accessToken, role } = useAuth()
+  const canExportPdf = role !== 'director'
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [previousMonthOpen, setPreviousMonthOpen] = useState(false)
   const [exportSectionPdf] = useExportSectionPdfMutation()
@@ -457,25 +458,27 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                     <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
                   </select>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  className="global-summary-export-button"
-                  disabled={exportingSection !== null}
-                  title={t('globalSummary.actions.exportPdf')}
-                  aria-label={`${t('globalSummary.incomeSourcesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
-                  onClick={() => {
-                    void handleSectionExport('income_sources')
-                  }}
-                >
-                  {exportingSection === 'income_sources'
-                    ? t('globalSummary.actions.exportingPdf')
-                    : t('globalSummary.actions.exportPdf')}
-                </Button>
+                {canExportPdf && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    className="global-summary-export-button"
+                    disabled={exportingSection !== null}
+                    title={t('globalSummary.actions.exportPdf')}
+                    aria-label={`${t('globalSummary.incomeSourcesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                    onClick={() => {
+                      void handleSectionExport('income_sources')
+                    }}
+                  >
+                    {exportingSection === 'income_sources'
+                      ? t('globalSummary.actions.exportingPdf')
+                      : t('globalSummary.actions.exportPdf')}
+                  </Button>
+                )}
               </div>
             </div>
-            {exportErrorSection === 'income_sources' && (
+            {canExportPdf && exportErrorSection === 'income_sources' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
               </div>
@@ -551,25 +554,27 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                         <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
                       </select>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="small"
-                      className="global-summary-export-button"
-                      disabled={exportingDetail !== null}
-                      title={t('globalSummary.actions.exportPdf')}
-                      aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
-                      onClick={() => {
-                        void handleIncomeDetailExport()
-                      }}
-                    >
-                      {exportingDetail === 'income_source_detail'
-                        ? t('globalSummary.actions.exportingPdf')
-                        : t('globalSummary.actions.exportPdf')}
-                    </Button>
+                    {canExportPdf && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        className="global-summary-export-button"
+                        disabled={exportingDetail !== null}
+                        title={t('globalSummary.actions.exportPdf')}
+                        aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
+                        onClick={() => {
+                          void handleIncomeDetailExport()
+                        }}
+                      >
+                        {exportingDetail === 'income_source_detail'
+                          ? t('globalSummary.actions.exportingPdf')
+                          : t('globalSummary.actions.exportPdf')}
+                      </Button>
+                    )}
                   </div>
                 </div>
-                {exportErrorDetail === 'income_source_detail' && (
+                {canExportPdf && exportErrorDetail === 'income_source_detail' && (
                   <div className="summary-error">
                     {t('globalSummary.exportError')}
                   </div>
@@ -681,25 +686,27 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                     <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
                   </select>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  className="global-summary-export-button"
-                  disabled={exportingSection !== null}
-                  title={t('globalSummary.actions.exportPdf')}
-                  aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
-                  onClick={() => {
-                    void handleSectionExport('expense_categories')
-                  }}
-                >
-                  {exportingSection === 'expense_categories'
-                    ? t('globalSummary.actions.exportingPdf')
-                    : t('globalSummary.actions.exportPdf')}
-                </Button>
+                {canExportPdf && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    className="global-summary-export-button"
+                    disabled={exportingSection !== null}
+                    title={t('globalSummary.actions.exportPdf')}
+                    aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                    onClick={() => {
+                      void handleSectionExport('expense_categories')
+                    }}
+                  >
+                    {exportingSection === 'expense_categories'
+                      ? t('globalSummary.actions.exportingPdf')
+                      : t('globalSummary.actions.exportPdf')}
+                  </Button>
+                )}
               </div>
             </div>
-            {exportErrorSection === 'expense_categories' && (
+            {canExportPdf && exportErrorSection === 'expense_categories' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
               </div>
@@ -775,25 +782,27 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                         <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
                       </select>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="small"
-                      className="global-summary-export-button"
-                      disabled={exportingDetail !== null}
-                      title={t('globalSummary.actions.exportPdf')}
-                      aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
-                      onClick={() => {
-                        void handleExpenseDetailExport()
-                      }}
-                    >
-                      {exportingDetail === 'expense_category_detail'
-                        ? t('globalSummary.actions.exportingPdf')
-                        : t('globalSummary.actions.exportPdf')}
-                    </Button>
+                    {canExportPdf && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        className="global-summary-export-button"
+                        disabled={exportingDetail !== null}
+                        title={t('globalSummary.actions.exportPdf')}
+                        aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
+                        onClick={() => {
+                          void handleExpenseDetailExport()
+                        }}
+                      >
+                        {exportingDetail === 'expense_category_detail'
+                          ? t('globalSummary.actions.exportingPdf')
+                          : t('globalSummary.actions.exportPdf')}
+                      </Button>
+                    )}
                   </div>
                 </div>
-                {exportErrorDetail === 'expense_category_detail' && (
+                {canExportPdf && exportErrorDetail === 'expense_category_detail' && (
                   <div className="summary-error">
                     {t('globalSummary.exportError')}
                   </div>
@@ -975,48 +984,50 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                                 {isOpen ? 'Скрыть' : 'Показать'}
                               </span>
                             </button>
-                            <button
-                              type="button"
-                              className="transfer-action-btn transfer-action-btn--secondary"
-                              onClick={() => {
-                                const mappedDirection =
-                                  directionKey === 'BANK_TO_CASH'
-                                    ? 'BANK_TO_CASH'
-                                    : 'CASH_TO_BANK'
+                            {canExportPdf && (
+                              <button
+                                type="button"
+                                className="transfer-action-btn transfer-action-btn--secondary"
+                                onClick={() => {
+                                  const mappedDirection =
+                                    directionKey === 'BANK_TO_CASH'
+                                      ? 'BANK_TO_CASH'
+                                      : 'CASH_TO_BANK'
 
-                                void (async () => {
-                                  const resp = await fetch(
-                                    `/api/v1/reports/transfers-direction-pdf/?month=${month}&direction=${mappedDirection}`,
-                                    {
-                                      method: 'GET',
-                                      headers: {
-                                        ...(accessToken && {
-                                          Authorization: `Bearer ${accessToken}`,
-                                        }),
+                                  void (async () => {
+                                    const resp = await fetch(
+                                      `/api/v1/reports/transfers-direction-pdf/?month=${month}&direction=${mappedDirection}`,
+                                      {
+                                        method: 'GET',
+                                        headers: {
+                                          ...(accessToken && {
+                                            Authorization: `Bearer ${accessToken}`,
+                                          }),
+                                        },
+                                        credentials: 'include',
                                       },
-                                      credentials: 'include',
-                                    },
-                                  )
-                                  if (!resp.ok) {
-                                    return
-                                  }
-                                  const blob = await resp.blob()
-                                  const url = URL.createObjectURL(blob)
-                                  const link = document.createElement('a')
-                                  link.href = url
-                                  link.download =
-                                    mappedDirection === 'BANK_TO_CASH'
-                                      ? `transfers_bank_to_cash_${month}.pdf`
-                                      : `transfers_cash_to_bank_${month}.pdf`
-                                  document.body.appendChild(link)
-                                  link.click()
-                                  document.body.removeChild(link)
-                                  URL.revokeObjectURL(url)
-                                })()
-                              }}
-                            >
-                              PDF
-                            </button>
+                                    )
+                                    if (!resp.ok) {
+                                      return
+                                    }
+                                    const blob = await resp.blob()
+                                    const url = URL.createObjectURL(blob)
+                                    const link = document.createElement('a')
+                                    link.href = url
+                                    link.download =
+                                      mappedDirection === 'BANK_TO_CASH'
+                                        ? `transfers_bank_to_cash_${month}.pdf`
+                                        : `transfers_cash_to_bank_${month}.pdf`
+                                    document.body.appendChild(link)
+                                    link.click()
+                                    document.body.removeChild(link)
+                                    URL.revokeObjectURL(url)
+                                  })()
+                                }}
+                              >
+                                PDF
+                              </button>
+                            )}
                           </td>
                         </tr>
                         {isOpen && (

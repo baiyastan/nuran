@@ -15,7 +15,9 @@ interface IncomePlanModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  onEditExistingPlan?: () => void
   plan?: IncomePlan | null
+  usedSourceIds?: number[]
   year: number
   month: number
 }
@@ -24,7 +26,9 @@ export function IncomePlanModal({
   isOpen,
   onClose,
   onSuccess,
+  onEditExistingPlan,
   plan,
+  usedSourceIds = [],
   year,
   month,
 }: IncomePlanModalProps) {
@@ -50,19 +54,25 @@ export function IncomePlanModal({
   }, [sourcesData])
 
   const sourceOptions = useMemo(() => {
-    return sources.map((source) => ({
-      value: source.id.toString(),
-      label: source.name,
-    }))
-  }, [sources])
+    const safeUsedSourceIds = usedSourceIds ?? []
+    const usedSet = new Set(safeUsedSourceIds)
+    return sources
+      .filter((source) => isEditMode || !usedSet.has(source?.id))
+      .map((source) => ({
+        value: String(source?.id ?? ''),
+        label: source.name,
+      }))
+  }, [isEditMode, sources, usedSourceIds])
+  const hasNoAvailableSources = !isEditMode && sourceOptions.length === 0
 
   const isLoading = isCreating || isUpdating
 
   // Initialize form data when plan changes
   useEffect(() => {
     if (plan) {
+      const sourceId = plan.source_id ?? plan.source?.id
       setFormData({
-        source_id: plan.source_id.toString(),
+        source_id: String(sourceId ?? ''),
         amount: plan.amount,
       })
     } else {
@@ -156,6 +166,10 @@ export function IncomePlanModal({
     setMonthPeriodError(null)
     onClose()
   }
+  const handleEditInstead = () => {
+    handleClose()
+    onEditExistingPlan?.()
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={isEditMode ? t('incomePlan.editTitle') : t('incomePlan.addTitle')}>
@@ -169,8 +183,19 @@ export function IncomePlanModal({
             ...sourceOptions,
           ]}
           required
+          disabled={hasNoAvailableSources}
           error={error && !formData.source_id ? error : undefined}
         />
+        {hasNoAvailableSources && (
+          <div className="form-error">
+            {t('incomePlan.noAvailableSources')}
+          </div>
+        )}
+        {hasNoAvailableSources && (
+          <Button type="button" variant="secondary" onClick={handleEditInstead}>
+            {t('incomePlan.editInstead')}
+          </Button>
+        )}
 
         <Input
           label={t('incomePlan.amount')}
@@ -203,7 +228,7 @@ export function IncomePlanModal({
           <Button type="button" onClick={handleClose} variant="secondary" disabled={isLoading}>
             {t('cancel', { ns: 'common' })}
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || hasNoAvailableSources}>
             {isLoading ? (isEditMode ? t('updating', { ns: 'common' }) : t('creating', { ns: 'common' })) : (isEditMode ? t('update', { ns: 'common' }) : t('create', { ns: 'common' }))}
           </Button>
         </div>

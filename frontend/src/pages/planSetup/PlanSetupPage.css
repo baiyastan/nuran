@@ -1,5 +1,6 @@
 .plan-setup-page {
   padding: 24px;
+  min-width: 0;
 }
 
 .plan-setup-page.loading {
@@ -10,6 +11,7 @@
 .plan-setup-page h2 {
   margin-top: 0;
   margin-bottom: 20px;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-error {
@@ -20,6 +22,7 @@
   color: #721c24;
   max-width: 600px;
   margin-top: 16px;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-filters {
@@ -35,6 +38,7 @@
   flex-direction: column;
   gap: 4px;
   font-weight: 500;
+  min-width: 0;
 }
 
 .plan-setup-filters input[type='month'],
@@ -60,6 +64,7 @@
 .plan-setup-message {
   margin-top: 16px;
   color: #666;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-no-plan-message {
@@ -80,10 +85,12 @@
   margin-bottom: 16px;
   color: #666;
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-total {
   margin-bottom: 16px;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-input {
@@ -100,6 +107,9 @@
 
 .plan-setup-actions {
   margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .plan-setup-save-btn {
@@ -115,6 +125,8 @@
   border-radius: 6px;
   font-size: 14px;
   border-left: 3px solid rgba(0, 0, 0, 0.15);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .plan-setup-input-amount {
@@ -126,9 +138,32 @@
   max-width: 280px;
 }
 
+.plan-setup-readonly {
+  display: inline-block;
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.plan-setup-readonly--amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.plan-setup-readonly--comment {
+  max-width: 280px;
+  word-break: break-word;
+}
+
 @media (max-width: 768px) {
   .plan-setup-page {
     padding: 12px 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .plan-setup-page h2 {
+    margin-bottom: 14px;
+    font-size: 1.35rem;
   }
 
   .plan-setup-save-btn {
@@ -141,10 +176,30 @@
   .plan-setup-input-comment {
     max-width: 100%;
     box-sizing: border-box;
+    min-height: 40px;
   }
 
   .plan-setup-filters input[type='month'],
   .plan-setup-filters select {
-    min-width: 120px;
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+  }
+
+  .plan-setup-filters label {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .plan-setup-total {
+    margin-bottom: 12px;
+    font-size: 0.98rem;
+    line-height: 1.35;
+  }
+
+  .plan-setup-context,
+  .plan-setup-message {
+    margin-bottom: 12px;
+    line-height: 1.35;
   }
 }

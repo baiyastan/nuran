@@ -34,7 +34,9 @@ function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<ActualExpense | null>(null)
   const [deletingExpenseId, setDeletingExpenseId] = useState<number | null>(null)
 
-  const canManageExpenses = role === 'admin' || role === 'director'
+  /** Admin only; director/foreman are read-only on this page. */
+  const canManageExpenses = role === 'admin'
+  const showMonthGateBanner = role !== 'director'
 
   useEffect(() => {
     if (!searchParams.has('month') || !searchParams.has('scope')) {
@@ -108,7 +110,7 @@ function ExpensesPage() {
     { key: 'category_name', label: t('expensesPage.table.columns.category') },
     { key: 'amount', label: t('expensesPage.table.columns.amount') },
     { key: 'comment', label: t('expensesPage.table.columns.comment') },
-    ...(canManageExpenses ? [{ key: 'actions', label: '' }] : []),
+    ...(canManageExpenses ? [{ key: 'actions', label: t('actions', { ns: 'common' }) }] : []),
   ]
 
   const tableData = useMemo(() => {
@@ -119,7 +121,7 @@ function ExpensesPage() {
       category_name: expense.category_name ?? '-',
       comment: expense.comment || '-',
       actions: canManageExpenses ? (
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="expenses-table-actions">
           <Button size="small" onClick={() => setEditingExpense(expense)}>
             {t('expensesPage.table.actions.edit')}
           </Button>
@@ -149,7 +151,7 @@ function ExpensesPage() {
         <h2>{t('expensesPage.title')}</h2>
       </div>
 
-      <MonthGateBanner />
+      {showMonthGateBanner && <MonthGateBanner />}
 
       <div className="filters-section">
         <div className="filter-group">
@@ -193,7 +195,7 @@ function ExpensesPage() {
         </div>
 
         {isLoadingExpenses ? (
-          <TableSkeleton columnCount={5} />
+          <TableSkeleton columnCount={tableColumns.length} />
         ) : expenses.length === 0 ? (
           <div className="empty-state">
             <p>{t('expensesPage.empty.noExpenses')}</p>

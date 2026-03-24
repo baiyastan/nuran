@@ -1,15 +1,19 @@
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { MonthSelector } from './components/MonthSelector'
 import { GlobalSummary } from './components/GlobalSummary'
+import { ForemanProjectExpenseReport } from './components/ForemanProjectExpenseReport'
 import { MonthGateBanner } from '@/features/month-gate/MonthGateBanner'
 import { useGetMonthPeriodQuery } from '@/shared/api/monthPeriodsApi'
+import { useAuth } from '@/shared/hooks/useAuth'
 import './ReportsPage.css'
 
 const DEFAULT_MONTH = () => new Date().toISOString().slice(0, 7)
 
 function ReportsPage() {
   const { t } = useTranslation('reports')
+  const { role } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // URL as single source of truth
@@ -30,6 +34,20 @@ function ReportsPage() {
 
   const { data: monthPeriod } = useGetMonthPeriodQuery(month)
 
+  useEffect(() => {
+    if (role !== 'foreman') return
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('tab') && !prev.has('scope')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('tab')
+        next.delete('scope')
+        return next
+      },
+      { replace: true }
+    )
+  }, [role, setSearchParams])
+
   return (
     <div className="reports-page">
       <div className="reports-header">
@@ -37,16 +55,24 @@ function ReportsPage() {
       </div>
 
       <div className="reports-filters">
-        <MonthGateBanner showManageButton={false} />
+        {role !== 'director' && <MonthGateBanner showManageButton={false} />}
         <MonthSelector
           value={month}
           onChange={handleMonthChange}
-          monthStatus={monthPeriod?.status ?? null}
+          monthStatus={
+            role === 'director' ? null : (monthPeriod?.status ?? null)
+          }
         />
       </div>
 
-      {/* Global 3-KPI summary (Income fact, Expense fact, Difference) */}
-      <GlobalSummary month={month} />
+      {role === 'foreman' ? (
+        <ForemanProjectExpenseReport
+          month={month}
+          monthStatus={monthPeriod?.status ?? null}
+        />
+      ) : (
+        <GlobalSummary month={month} />
+      )}
     </div>
   )
 }

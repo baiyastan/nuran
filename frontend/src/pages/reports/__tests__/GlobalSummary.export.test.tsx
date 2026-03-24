@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import '@/shared/i18n'
 import i18n from '@/shared/i18n'
 import { renderWithProviders } from '@/testing/renderWithProviders'
@@ -11,6 +11,7 @@ import {
   useGetDashboardExpenseCategoriesQuery,
   useGetDashboardIncomeSourcesQuery,
   useGetDashboardKpiQuery,
+  useGetTransferDetailsQuery,
 } from '@/shared/api/reportsApi'
 import { useListIncomeEntriesQuery } from '@/shared/api/incomeEntriesApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
@@ -28,6 +29,7 @@ vi.mock('@/shared/api/reportsApi', async () => {
     useGetDashboardExpenseCategoriesQuery: vi.fn(),
     useGetDashboardIncomeSourcesQuery: vi.fn(),
     useExportSectionPdfMutation: vi.fn(),
+    useGetTransferDetailsQuery: vi.fn(),
   }
 })
 
@@ -117,6 +119,12 @@ describe('GlobalSummary section PDF export', () => {
           },
         ],
       },
+      isLoading: false,
+      error: null,
+    } as never)
+
+    vi.mocked(useGetTransferDetailsQuery).mockReturnValue({
+      data: { month: '2026-03', bank_to_cash: [], cash_to_bank: [] },
       isLoading: false,
       error: null,
     } as never)
@@ -230,21 +238,22 @@ describe('GlobalSummary section PDF export', () => {
 
     renderWithProviders(<GlobalSummary month="2026-03" />)
 
-    // Block header is present, content is hidden by default
-    const headerButton = screen.getByRole('button', { name: /Мурунку айдан остаток/i })
-    expect(headerButton).toBeInTheDocument()
-    expect(screen.queryByText(/Касса:/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Банк:/i)).not.toBeInTheDocument()
+    const balanceToggle = screen.getByRole('button', {
+      name: /Показать детализацию остатков по счетам/i,
+    })
+    expect(balanceToggle).toBeInTheDocument()
+    expect(screen.queryByText(/Мурунку айдан остаток/i)).not.toBeInTheDocument()
 
-    // Expand
-    fireEvent.click(headerButton)
+    fireEvent.click(balanceToggle)
 
-    // Values are formatted with formatKGS (contains "сом")
     await waitFor(() => {
-      expect(screen.getByText(/Касса:/i)).toBeInTheDocument()
-      expect(screen.getByText(/Банк:/i)).toBeInTheDocument()
-      expect(screen.getByText(/150.*сом/i)).toBeInTheDocument()
-      expect(screen.getByText(/250.*сом/i)).toBeInTheDocument()
+      const balancePanel = document.querySelector('.global-summary-balance-details')
+      expect(balancePanel).toBeTruthy()
+      expect(
+        within(balancePanel as HTMLElement).getByText(/Мурунку айдан остаток/i)
+      ).toBeInTheDocument()
+      expect(within(balancePanel as HTMLElement).getByText(/150.*сом/i)).toBeInTheDocument()
+      expect(within(balancePanel as HTMLElement).getByText(/250.*сом/i)).toBeInTheDocument()
     })
   })
 
@@ -312,16 +321,8 @@ describe('GlobalSummary section PDF export', () => {
 
     renderWithProviders(<GlobalSummary month="2026-03" />)
 
-    // Helper text / explanations
     expect(
-      screen.getByText(/Факт расходов может включать плановые корректировки/i)
-    ).toBeInTheDocument()
-    expect(screen.getByText(/Чистый результат — это показатель P&L/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/Остаток на счетах — это итоговый баланс кассы и банковских счетов/i)
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Переводы между счетами не изменяют чистый результат/i)
+      screen.getByText(/Внутренние переводы между кассой и банком/i)
     ).toBeInTheDocument()
 
     // Transfer summary table at the bottom of the card
@@ -383,21 +384,27 @@ describe('GlobalSummary section PDF export', () => {
 
     renderWithProviders(<GlobalSummary month="2026-03" />)
 
-    // Open BANK -> CASH details
-    fireEvent.click(screen.getByRole('button', { name: /Показать/i }))
+    const transfersSection = screen.getByText(/Переводы между счетами/i).closest('.global-summary-transfers')
+    expect(transfersSection).toBeTruthy()
+    const transferShowButtons = within(transfersSection as HTMLElement).getAllByRole('button', {
+      name: /Показать/i,
+    })
+    fireEvent.click(transferShowButtons[0])
 
     await waitFor(() => {
-      expect(screen.getByText(/Дата/i)).toBeInTheDocument()
-      expect(screen.getByText(/Откуда/i)).toBeInTheDocument()
-      expect(screen.getByText(/Куда/i)).toBeInTheDocument()
-      expect(screen.getByText(/Сумма/i)).toBeInTheDocument()
-      expect(screen.getByText(/Комментарий/i)).toBeInTheDocument()
-      expect(screen.getByText(/B->C/i)).toBeInTheDocument()
+      const title = screen.getByText(/Операции по направлению/i)
+      const panel = title.closest('.transfer-details-panel')
+      expect(panel).toBeTruthy()
+      const tables = within(panel as HTMLElement).getAllByRole('table')
+      const detailTable = tables[tables.length - 1]
+      expect(within(detailTable).getByText(/B->C/i)).toBeInTheDocument()
     })
 
-    // Toggle to CASH -> BANK direction (empty state)
-    const buttons = screen.getAllByRole('button', { name: /Показать/i })
-    fireEvent.click(buttons[1])
+    const cashToBankRow = screen.getByText(/Касса → Банк/i).closest('tr')
+    expect(cashToBankRow).toBeTruthy()
+    fireEvent.click(
+      within(cashToBankRow as HTMLTableRowElement).getByRole('button', { name: /Показать/i })
+    )
 
     await waitFor(() => {
       expect(screen.getByText(/Операций нет/i)).toBeInTheDocument()

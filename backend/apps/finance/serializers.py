@@ -180,6 +180,17 @@ class IncomePlanSerializer(serializers.ModelSerializer):
             except DRFValidationError as e:
                 # Re-raise DRF ValidationError as serializers.ValidationError
                 raise serializers.ValidationError(e.detail)
+
+        period = data.get('period', getattr(self.instance, 'period', None))
+        source = data.get('source', getattr(self.instance, 'source', None))
+        if period and source:
+            duplicate_qs = IncomePlan.objects.filter(period=period, source=source)
+            if self.instance:
+                duplicate_qs = duplicate_qs.exclude(pk=self.instance.pk)
+            if duplicate_qs.exists():
+                raise serializers.ValidationError({
+                    'source_id': 'A plan for this source already exists in the selected month. Please edit the existing plan.'
+                })
         
         return data
     

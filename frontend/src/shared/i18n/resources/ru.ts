@@ -63,7 +63,7 @@ export default {
     audit: 'Аудит',
     admin: 'Админ',
     users: 'Пользователи',
-    financePeriods: 'Периоды расходов',
+    financePeriods: 'Приходы',
     expenses: 'Расходы',
     incomeSources: 'Источники дохода',
     reports: 'Отчёты',
@@ -812,6 +812,8 @@ export default {
     incomePlan: {
       addTitle: 'Добавить план дохода',
       editTitle: 'Редактировать план дохода',
+      editInstead: 'Редактировать существующий план',
+      noAvailableSources: 'Для выбранного месяца планы уже созданы для всех источников дохода.',
       source: 'Источник',
       selectSource: 'Выберите источник...',
       amount: 'Сумма',
@@ -1190,6 +1192,8 @@ export default {
       loadReport: 'Не удалось загрузить отчёт',
       loadSummary: 'Не удалось загрузить сводку',
       loadDetails: 'Не удалось загрузить детали',
+      noReportsAccess:
+        'Нет доступа к отчётам по объектам. Обратитесь к администратору для назначения на проект.',
     },
     loading: 'Загрузка...',
     warnings: {
@@ -1367,6 +1371,7 @@ export default {
     emptyCategories: 'Нет конечных категорий расходов для этой области.',
     emptyStateNoPlanLine1: 'План на этот месяц ещё не создан.',
     emptyStateNoPlanLine2: 'После создания плана вы сможете ввести суммы по категориям.',
+    emptyStateNoPlanDirector: 'План создаёт администратор.',
     saved: 'Сохранено',
   },
   monthGate: {

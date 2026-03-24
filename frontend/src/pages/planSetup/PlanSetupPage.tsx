@@ -72,10 +72,21 @@ function getCategoryBadgeColor(categoryId: number): string {
   return CATEGORY_BADGE_COLORS[Math.abs(categoryId) % CATEGORY_BADGE_COLORS.length]
 }
 
+function formatReadOnlyPlannedAmount(raw: string): string {
+  const trimmed = raw?.trim() ?? ''
+  if (!trimmed) return '—'
+  const n = parseFloat(trimmed.replace(/\s/g, ''))
+  if (!Number.isFinite(n)) return '—'
+  return formatMoneyKGS(n)
+}
+
 export default function PlanSetupPage() {
   const { t, i18n } = useTranslation('planSetup')
   const [searchParams, setSearchParams] = useSearchParams()
   const { role: userRole } = useAuth()
+
+  const isDirectorReadOnly = userRole === 'director'
+  const canEditPlan = !isDirectorReadOnly
 
   const allowedScopes = (userRole && ALLOWED_SCOPES_BY_ROLE[userRole]) ?? ALL_SCOPES
   const defaultScope = (userRole && DEFAULT_SCOPE_BY_ROLE[userRole]) ?? 'OFFICE'
@@ -264,7 +275,7 @@ export default function PlanSetupPage() {
     return (
       <div className="plan-setup-page">
         <h2>{t('title')}</h2>
-        <MonthGateBanner />
+        {!isDirectorReadOnly && <MonthGateBanner />}
         <div className="plan-setup-error">
           {t('monthPeriodNotFound')}
         </div>
@@ -302,13 +313,17 @@ export default function PlanSetupPage() {
         )}
         <div className="plan-setup-no-plan-message">
           <p>{t('emptyStateNoPlanLine1')}</p>
-          <p>{t('emptyStateNoPlanLine2')}</p>
+          <p>
+            {isDirectorReadOnly ? t('emptyStateNoPlanDirector') : t('emptyStateNoPlanLine2')}
+          </p>
         </div>
-        <div className="plan-setup-actions">
-          <Button onClick={handleCreatePlan} disabled={isCreatingPlan || isLocked}>
-            {isCreatingPlan ? t('actions.creating') : t('actions.createPlan')}
-          </Button>
-        </div>
+        {canEditPlan && (
+          <div className="plan-setup-actions">
+            <Button onClick={handleCreatePlan} disabled={isCreatingPlan || isLocked}>
+              {isCreatingPlan ? t('actions.creating') : t('actions.createPlan')}
+            </Button>
+          </div>
+        )}
       </div>
     )
   }
@@ -332,7 +347,11 @@ export default function PlanSetupPage() {
           {cat.name}
         </span>
       ),
-      amount: (
+      amount: isDirectorReadOnly ? (
+        <span className="plan-setup-readonly plan-setup-readonly--amount">
+          {formatReadOnlyPlannedAmount(rawAmount)}
+        </span>
+      ) : (
         <input
           type="text"
           inputMode="decimal"
@@ -347,7 +366,11 @@ export default function PlanSetupPage() {
           disabled={isLocked}
         />
       ),
-      comment: (
+      comment: isDirectorReadOnly ? (
+        <span className="plan-setup-readonly plan-setup-readonly--comment">
+          {(cell?.comment ?? '').trim() ? (cell?.comment ?? '') : '—'}
+        </span>
+      ) : (
         <input
           type="text"
           value={cell?.comment ?? ''}
@@ -363,7 +386,7 @@ export default function PlanSetupPage() {
   return (
     <div className="plan-setup-page">
       <h2>{t('title')}</h2>
-      <MonthGateBanner />
+      {!isDirectorReadOnly && <MonthGateBanner />}
       {isLocked && (
         <p className="plan-setup-message">
           {t('readOnlyLocked', { defaultValue: 'Month is locked — planning is read-only.' })}
@@ -396,15 +419,17 @@ export default function PlanSetupPage() {
       ) : (
         <p className="plan-setup-empty">{t('emptyCategories')}</p>
       )}
-      <div className="plan-setup-actions">
-        <Button
-          className="plan-setup-save-btn"
-          onClick={handleSave}
-          disabled={isSaving || !plan || isLocked}
-        >
-          {isSaving ? t('actions.saving') : t('actions.savePlan')}
-        </Button>
-      </div>
+      {canEditPlan && (
+        <div className="plan-setup-actions">
+          <Button
+            className="plan-setup-save-btn"
+            onClick={handleSave}
+            disabled={isSaving || !plan || isLocked}
+          >
+            {isSaving ? t('actions.saving') : t('actions.savePlan')}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

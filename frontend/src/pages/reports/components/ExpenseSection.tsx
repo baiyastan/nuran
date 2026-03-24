@@ -67,6 +67,15 @@ interface ExpenseSectionProps {
   }
   showPlanned?: boolean
   showActual?: boolean
+  /** When false, hides the “plan vs actual by category” chart only (summary + tables unchanged). */
+  showCategoryPlannedVsActualChart?: boolean
+  /** When false, skips the daily expense chart (avoids duplicate empty state vs facts table). */
+  showDailyExpenseChart?: boolean
+  /**
+   * Minimal foreman layout: no section h2, tighter spacing, hide note column,
+   * simpler summary (no delta %), optional comment column on facts.
+   */
+  foremanExpenseUi?: boolean
 }
 
 export function ExpenseSection({
@@ -82,22 +91,28 @@ export function ExpenseSection({
   expenseFacts,
   showPlanned = true,
   showActual = true,
+  showCategoryPlannedVsActualChart = true,
+  showDailyExpenseChart = true,
+  foremanExpenseUi = false,
 }: ExpenseSectionProps) {
   const { t } = useTranslation('reports')
   return (
-    <div className="report-section expense-section">
-      <h2>{t('expense.title')}</h2>
+    <div
+      className={`report-section expense-section${foremanExpenseUi ? ' expense-section--foreman' : ''}`}
+    >
+      {!foremanExpenseUi && <h2>{t('expense.title')}</h2>}
       <ExpenseSummaryCard
         planned={planned.total}
         actual={actualTotal}
         delta={delta}
         deltaPercent={deltaPercent}
+        showDeltaPercent={!foremanExpenseUi}
       />
       
-      {showPlanned && (
+      {showPlanned && showCategoryPlannedVsActualChart && (
         <ExpensePlannedVsActualChart data={expenseByCategory} />
       )}
-      <ExpenseDailyChart data={expenseDailyTotals} />
+      {showDailyExpenseChart && <ExpenseDailyChart data={expenseDailyTotals} />}
 
       <div className="tables-container">
         {showPlanned && (
@@ -112,6 +127,7 @@ export function ExpenseSection({
               lines={planned.lines}
               budgetPlanStatus={planned.budgetPlan?.status}
               loading={loading.planned}
+              showNoteColumn={!foremanExpenseUi}
             />
           </div>
         )}
@@ -123,6 +139,7 @@ export function ExpenseSection({
               items={expenseFacts.items}
               loading={expenseFacts.loading}
               error={expenseFacts.error}
+              commentColumn={foremanExpenseUi ? 'when-nonempty' : 'always'}
             />
           </div>
         )}

@@ -15,23 +15,29 @@ interface ExpensePlannedTableProps {
   }>
   budgetPlanStatus?: string
   loading: boolean
+  showNoteColumn?: boolean
 }
 
-export function ExpensePlannedTable({ lines, budgetPlanStatus, loading }: ExpensePlannedTableProps) {
+export function ExpensePlannedTable({
+  lines,
+  budgetPlanStatus,
+  loading,
+  showNoteColumn = true,
+}: ExpensePlannedTableProps) {
   const { t } = useTranslation('reports')
   const canEdit = budgetPlanStatus === 'OPEN'
 
   const columns = [
     { key: 'category_name', label: t('expense.tables.planned.columns.categoryName') },
     { key: 'amount_planned', label: t('expense.tables.planned.columns.plannedAmount') },
-    { key: 'note', label: t('expense.tables.planned.columns.note') },
+    ...(showNoteColumn ? [{ key: 'note', label: t('expense.tables.planned.columns.note') }] : []),
     ...(canEdit ? [{ key: 'actions', label: t('expense.tables.planned.columns.actions') }] : []),
   ]
 
   const tableData = lines.map((line) => ({
     category_name: line.category_name,
     amount_planned: formatKGS(parseFloat(line.amount_planned)),
-    note: line.note || '-',
+    ...(showNoteColumn ? { note: line.note || '—' } : {}),
     actions: canEdit ? (
       <div className="table-actions">
         {/* Actions can be added later */}

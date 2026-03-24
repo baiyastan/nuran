@@ -3,7 +3,7 @@ Finance services - business logic layer.
 """
 from datetime import date
 from decimal import Decimal
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum, Count, Q, Value, DecimalField
 from django.db.models.functions import Coalesce
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -237,6 +237,18 @@ class IncomeEntryService:
 
 class IncomePlanService:
     """Service for IncomePlan business logic."""
+
+    @staticmethod
+    def _raise_duplicate_plan_validation_error(exc: IntegrityError):
+        """Map unique period+source collisions to a clean API validation error."""
+        error_text = str(exc)
+        if 'unique_income_plan_period_source' in error_text or (
+            'finance_incomeplan.period_id' in error_text and 'finance_incomeplan.source_id' in error_text
+        ):
+            raise ValidationError({
+                'source_id': 'A plan for this source already exists in the selected month. Please edit the existing plan.'
+            })
+        raise exc
     
     @staticmethod
     def serialize_finance_period(period):
@@ -382,9 +394,12 @@ class IncomePlanService:
         income_plan = IncomePlan(**data)
         IncomePlanService.assert_period_open(income_plan)
 
-        with transaction.atomic():
-            income_plan.save()
-            AuditLogService.log_create(user, income_plan)
+        try:
+            with transaction.atomic():
+                income_plan.save()
+                AuditLogService.log_create(user, income_plan)
+        except IntegrityError as exc:
+            IncomePlanService._raise_duplicate_plan_validation_error(exc)
 
         return income_plan
     
@@ -420,9 +435,12 @@ class IncomePlanService:
         # Check period is still open after update (in case period changed)
         IncomePlanService.assert_period_open(income_plan)
 
-        with transaction.atomic():
-            income_plan.save()
-            AuditLogService.log_update(user, income_plan, before_state)
+        try:
+            with transaction.atomic():
+                income_plan.save()
+                AuditLogService.log_update(user, income_plan, before_state)
+        except IntegrityError as exc:
+            IncomePlanService._raise_duplicate_plan_validation_error(exc)
 
         return income_plan
     

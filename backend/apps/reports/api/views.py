@@ -21,13 +21,19 @@ from apps.planning.models import ActualExpense as PlanningActualExpense
 from apps.expenses.services import aggregate_by_category, sum_expenses, get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
 from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource, Transfer
+from apps.projects.models import ProjectAssignment
 from apps.reports.services.pdf import (
     build_report_detail_pdf,
     build_report_section_pdf,
     build_transfer_direction_pdf,
 )
 
-from .serializers import BudgetPlanReportSerializer
+from .serializers import BudgetPlanReportSerializer, ForemanProjectSummaryDataSerializer
+
+
+def _foreman_has_project_assignment(user) -> bool:
+    """Reports/expense facts for foreman require at least one project assignment (SoT in codebase)."""
+    return ProjectAssignment.objects.filter(prorab=user).exists()
 
 
 def _to_decimal_str(value: Decimal) -> str:
@@ -509,6 +515,8 @@ class MonthlyReportView(views.APIView):
         elif role == 'foreman':
             if request.query_params.get('scope') != 'PROJECT':
                 raise PermissionDenied('Reports are not available for your role.')
+            if not _foreman_has_project_assignment(request.user):
+                raise PermissionDenied('You do not have access to project reports.')
         else:
             raise PermissionDenied('Reports are not available for your role.')
 
@@ -1204,6 +1212,86 @@ class ExportTransfersDirectionPdfView(views.APIView):
             f'attachment; filename="transfers_{filename_direction}_{month}.pdf"'
         )
         return response
+
+
+class ForemanProjectSummaryView(views.APIView):
+    """
+    Foreman-focused project summary:
+    - planned_total: sum(BudgetLine.amount_planned) for month + PROJECT scope + project
+    - actual_total: sum(expenses.ActualExpense.amount) for month + PROJECT scope
+    - difference: planned_total - actual_total
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        role = getattr(request.user, 'role', None)
+        if not (request.user.is_superuser or role == 'foreman'):
+            raise PermissionDenied('This endpoint is available for foreman only.')
+        if role == 'foreman' and not _foreman_has_project_assignment(request.user):
+            raise PermissionDenied('You do not have access to project reports.')
+
+        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+        month, month_period = validated
+
+        # Current codebase source-of-truth for foreman->project visibility is ProjectAssignment.
+        assignments = (
+            ProjectAssignment.objects
+            .select_related('project')
+            .filter(prorab=request.user)
+            .order_by('project__name', 'project_id')
+        )
+
+        # expenses.ActualExpense has no project field in this codebase.
+        # Keep actual strictly from expenses app and PROJECT scope (as requested).
+        actual_total_global = (
+            ExpenseActualExpense.objects
+            .filter(month_period=month_period, scope='PROJECT')
+            .aggregate(total=Sum('amount'))['total']
+            or Decimal('0.00')
+        )
+
+        projects = []
+        for assignment in assignments:
+            project = assignment.project
+            planned_total = (
+                BudgetLine.objects
+                .filter(
+                    plan__period=month_period,
+                    plan__scope='PROJECT',
+                    plan__project_id=project.id,
+                )
+                .aggregate(total=Sum('amount_planned'))['total']
+                or Decimal('0.00')
+            )
+            difference = planned_total - actual_total_global
+            projects.append(
+                {
+                    'project_id': project.id,
+                    'project_name': project.name,
+                    'planned_total': planned_total,
+                    'actual_total': actual_total_global,
+                    'difference': difference,
+                }
+            )
+
+        data_payload = {
+            'month': month,
+            'projects': projects,
+        }
+        serializer = ForemanProjectSummaryDataSerializer(data=data_payload)
+        serializer.is_valid(raise_exception=True)
+        return Response(
+            {
+                'success': True,
+                'code': 'SUCCESS',
+                'message': 'Foreman project summary retrieved.',
+                'data': serializer.validated_data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # Manual test (curl):

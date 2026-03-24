@@ -14,15 +14,15 @@ describe('ReportsPage – URL edge cases', () => {
     vi.mocked(useAuth).mockClear()
   })
 
-  it('foreman with invalid tab/scope leaves them unchanged (ReportsPage only manages month)', async () => {
+  it('foreman: tab/scope query params are stripped (PROJECT-only reports; backend enforces scope)', async () => {
     const { getLocationSearch } = renderReportsPage({
       role: 'foreman',
       initialUrl: '/reports?tab=charity&scope=charity&month=2026-02',
     })
     await waitFor(() => {
       const search = getLocationSearch()
-      expect(search).toContain('tab=charity')
-      expect(search).toContain('scope=charity')
+      expect(search).not.toContain('tab=')
+      expect(search).not.toContain('scope=')
       expect(search).toContain('month=2026-02')
     })
   })

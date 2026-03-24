@@ -161,6 +161,113 @@ class TestIncomePlanAPI:
         assert response.status_code == 403
         assert 'detail' in response.data
         assert 'locked' in response.data['detail'].lower()
+
+    def test_create_income_plan_duplicate_source_same_month_returns_400(
+        self, api_client, admin_user, income_source, finance_period_office
+    ):
+        """Creating duplicate (period, source) returns validation 400, not 500."""
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        IncomePlan.objects.create(
+            period=finance_period_office,
+            source=income_source,
+            amount=Decimal('300000.00')
+        )
+
+        data = {
+            'year': 2026,
+            'month': 2,
+            'source_id': income_source.id,
+            'amount': '70000.00'
+        }
+        response = api_client.post('/api/v1/income/plans/', data, format='json')
+        assert response.status_code == 400
+        assert 'source_id' in response.data
+        assert 'already exists in the selected month' in response.data['source_id'][0]
+
+    def test_create_income_plan_same_source_different_month_allowed(
+        self, api_client, admin_user, income_source, month_period, finance_period_office
+    ):
+        """Same source can be planned in a different month."""
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        IncomePlan.objects.create(
+            period=finance_period_office,
+            source=income_source,
+            amount=Decimal('300000.00')
+        )
+
+        month_period_2 = MonthPeriod.objects.create(month='2026-03', status='OPEN')
+        finance_period_2 = FinancePeriod.objects.create(
+            month_period=month_period_2,
+            fund_kind='office',
+            project=None,
+            status='open',
+            created_by=admin_user
+        )
+
+        data = {
+            'year': 2026,
+            'month': 3,
+            'source_id': income_source.id,
+            'amount': '70000.00'
+        }
+        response = api_client.post('/api/v1/income/plans/', data, format='json')
+        assert response.status_code == 201
+        assert response.data['source']['id'] == income_source.id
+        assert IncomePlan.objects.filter(period=finance_period_2, source=income_source).exists()
+
+    def test_update_income_plan_amount_same_source_allowed(
+        self, api_client, admin_user, income_source, finance_period_office
+    ):
+        """Updating amount without changing source is allowed."""
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        income_plan = IncomePlan.objects.create(
+            period=finance_period_office,
+            source=income_source,
+            amount=Decimal('300000.00')
+        )
+
+        response = api_client.patch(
+            f'/api/v1/income/plans/{income_plan.id}/',
+            {'amount': '350000.00'},
+            format='json'
+        )
+        assert response.status_code == 200
+        assert response.data['amount'] == '350000.00'
+
+    def test_update_income_plan_to_existing_source_same_month_rejected(
+        self, api_client, admin_user, finance_period_office
+    ):
+        """Changing source to one already used in same period returns 400."""
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        source_a = IncomeSource.objects.create(name='Source A', is_active=True)
+        source_b = IncomeSource.objects.create(name='Source B', is_active=True)
+        existing = IncomePlan.objects.create(
+            period=finance_period_office,
+            source=source_a,
+            amount=Decimal('100000.00')
+        )
+        target = IncomePlan.objects.create(
+            period=finance_period_office,
+            source=source_b,
+            amount=Decimal('200000.00')
+        )
+
+        response = api_client.patch(
+            f'/api/v1/income/plans/{target.id}/',
+            {'source_id': existing.source_id},
+            format='json'
+        )
+        assert response.status_code == 400
+        assert 'source_id' in response.data
+        assert 'already exists in the selected month' in response.data['source_id'][0]
     
     def test_delete_income_plan_locked_month_period(self, api_client, admin_user, income_source, finance_period_office):
         """Test IncomePlan deletion fails with 403 when MonthPeriod is LOCKED."""

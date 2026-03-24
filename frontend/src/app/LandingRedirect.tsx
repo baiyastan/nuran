@@ -5,10 +5,13 @@ import { selectMeStatus } from '@/features/auth/authSlice'
 import Loader from '@/shared/ui/Loader/Loader'
 
 export default function LandingRedirect() {
-  const { role, isAuthenticated } = useAuth()
+  const { role, isAuthenticated, accessToken, user } = useAuth()
   const meStatus = useAppSelector(selectMeStatus)
 
-  const isMeLoading = isAuthenticated && (meStatus === 'idle' || meStatus === 'loading')
+  const isMeLoading =
+    !!accessToken &&
+    !user &&
+    (meStatus === 'idle' || meStatus === 'loading')
 
   // Wait for auth bootstrap to complete before redirecting
   if (isMeLoading) {

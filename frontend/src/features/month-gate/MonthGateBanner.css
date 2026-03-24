@@ -2,11 +2,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
   font-size: 14px;
   margin-bottom: 0.75rem;
+}
+
+.month-gate-banner > * {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .month-gate-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem 0.625rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    line-height: 1.32;
+    font-size: 13px;
+  }
+
+  .month-gate-banner button {
+    width: 100%;
+    min-height: 36px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0.35rem 0.625rem;
+  }
 }
 
 .month-gate-banner--loading {

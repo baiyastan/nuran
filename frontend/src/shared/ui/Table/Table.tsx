@@ -45,10 +45,17 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                   {columns.map((column) => {
                     const value = rowRecord[column.key]
                     return (
-                      <td key={column.key}>
-                        {renderCell
-                          ? renderCell(column.key, value, row)
-                          : (value as React.ReactNode)}
+                      <td
+                        key={column.key}
+                        data-label={column.label}
+                        data-column={column.key}
+                      >
+                        <span className="table-mobile-label">{column.label}</span>
+                        <span className="table-mobile-value">
+                          {renderCell
+                            ? renderCell(column.key, value, row)
+                            : (value as React.ReactNode)}
+                        </span>
                       </td>
                     )
                   })}

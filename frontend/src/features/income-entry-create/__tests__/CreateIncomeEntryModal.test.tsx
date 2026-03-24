@@ -57,6 +57,7 @@ describe('CreateIncomeEntryModal', () => {
       amount: 500,
       received_at: '2026-02-15',
       comment: 'Salary',
+      account: 'CASH',
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })

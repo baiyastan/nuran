@@ -1,9 +1,14 @@
 .expenses-page {
   padding: 1.5rem;
+  min-width: 0;
 }
 
 .expenses-page .page-header {
   margin-bottom: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .expenses-page .page-header h2 {
@@ -64,12 +69,15 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .expenses-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   padding: 1rem;
   background: #fff;
   border: 1px solid #e0e0e0;
@@ -81,6 +89,7 @@
   font-size: 1rem;
   color: #333;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .expenses-total {
@@ -90,6 +99,7 @@
   border-radius: 8px;
   text-align: right;
   font-size: 1.1rem;
+  overflow-wrap: anywhere;
 }
 
 /* Info Message */
@@ -118,6 +128,7 @@
 .empty-state p {
   margin: 0;
   color: #666;
+  overflow-wrap: anywhere;
 }
 
 /* Loading and Error States */
@@ -130,5 +141,51 @@
 
 .error {
   color: #dc3545;
+}
+
+.expenses-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .expenses-page {
+    padding: 1rem;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  }
+
+  .expenses-page .page-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .filters-section {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .filter-input,
+  .filter-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+  }
+
+  .expenses-header > button {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .expenses-total {
+    text-align: left;
+    font-size: 1rem;
+    line-height: 1.35;
+    padding: 0.875rem;
+  }
+
+  .expenses-header {
+    padding: 0.875rem;
+  }
 }
 

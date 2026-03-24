@@ -37,6 +37,7 @@ const authSlice = createSlice({
     ) => {
       state.accessToken = action.payload.access
       state.user = action.payload.user
+      state.meStatus = 'succeeded'
       // Save to localStorage for persistence
       try {
         localStorage.setItem('accessToken', action.payload.access)

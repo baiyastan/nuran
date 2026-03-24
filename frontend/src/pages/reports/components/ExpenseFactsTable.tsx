@@ -5,29 +5,45 @@ import { formatKGS, formatDate } from '@/shared/lib/utils'
 import { ActualExpense } from '@/entities/actual-expense/model'
 import './ReportsTable.css'
 
+function actualsHaveAnyComment(items: ActualExpense[]) {
+  return items.some((i) => String(i.comment ?? '').trim().length > 0)
+}
+
 interface ExpenseFactsTableProps {
   items?: ActualExpense[]
   loading: boolean
   error?: unknown | null
+  /** `when-nonempty`: hide comment column unless at least one row has a comment. */
+  commentColumn?: 'always' | 'when-nonempty'
 }
 
-export function ExpenseFactsTable({ items, loading, error }: ExpenseFactsTableProps) {
+export function ExpenseFactsTable({
+  items,
+  loading,
+  error,
+  commentColumn = 'always',
+}: ExpenseFactsTableProps) {
   const { t } = useTranslation('reports')
+
+  const showCommentCol =
+    commentColumn === 'always' ||
+    (items !== undefined && items.length > 0 && actualsHaveAnyComment(items))
 
   const columns = [
     { key: 'date', label: t('expense.tables.actual.columns.date') },
     { key: 'category_name', label: t('expense.tables.actual.columns.categoryName') },
     { key: 'amount', label: t('expense.tables.actual.columns.amount') },
-    { key: 'comment', label: t('expense.tables.actual.columns.comment') },
+    ...(showCommentCol ? [{ key: 'comment', label: t('expense.tables.actual.columns.comment') }] : []),
   ]
 
-  // Treat undefined items as loading: do not show empty message
+  const skeletonCols = commentColumn === 'when-nonempty' ? 3 : 4
+
   if (loading || items === undefined) {
-    return <TableSkeleton columnCount={4} />
+    return <TableSkeleton columnCount={skeletonCols} />
   }
 
   if (error) {
-    return <div className="table-loading">{t('expense.tables.actual.loading')}</div>
+    return <div className="table-empty-message">{t('errors.loadReport')}</div>
   }
 
   if (items.length === 0) {
@@ -41,12 +57,15 @@ export function ExpenseFactsTable({ items, loading, error }: ExpenseFactsTablePr
         ? (item.category as { name?: string | null }).name ?? null
         : null
 
-    return {
+    const row: Record<string, string> = {
       date: formatDate(item.spent_at),
       category_name: item.category_name ?? categoryFromObject ?? fallbackCategoryName,
       amount: formatKGS(parseFloat(item.amount)),
-      comment: item.comment,
     }
+    if (showCommentCol) {
+      row.comment = item.comment?.trim() ? item.comment : '—'
+    }
+    return row
   })
 
   return <Table columns={columns} data={tableData} />

@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from decimal import Decimal
 from apps.budgeting.models import BudgetPlan, BudgetLine, ExpenseCategory, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectAssignment
 from apps.finance.models import FinancePeriod
 from apps.finance.constants import MONTH_REQUIRED_MSG
 
@@ -94,6 +94,23 @@ def api_client(admin_user):
     """Create API client with admin user."""
     client = APIClient()
     client.force_authenticate(user=admin_user)
+    return client
+
+
+@pytest.fixture
+def foreman_user(db):
+    return User.objects.create_user(
+        username='foreman_mr',
+        email='foreman_mr@test.com',
+        password='testpass123',
+        role='foreman',
+    )
+
+
+@pytest.fixture
+def foreman_api_client(foreman_user):
+    client = APIClient()
+    client.force_authenticate(user=foreman_user)
     return client
 
 
@@ -297,5 +314,27 @@ class TestMonthlyReportAPI:
         assert len(response.data['rows']) == 1
         assert response.data['rows'][0]['category_name'] == subcategory_office.name
         assert response.data['plan_id'] is not None
+
+    def test_foreman_office_scope_forbidden(self, foreman_api_client, month_period):
+        response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
+        assert response.status_code == 403
+
+    def test_foreman_project_scope_without_assignment_forbidden(self, foreman_api_client, month_period):
+        response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
+        assert response.status_code == 403
+
+    def test_foreman_project_scope_with_assignment_allowed(
+        self, foreman_api_client, foreman_user, month_period, admin_user
+    ):
+        project = Project.objects.create(
+            name='P1',
+            description='',
+            status='active',
+            created_by=admin_user,
+        )
+        ProjectAssignment.objects.create(project=project, prorab=foreman_user)
+        response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
+        assert response.status_code == 200
+        assert response.data['scope'] == 'PROJECT'
 
 

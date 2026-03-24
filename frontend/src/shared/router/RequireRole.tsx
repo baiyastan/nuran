@@ -12,8 +12,8 @@ function RequireRole({ allowedRoles }: RequireRoleProps) {
   const { isAuthenticated, accessToken, user } = useAuth()
   const meStatus = useAppSelector(selectMeStatus)
 
-  // Show loader while loading or if we have token but haven't started query yet
-  if (meStatus === 'loading' || (meStatus === 'idle' && accessToken)) {
+  // Show bootstrap loader only when token exists but user is not resolved yet
+  if (meStatus === 'loading' || (meStatus === 'idle' && accessToken && !user)) {
     return <Loader />
   }
 

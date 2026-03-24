@@ -8,6 +8,15 @@ import { useGetMonthlyReportQuery } from '@/shared/api/reportsApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
 import { ReportTab } from '../types/reports.types'
 
+/** HTTP status from RTK Query / fetch error (for role-specific report UX). */
+export function getQueryErrorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const s = (error as { status: unknown }).status
+    return typeof s === 'number' ? s : undefined
+  }
+  return undefined
+}
+
 interface UseReportsDataParams {
   selectedMonth: string // YYYY-MM
   selectedTab: ReportTab
@@ -308,6 +317,11 @@ export function useReportsData({
       expensePlanned: monthlyReportError ? t('errors.loadReport') : null,
       expenseActual: monthlyReportError ? t('errors.loadReport') : null,
     },
+
+    monthlyReportErrorStatus: getQueryErrorStatus(monthlyReportError),
+    expenseFactsErrorStatus: getQueryErrorStatus(expenseFactsError),
+    monthlyReportError,
+    expenseFactsError,
 
     // Warnings
     warnings: {

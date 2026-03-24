@@ -63,7 +63,7 @@ export default {
     audit: 'Аудит',
     admin: 'Башкаруу',
     users: 'Колдонуучулар',
-    financePeriods: 'Каржылык мезгилдер',
+    financePeriods: 'Приходы',
     expenses: 'Чыгымдар',
     incomeSources: 'Киреше булактары',
     reports: 'Отчёттор',
@@ -812,6 +812,8 @@ export default {
     incomePlan: {
       addTitle: 'Киреше планы кошуу',
       editTitle: 'Киреше планын түзөтүү',
+      editInstead: 'Бар болгон планды түзөтүү',
+      noAvailableSources: 'Тандалган ай үчүн бардык киреше булактарына план түзүлгөн.',
       source: 'Булак',
       selectSource: 'Булакты тандаңыз...',
       amount: 'Сумма',
@@ -1190,6 +1192,8 @@ export default {
       loadReport: 'Не удалось загрузить отчёт',
       loadSummary: 'Не удалось загрузить сводку',
       loadDetails: 'Не удалось загрузить детали',
+      noReportsAccess:
+        'Объект боюнча отчётторго уруксат жок. Администраторго кайрылыңыз — проектке дайындоо керек.',
     },
     status: {
       LOCKED: 'ЖАБЫК',
@@ -1370,6 +1374,7 @@ export default {
     emptyCategories: 'Бул багыт үчүн чыгым категорияларынын түпкүлүгү жок.',
     emptyStateNoPlanLine1: 'Бул ай үчүн план түзүлө элек.',
     emptyStateNoPlanLine2: 'План түзгөндөн кийин категориялар боюнча суммаларды киргизе аласыз.',
+    emptyStateNoPlanDirector: 'Планды администратор түзөт.',
     saved: 'Сакталды',
   },
   monthGate: {

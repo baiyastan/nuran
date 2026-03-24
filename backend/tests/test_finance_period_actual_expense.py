@@ -249,3 +249,24 @@ class TestActualExpenseRBAC:
 
         response = client.get(f'/api/v1/actual-expenses/{office_expense.id}/')
         assert response.status_code == 403
+
+    def test_foreman_without_assignment_cannot_access_project_expenses(
+        self, month_period, category_project, foreman_user, admin_user
+    ):
+        """Foreman must have at least one ProjectAssignment to use PROJECT expense reports APIs."""
+        ActualExpense.objects.create(
+            month_period=month_period,
+            scope='PROJECT',
+            category=category_project,
+            account='CASH',
+            amount=Decimal('100.00'),
+            spent_at='2024-01-15',
+            comment='x',
+            created_by=admin_user,
+        )
+        client = APIClient()
+        token = RefreshToken.for_user(foreman_user)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+        response = client.get('/api/v1/actual-expenses/?scope=PROJECT')
+        assert response.status_code == 403
