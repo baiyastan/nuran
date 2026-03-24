@@ -108,7 +108,6 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { accessToken, role } = useAuth()
   const canExportPdf = role !== 'director'
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
-  const [previousMonthOpen, setPreviousMonthOpen] = useState(false)
   const [exportSectionPdf] = useExportSectionPdfMutation()
   const [exportIncomeSourceDetailPdf] = useExportIncomeSourceDetailPdfMutation()
   const [exportExpenseCategoryDetailPdf] = useExportExpenseCategoryDetailPdfMutation()

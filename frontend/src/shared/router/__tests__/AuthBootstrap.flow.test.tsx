@@ -113,7 +113,15 @@ describe('Auth bootstrap flow', () => {
       expect(screen.getByText('Login page')).toBeInTheDocument()
     })
 
-    const calledUrls = vi.mocked(axiosInstance).mock.calls.map((args) => args[0]?.url)
+    const calledUrls = vi.mocked(axiosInstance).mock.calls
+      .map((args) => args[0])
+      .map((request) => {
+        if (typeof request === 'string') return request
+        if (request && typeof request === 'object') {
+          return (request as { url?: string }).url
+        }
+        return undefined
+      })
     const meCalls = calledUrls.filter((url) => url === '/auth/me/').length
     const refreshCalls = calledUrls.filter((url) => url === '/auth/refresh/').length
 

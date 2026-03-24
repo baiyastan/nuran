@@ -32,6 +32,16 @@ vi.mock('react-i18next', () => ({
 }))
 
 describe('IncomePlanModal', () => {
+  const createMockQueryResult = <T,>(data: T) =>
+    ({
+      data,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      error: undefined,
+      refetch: vi.fn(),
+    }) as const
+
   beforeEach(() => {
     vi.mocked(useCreateIncomePlanMutation).mockReturnValue([
       vi.fn(),
@@ -46,12 +56,12 @@ describe('IncomePlanModal', () => {
       { isLoading: false },
     ] as unknown as ReturnType<typeof useCreateMonthPeriodMutation>)
     vi.mocked(useAuth).mockReturnValue({ role: 'admin' } as ReturnType<typeof useAuth>)
-    vi.mocked(useListIncomeSourcesQuery).mockReturnValue({
-      data: [
+    vi.mocked(useListIncomeSourcesQuery).mockReturnValue(
+      createMockQueryResult([
         { id: 1, name: 'Source A', is_active: true },
         { id: 2, name: 'Source B', is_active: true },
-      ],
-    } as ReturnType<typeof useListIncomeSourcesQuery>)
+      ]) as unknown as ReturnType<typeof useListIncomeSourcesQuery>
+    )
   })
 
   it('create mode hides already used sources', () => {

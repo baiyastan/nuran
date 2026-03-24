@@ -88,7 +88,7 @@ export function ForemanProjectExpenseReport({
         monthStatus={monthStatus}
         loading={{
           planned: data.loading.expensePlanned,
-          actual: data.loading.expenseFacts,
+          actual: data.loading.expenseActual,
         }}
         expenseByCategory={data.expenseByCategory}
         expenseDailyTotals={data.expenseDailyTotals}

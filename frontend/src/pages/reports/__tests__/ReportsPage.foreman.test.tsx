@@ -36,33 +36,35 @@ const monthlyEmpty = {
 }
 
 describe('ReportsPage – foreman', () => {
+  const createMockQueryResult = <T,>(data: T) =>
+    ({
+      data,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      error: undefined,
+      refetch: vi.fn(),
+    }) as const
+
   beforeEach(() => {
     vi.mocked(useAuth).mockClear()
-    vi.mocked(useGetMonthPeriodQuery).mockReturnValue({
-      data: {
+    vi.mocked(useGetMonthPeriodQuery).mockReturnValue(
+      createMockQueryResult({
         id: 1,
         month: '2026-02',
         status: 'OPEN',
         created_at: '',
         updated_at: '',
-      },
-      isLoading: false,
-      error: undefined,
-      isError: false,
-    } as ReturnType<typeof useGetMonthPeriodQuery>)
-    vi.mocked(useGetMonthlyReportQuery).mockReturnValue({
-      data: monthlyEmpty,
-      isLoading: false,
-      isFetching: false,
-      error: undefined,
-      isError: false,
-    } as ReturnType<typeof useGetMonthlyReportQuery>)
-    vi.mocked(useListActualExpensesQuery).mockReturnValue({
-      data: { results: [], count: 0, next: null, previous: null },
-      isLoading: false,
-      error: undefined,
-      isError: false,
-    } as ReturnType<typeof useListActualExpensesQuery>)
+      }) as unknown as ReturnType<typeof useGetMonthPeriodQuery>
+    )
+    vi.mocked(useGetMonthlyReportQuery).mockReturnValue(
+      createMockQueryResult(monthlyEmpty) as unknown as ReturnType<typeof useGetMonthlyReportQuery>
+    )
+    vi.mocked(useListActualExpensesQuery).mockReturnValue(
+      createMockQueryResult({ results: [], count: 0, next: null, previous: null }) as unknown as ReturnType<
+        typeof useListActualExpensesQuery
+      >
+    )
   })
 
   it('renders project expense report instead of global summary for foreman', () => {
