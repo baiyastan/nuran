@@ -21,27 +21,6 @@ set -a
 source .env
 set +a
 
-send_telegram() {
-  local message="$1"
-
-  if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
-    echo "Telegram env vars are missing, skipping alert."
-    return 0
-  fi
-
-  curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "text=${message}" > /dev/null || true
-}
-
-on_error() {
-  local exit_code=$?
-  send_telegram "❌ Nuran backup FAILED on $(hostname) at ${TIMESTAMP}"
-  exit "${exit_code}"
-}
-
-trap on_error ERR
-
 mkdir -p "${BACKUP_DIR}"
 
 echo "Creating PostgreSQL backup at ${BACKUP_FILE} ..."
@@ -69,7 +48,5 @@ aws s3 ls \
 
 echo "Rotating local backups, keeping the 7 most recent..."
 ls -1t "${BACKUP_DIR}"/nuran_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
-
-send_telegram "✅ Nuran backup OK on $(hostname): $(basename "${BACKUP_FILE}")"
 
 echo "Done."
