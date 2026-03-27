@@ -510,6 +510,21 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
         # Reserved for controlled bootstrap endpoints/commands only.
         context['allow_root_creation'] = False
         return context
+
+    def list(self, request, *args, **kwargs):
+        """
+        Return full filtered category list without page slicing.
+        Keep response envelope stable for existing frontend consumers.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        results = serializer.data
+        return Response({
+            'count': len(results),
+            'next': None,
+            'previous': None,
+            'results': results,
+        })
     
     def perform_create(self, serializer):
         """Create category - validation handled by serializer (calls model.clean())."""

@@ -28,6 +28,22 @@ export interface ExpenseCategoryListResponse {
   results: ExpenseCategory[]
 }
 
+type ExpenseCategoryListApiResponse = ExpenseCategoryListResponse | ExpenseCategory[]
+
+export function normalizeExpenseCategoryListResponse(
+  response: ExpenseCategoryListApiResponse
+): ExpenseCategoryListResponse {
+  if (Array.isArray(response)) {
+    return {
+      count: response.length,
+      next: null,
+      previous: null,
+      results: response,
+    }
+  }
+  return response
+}
+
 export interface CreateExpenseCategoryRequest {
   name: string
   scope: 'project' | 'office' | 'charity'
@@ -66,6 +82,8 @@ export const expenseCategoriesApi = baseApi.injectEndpoints({
           params: Object.keys(searchParams).length > 0 ? searchParams : undefined,
         }
       },
+      transformResponse: (response: ExpenseCategoryListApiResponse) =>
+        normalizeExpenseCategoryListResponse(response),
       providesTags: ['ExpenseCategories'],
     }),
     createExpenseCategory: builder.mutation<ExpenseCategory, CreateExpenseCategoryRequest>({

@@ -291,3 +291,63 @@ def test_cannot_edit_system_root_name_manually(admin_client):
     )
     assert response.status_code == 400
 
+
+@pytest.mark.django_db
+def test_expense_categories_list_returns_full_filtered_results_without_pagination(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='office', is_system_root=True, parent__isnull=True)
+
+    for idx in range(25):
+        ExpenseCategory.objects.create(
+            name=f'Office child {idx}',
+            scope='office',
+            kind='EXPENSE',
+            parent=root,
+            is_active=True,
+        )
+    ExpenseCategory.objects.create(
+        name='Office inactive child',
+        scope='office',
+        kind='EXPENSE',
+        parent=root,
+        is_active=False,
+    )
+
+    response = admin_client.get('/api/v1/budgets/expense-categories/?scope=office&is_active=true')
+    assert response.status_code == 200
+    assert response.data['next'] is None
+    assert response.data['previous'] is None
+    assert response.data['count'] == len(response.data['results'])
+    # 1 active root + 25 active children (inactive child excluded by filter)
+    assert response.data['count'] == 26
+    assert all(item['scope'] == 'office' for item in response.data['results'])
+    assert all(item['is_active'] is True for item in response.data['results'])
+
+
+@pytest.mark.django_db
+def test_expense_categories_list_kind_filter_still_works_without_pagination(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='project', is_system_root=True, parent__isnull=True)
+    ExpenseCategory.objects.create(
+        name='Project income legacy',
+        scope='project',
+        kind='INCOME',
+        parent=root,
+        is_active=True,
+    )
+    ExpenseCategory.objects.create(
+        name='Project expense child',
+        scope='project',
+        kind='EXPENSE',
+        parent=root,
+        is_active=True,
+    )
+
+    response = admin_client.get('/api/v1/budgets/expense-categories/?scope=project&is_active=true&kind=EXPENSE')
+    assert response.status_code == 200
+    assert response.data['next'] is None
+    assert response.data['count'] == len(response.data['results'])
+    assert all(item['scope'] == 'project' for item in response.data['results'])
+    assert all(item['is_active'] is True for item in response.data['results'])
+    assert all(item['kind'] == 'EXPENSE' for item in response.data['results'])
+
