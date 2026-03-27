@@ -515,8 +515,6 @@ class MonthlyReportView(views.APIView):
         elif role == 'foreman':
             if request.query_params.get('scope') != 'PROJECT':
                 raise PermissionDenied('Reports are not available for your role.')
-            if not _foreman_has_project_assignment(request.user):
-                raise PermissionDenied('You do not have access to project reports.')
         else:
             raise PermissionDenied('Reports are not available for your role.')
 

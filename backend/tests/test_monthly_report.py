@@ -319,9 +319,23 @@ class TestMonthlyReportAPI:
         response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=OFFICE')
         assert response.status_code == 403
 
+    def test_foreman_charity_scope_forbidden(self, foreman_api_client, month_period):
+        response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=CHARITY')
+        assert response.status_code == 403
+
     def test_foreman_project_scope_without_assignment_forbidden(self, foreman_api_client, month_period):
         response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
-        assert response.status_code == 403
+        assert response.status_code == 200
+        assert response.data['scope'] == 'PROJECT'
+
+    def test_foreman_project_scope_without_projects_or_assignments_allowed(
+        self, foreman_api_client, month_period
+    ):
+        assert Project.objects.count() == 0
+        assert ProjectAssignment.objects.count() == 0
+        response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
+        assert response.status_code == 200
+        assert response.data['scope'] == 'PROJECT'
 
     def test_foreman_project_scope_with_assignment_allowed(
         self, foreman_api_client, foreman_user, month_period, admin_user

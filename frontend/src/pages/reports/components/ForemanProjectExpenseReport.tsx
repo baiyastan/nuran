@@ -34,6 +34,7 @@ export function ForemanProjectExpenseReport({
     selectedMonth: month,
     selectedTab: 'project',
     selectedProjectId: null,
+    skipExpenseFacts: true,
   })
 
   const loadingMain = data.loading.monthPeriod || data.loading.expensePlanned
@@ -65,18 +66,11 @@ export function ForemanProjectExpenseReport({
     )
   }
 
-  const factsAccessDenied = data.expenseFactsErrorStatus === 403
-
   return (
     <div className="foreman-project-report">
       {data.warnings.noBudgetPlan && (
         <div className="summary-no-data" role="status">
           {t('warnings.noBudgetPlan')}
-        </div>
-      )}
-      {factsAccessDenied && (
-        <div className="summary-error" role="alert">
-          {t('errors.noReportsAccess')}
         </div>
       )}
       <ExpenseSection
@@ -94,10 +88,10 @@ export function ForemanProjectExpenseReport({
         expenseDailyTotals={data.expenseDailyTotals}
         expenseFacts={{
           ...data.expenseFacts,
-          error: factsAccessDenied ? null : data.expenseFacts.error,
+          error: data.expenseFacts.error,
         }}
         showPlanned
-        showActual={!factsAccessDenied}
+        showActual
         showCategoryPlannedVsActualChart={false}
         showDailyExpenseChart={false}
         foremanExpenseUi

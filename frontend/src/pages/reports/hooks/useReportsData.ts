@@ -21,12 +21,14 @@ interface UseReportsDataParams {
   selectedMonth: string // YYYY-MM
   selectedTab: ReportTab
   selectedProjectId: number | null
+  skipExpenseFacts?: boolean
 }
 
 export function useReportsData({
   selectedMonth,
   selectedTab,
   selectedProjectId,
+  skipExpenseFacts = false,
 }: UseReportsDataParams) {
   const { t } = useTranslation('reports')
 
@@ -117,7 +119,7 @@ export function useReportsData({
     error: expenseFactsError,
   } = useListActualExpensesQuery(
     scope ? { month: selectedMonth, scope } : undefined,
-    { skip: !isExpenseTab || !scope }
+    { skip: !isExpenseTab || !scope || skipExpenseFacts }
   )
 
   const budgetPlanId = useMemo(() => monthlyReportData?.plan_id ?? null, [monthlyReportData])

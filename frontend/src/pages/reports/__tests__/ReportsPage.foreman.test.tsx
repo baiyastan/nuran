@@ -76,6 +76,10 @@ describe('ReportsPage – foreman', () => {
     expect(screen.queryByText('expense.title')).not.toBeInTheDocument()
     expect(screen.getByText('expense.summaryTitle')).toBeInTheDocument()
     expect(screen.queryByText('globalSummary.title')).not.toBeInTheDocument()
+    expect(vi.mocked(useListActualExpensesQuery)).toHaveBeenCalledWith(
+      { month: '2026-02', scope: 'PROJECT' },
+      { skip: true }
+    )
   })
 
   it('strips tab and scope from URL for foreman', async () => {
