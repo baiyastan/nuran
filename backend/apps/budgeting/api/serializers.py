@@ -103,9 +103,9 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
         model = ExpenseCategory
         fields = [
             'id', 'name', 'scope', 'kind', 'parent', 'parent_id', 'is_active',
-            'children_count', 'created_at', 'updated_at'
+            'is_system_root', 'children_count', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['is_system_root', 'created_at', 'updated_at']
     
     def get_children_count(self, obj):
         """Get count of children categories."""
@@ -113,9 +113,33 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
     
     def validate_name(self, value):
         """Validate name field."""
-        if not value or not value.strip():
+        if not self.normalize_category_name_for_compare(value):
             raise serializers.ValidationError("Name is required.")
-        return value.strip()
+        return value
+
+    def normalize_category_name_for_compare(self, name):
+        """
+        Normalize name for duplicate comparison:
+        - trim
+        - collapse multiple internal spaces to one
+        - lowercase
+        """
+        normalized = re.sub(r'\s+', ' ', (name or '')).strip()
+        if not normalized:
+            return ''
+        return normalized.lower()
+
+    def normalize_category_name_for_store(self, name):
+        """
+        Normalize name for storage/display:
+        - trim
+        - collapse multiple internal spaces to one
+        - uppercase first character only (keep the rest as user-entered)
+        """
+        normalized = re.sub(r'\s+', ' ', (name or '')).strip()
+        if not normalized:
+            return ''
+        return normalized[:1].upper() + normalized[1:]
     
     def validate_scope(self, value):
         """Validate scope field."""
@@ -131,9 +155,22 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate scope and kind match parent scope and kind."""
-        parent = data.get('parent')
-        scope = data.get('scope')
-        kind = data.get('kind')
+        parent = data.get('parent', getattr(self.instance, 'parent', None))
+        scope = data.get('scope', getattr(self.instance, 'scope', None))
+        kind = data.get('kind', getattr(self.instance, 'kind', None))
+        raw_name = data.get('name', getattr(self.instance, 'name', ''))
+        name_for_store = self.normalize_category_name_for_store(raw_name)
+        normalized_name_for_compare = self.normalize_category_name_for_compare(raw_name)
+
+        if not normalized_name_for_compare:
+            raise serializers.ValidationError({'name': 'Name is required.'})
+        data['name'] = name_for_store
+
+        allow_root_creation = bool(self.context.get('allow_root_creation', False))
+        if parent is None and not allow_root_creation:
+            raise serializers.ValidationError({
+                'parent': 'Root categories are system-defined and cannot be created manually.'
+            })
         
         # If parent is provided, scope and kind must match parent
         if parent is not None:
@@ -142,7 +179,6 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
             # Handle both parent object (from instance) and parent ID (from request)
             if isinstance(parent, int):
                 # Parent is an ID, fetch the parent object
-                from ..models import ExpenseCategory
                 try:
                     parent_obj = ExpenseCategory.objects.get(pk=parent)
                 except ExpenseCategory.DoesNotExist:
@@ -165,6 +201,22 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
                 data['scope'] = parent.scope
             if not kind:
                 data['kind'] = parent.kind
+
+        # Duplicate sibling guard (trim + collapsed spaces + case-insensitive)
+        siblings = ExpenseCategory.objects.filter(
+            scope=data.get('scope', getattr(self.instance, 'scope', None)),
+            parent=parent,
+        )
+        if self.instance:
+            siblings = siblings.exclude(pk=self.instance.pk)
+        sibling_names = siblings.values_list('name', flat=True)
+        if any(
+            self.normalize_category_name_for_compare(existing_name) == normalized_name_for_compare
+            for existing_name in sibling_names
+        ):
+            raise serializers.ValidationError({
+                'name': 'Категория с таким названием уже существует у выбранного родителя.'
+            })
         
         return data
 
@@ -298,18 +350,9 @@ class BulkUpsertBudgetLinesSerializer(serializers.Serializer):
 
     def validate(self, data):
         plan = data['plan']
-        request = self.context.get('request')
-        user = request.user if request else None
 
         # Enforce MonthPeriod OPEN for all bulk upserts (no admin bypass)
         assert_month_open_for_plans(plan.period)
-
-        # Plan status for non-admin: must be OPEN
-        if user and not (getattr(user, 'is_superuser', False) or getattr(user, 'role', None) == 'admin'):
-            if plan.status != 'OPEN':
-                raise serializers.ValidationError({
-                    'plan': f'Plan status must be OPEN for non-admin users. Current status: {plan.status}'
-                })
 
         scope_mapping = {
             'office': 'OFFICE',

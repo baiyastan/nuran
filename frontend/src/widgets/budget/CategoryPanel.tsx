@@ -7,16 +7,19 @@ import './CategoryPanel.css'
 interface CategoryPanelProps {
   onCategorySelect: (categoryId: number) => void
   selectedCategoryId?: number | null
+  scope?: 'project' | 'office' | 'charity'
 }
 
-export function CategoryPanel({ onCategorySelect, selectedCategoryId }: CategoryPanelProps) {
+export function CategoryPanel({ onCategorySelect, selectedCategoryId, scope = 'project' }: CategoryPanelProps) {
   const { t } = useTranslation()
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null)
 
   // Fetch root categories
   const { data: rootCategoriesData } = useListExpenseCategoriesQuery({
+    scope,
     parent: null,
     is_active: true,
+    is_system_root: true,
     ordering: 'created_at', // Order by created_at ASC for roots
   })
 
@@ -24,6 +27,7 @@ export function CategoryPanel({ onCategorySelect, selectedCategoryId }: Category
   const { data: childrenData } = useListExpenseCategoriesQuery(
     {
       parent: selectedRootId || undefined,
+      scope,
       is_active: true,
       ordering: 'name', // Order by name ASC for children
     },

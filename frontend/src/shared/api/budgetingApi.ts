@@ -8,6 +8,7 @@ export interface ExpenseCategory {
   parent: number | null
   parent_id: number | null
   is_active: boolean
+  is_system_root: boolean
   children_count: number
   created_at: string
   updated_at: string
@@ -73,6 +74,7 @@ export interface ExpenseCategoryListParams {
   kind?: string
   is_active?: boolean
   parent?: number | null | 'null'
+  is_system_root?: boolean
   page?: number
 }
 

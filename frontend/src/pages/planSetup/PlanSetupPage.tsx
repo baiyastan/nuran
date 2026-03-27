@@ -13,9 +13,9 @@ import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
 import { Button } from '@/shared/ui/Button/Button'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
-import { getErrorMessage, formatAmountInputDisplay, parseAmountInputInput } from '@/shared/lib/utils'
+import { getErrorMessage, parseAmountInputInput } from '@/shared/lib/utils'
 import { toast } from '@/shared/ui/Toast/toast'
-import { formatMoneyKGS } from '@/shared/utils/formatMoney'
+import { formatAmountDisplayValue } from '@/shared/utils/formatMoney'
 import { formatMonthLabel } from '@/shared/lib/formatMonthLabel'
 import { MonthGateBanner } from '@/features/month-gate/MonthGateBanner'
 import './PlanSetupPage.css'
@@ -75,9 +75,8 @@ function getCategoryBadgeColor(categoryId: number): string {
 function formatReadOnlyPlannedAmount(raw: string): string {
   const trimmed = raw?.trim() ?? ''
   if (!trimmed) return '—'
-  const n = parseFloat(trimmed.replace(/\s/g, ''))
-  if (!Number.isFinite(n)) return '—'
-  return formatMoneyKGS(n)
+  const formatted = formatAmountDisplayValue(trimmed)
+  return formatted || '—'
 }
 
 export default function PlanSetupPage() {
@@ -355,7 +354,7 @@ export default function PlanSetupPage() {
         <input
           type="text"
           inputMode="decimal"
-          value={formatAmountInputDisplay(rawAmount)}
+          value={formatAmountDisplayValue(rawAmount)}
           onChange={(e) => setAmount(cat.id, parseAmountInputInput(e.target.value))}
           onBlur={(e) => {
             const raw = parseAmountInputInput(e.target.value)
@@ -412,7 +411,7 @@ export default function PlanSetupPage() {
         {monthLabel} · {t(`scopeOptions.${scope}`)}
       </p>
       <div className="plan-setup-total">
-        <strong>{t('summary.totalPlanned')}</strong> {formatMoneyKGS(totalPlanned)}
+        <strong>{t('summary.totalPlanned')}</strong> {formatAmountDisplayValue(totalPlanned)} сом
       </div>
       {tableData.length > 0 ? (
         <Table columns={columns} data={tableData} />

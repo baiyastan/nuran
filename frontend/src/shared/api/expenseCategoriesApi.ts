@@ -7,6 +7,7 @@ export interface ExpenseCategory {
   parent: number | null
   parent_id: number | null
   is_active: boolean
+  is_system_root: boolean
   children_count?: number
   created_at: string
   updated_at: string
@@ -17,6 +18,7 @@ export interface ExpenseCategoryListParams {
   parent?: number | null
   is_active?: boolean
   ordering?: string
+  is_system_root?: boolean
 }
 
 export interface ExpenseCategoryListResponse {
@@ -55,6 +57,9 @@ export const expenseCategoriesApi = baseApi.injectEndpoints({
         }
         if (params?.ordering) {
           searchParams.ordering = params.ordering
+        }
+        if (params?.is_system_root !== undefined) {
+          searchParams.is_system_root = String(params.is_system_root)
         }
         return {
           url: '/budgets/expense-categories/',

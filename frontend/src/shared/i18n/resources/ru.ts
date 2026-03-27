@@ -156,6 +156,11 @@ export default {
     confirmDelete: 'Удалить "{{name}}"?',
     deleteError: 'Ошибка удаления категории',
     loadError: 'Ошибка загрузки категорий',
+    errors: {
+      duplicate: 'В этом разделе уже есть категория с таким названием.',
+      rootForbidden: 'Нельзя вручную создавать корневую категорию.',
+      nameRequired: 'Введите название категории.',
+    },
     modals: {
       create: {
         title: 'Создать категорию',

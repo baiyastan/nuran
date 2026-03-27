@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useCreateExpenseCategoryMutation, useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { Button } from '@/shared/ui/Button/Button'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getCreateCategoryErrorMessage } from '@/shared/lib/utils'
 import './CategoryModals.css'
 
 type Scope = 'office' | 'project' | 'charity'
@@ -13,12 +13,6 @@ interface CreateCategoryModalProps {
   onClose: () => void
   onSuccess?: () => void
   scope: Scope
-}
-
-const ROOT_NAME_KEYS: Record<Scope, string> = {
-  office: 'categories.modals.create.rootNameOffice',
-  project: 'categories.modals.create.rootNameProject',
-  charity: 'categories.modals.create.rootNameCharity',
 }
 
 export function CreateCategoryModal({
@@ -34,36 +28,21 @@ export function CreateCategoryModal({
 
   const [createCategory, { isLoading }] = useCreateExpenseCategoryMutation()
 
-  const { data: rootCategoriesData, refetch: refetchRoots } = useListExpenseCategoriesQuery(
-    { scope, parent: null, is_active: true },
+  const { data: rootCategoriesData } = useListExpenseCategoriesQuery(
+    { scope, parent: null, is_active: true, is_system_root: true },
     { skip: !isOpen }
   )
 
   const rootCategories = rootCategoriesData?.results ?? []
-  const hasRoot = rootCategories.length > 0
+  const canonicalRoot = rootCategories[0] ?? null
 
   useEffect(() => {
     if (isOpen) {
       setName('')
-      setSelectedParentId(null)
+      setSelectedParentId(canonicalRoot?.id ?? null)
       setError('')
     }
-  }, [isOpen])
-
-  const handleCreateRoot = async () => {
-    setError('')
-    const rootName = t(ROOT_NAME_KEYS[scope])
-    try {
-      await createCategory({
-        name: rootName,
-        scope,
-        parent: null,
-      }).unwrap()
-      await refetchRoots()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err) || t('categories.modals.create.createError'))
-    }
-  }
+  }, [isOpen, canonicalRoot?.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,6 +52,10 @@ export function CreateCategoryModal({
       return
     }
     try {
+      if (!selectedParentId) {
+        setError('Системный root не найден. Обратитесь к администратору.')
+        return
+      }
       await createCategory({
         name: name.trim(),
         scope,
@@ -81,7 +64,14 @@ export function CreateCategoryModal({
       onSuccess?.()
       onClose()
     } catch (err: unknown) {
-      setError(getErrorMessage(err) || t('categories.modals.create.createError'))
+      const parsedError = getCreateCategoryErrorMessage(err)
+      if (parsedError.translationKey) {
+        setError(t(parsedError.translationKey))
+      } else if (parsedError.message) {
+        setError(parsedError.message)
+      } else {
+        setError(t('categories.modals.create.createError'))
+      }
     }
   }
 
@@ -89,24 +79,17 @@ export function CreateCategoryModal({
 
   const title = t('categories.modals.create.title')
 
-  if (!hasRoot) {
+  if (!canonicalRoot) {
     return (
       <Modal isOpen={isOpen} onClose={onClose} title={title}>
         <div className="category-form">
           <p className="category-modal-message">
-            {t('categories.modals.create.noRootMessage')}
+            Системный root не найден. Обратитесь к администратору.
           </p>
           {error && <div className="form-error">{error}</div>}
           <div className="form-actions" style={{ marginTop: '1rem' }}>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
               {t('common.cancel')}
-            </Button>
-            <Button
-              type="button"
-              onClick={handleCreateRoot}
-              disabled={isLoading}
-            >
-              {isLoading ? t('categories.modals.create.creating') : t('categories.modals.create.createRootButton')}
             </Button>
           </div>
         </div>
@@ -133,17 +116,13 @@ export function CreateCategoryModal({
           <label className="input-label">{t('categories.parentSelectorLabel')}</label>
           <select
             className="input"
-            value={selectedParentId ?? ''}
+            value={selectedParentId ?? canonicalRoot.id}
             onChange={(e) =>
               setSelectedParentId(e.target.value === '' ? null : Number(e.target.value))
             }
+            disabled
           >
-            <option value="">{t('categories.parentOptionTopLevel')}</option>
-            {rootCategories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
+            <option value={canonicalRoot.id}>{canonicalRoot.name}</option>
           </select>
         </div>
         {error && <div className="form-error">{error}</div>}

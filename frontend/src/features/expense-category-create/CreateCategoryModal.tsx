@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useCreateExpenseCategoryMutation, useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi'
 import { Input } from '@/shared/ui/Input/Input'
 import { Button } from '@/shared/ui/Button/Button'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getCreateCategoryErrorMessage } from '@/shared/lib/utils'
 import './CreateCategoryModal.css'
 
 interface CreateCategoryModalProps {
@@ -29,7 +29,9 @@ export function CreateCategoryModal({
   const { data: rootCategories } = useListExpenseCategoriesQuery({
     scope: formData.scope,
     parent: null,
+    is_system_root: true,
   })
+  const canonicalRoot = rootCategories?.results?.[0] ?? null
 
   useEffect(() => {
     if (isOpen) {
@@ -52,15 +54,26 @@ export function CreateCategoryModal({
     }
 
     try {
+      if (!canonicalRoot) {
+        setError('Системный root не найден. Обратитесь к администратору.')
+        return
+      }
       await createCategory({
         name: formData.name.trim(),
         scope: formData.scope,
-        parent: formData.parent || null,
+        parent: formData.parent || canonicalRoot.id,
       }).unwrap()
 
       onClose()
     } catch (err: unknown) {
-      setError(getErrorMessage(err) || 'Failed to create category')
+      const parsedError = getCreateCategoryErrorMessage(err)
+      if (parsedError.translationKey) {
+        setError(t(parsedError.translationKey))
+      } else if (parsedError.message) {
+        setError(parsedError.message)
+      } else {
+        setError(t('categories.modals.create.createError'))
+      }
     }
   }
 
@@ -85,14 +98,15 @@ export function CreateCategoryModal({
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  scope: e.target.value as 'project' | 'office',
-                  parent: null, // Reset parent when scope changes
+                  scope: e.target.value as 'project' | 'office' | 'charity',
+                  parent: null,
                 })
               }
               required
             >
               <option value="project">{t('categories.project')}</option>
               <option value="office">{t('categories.office')}</option>
+              <option value="charity">{t('categories.charity')}</option>
             </select>
           </div>
 
@@ -100,20 +114,20 @@ export function CreateCategoryModal({
             <label className="input-label">{t('categories.parentCategory')}</label>
             <select
               className="input"
-              value={formData.parent || ''}
+              value={formData.parent || canonicalRoot?.id || ''}
               onChange={(e) =>
                 setFormData({
                   ...formData,
                   parent: e.target.value ? Number(e.target.value) : null,
                 })
               }
+              disabled
             >
-              <option value="">{t('categories.all')}</option>
-              {rootCategories?.results.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
+              {canonicalRoot ? (
+                <option value={canonicalRoot.id}>{canonicalRoot.name}</option>
+              ) : (
+                <option value="">Системный root не найден</option>
+              )}
             </select>
           </div>
 

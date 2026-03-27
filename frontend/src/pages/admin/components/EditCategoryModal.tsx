@@ -35,6 +35,7 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
       scope: category?.scope || 'project',
       parent: null,
       is_active: true,
+      is_system_root: true,
     },
     { skip: !category }
   )
@@ -105,12 +106,12 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
           <label className="input-label">{t('categories.parentSelectorLabel')}</label>
           <select
             className="input"
-            value={formData.parent || ''}
+            value={formData.parent || rootCategories[0]?.id || ''}
             onChange={(e) =>
               setFormData({ ...formData, parent: e.target.value ? Number(e.target.value) : null })
             }
+            disabled
           >
-            <option value="">{t('categories.parentOptionTopLevel')}</option>
             {rootCategories.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {displayCategoryName(cat.name)}

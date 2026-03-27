@@ -142,3 +142,37 @@ export function getErrorMessage(error: unknown): string {
     return 'An error occurred'
   }
 }
+
+const CATEGORY_CREATE_ERROR_KEYS: Record<string, string> = {
+  'Категория с таким названием уже существует у выбранного родителя.': 'categories.errors.duplicate',
+  'Root categories are system-defined and cannot be created manually.': 'categories.errors.rootForbidden',
+  'Name is required.': 'categories.errors.nameRequired',
+}
+
+function pickFirstMessage(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0]
+    if (typeof first === 'string' && first.trim()) return first.trim()
+  }
+  return null
+}
+
+export function getCreateCategoryErrorMessage(error: unknown): { translationKey?: string; message?: string } {
+  const err = (error ?? {}) as Record<string, unknown>
+  const data = (err.data ?? {}) as Record<string, unknown>
+
+  const backendMessage =
+    pickFirstMessage(data.name) ??
+    pickFirstMessage(data.parent) ??
+    pickFirstMessage(data.detail) ??
+    null
+
+  if (!backendMessage) return {}
+
+  const translationKey = CATEGORY_CREATE_ERROR_KEYS[backendMessage]
+  if (translationKey) {
+    return { translationKey }
+  }
+  return { message: backendMessage }
+}

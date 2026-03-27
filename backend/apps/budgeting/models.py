@@ -5,6 +5,8 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.utils import timezone
+from django.db.models import Q
+from django.db.models.functions import Lower, Trim
 from apps.projects.models import Project
 
 
@@ -44,6 +46,7 @@ class ExpenseCategory(models.Model):
         help_text='Parent category for tree structure'
     )
     is_active = models.BooleanField(default=True)
+    is_system_root = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -54,6 +57,22 @@ class ExpenseCategory(models.Model):
             models.Index(fields=['scope', 'is_active']),
             models.Index(fields=['kind', 'is_active']),
             models.Index(fields=['parent']),
+        ]
+        constraints = [
+            # Safety net: at most one active root per scope.
+            models.UniqueConstraint(
+                fields=['scope'],
+                condition=Q(parent__isnull=True, is_active=True),
+                name='uniq_active_root_per_scope',
+            ),
+            # Child names must be unique per parent after trim/lower normalization.
+            models.UniqueConstraint(
+                'parent',
+                'scope',
+                Lower(Trim('name')),
+                condition=Q(parent__isnull=False),
+                name='uniq_child_name_per_parent_norm',
+            ),
         ]
     
     def __str__(self):
@@ -66,6 +85,13 @@ class ExpenseCategory(models.Model):
     def clean(self):
         """Validate scope and kind inheritance from parent."""
         from django.core.exceptions import ValidationError
+        from django.db.models.functions import Lower, Trim
+
+        normalized_name = (self.name or '').strip()
+        if normalized_name != (self.name or ''):
+            self.name = normalized_name
+        if not normalized_name:
+            raise ValidationError({'name': 'Name is required.'})
         
         if self.parent is not None:
             errors = {}
@@ -79,6 +105,35 @@ class ExpenseCategory(models.Model):
             
             if errors:
                 raise ValidationError(errors)
+        elif self.is_system_root is False:
+            # Non-system roots are legacy data and should not be created by API path.
+            # Serializer/view enforces business rule for user-facing operations.
+            pass
+
+        if self.parent is None and self.is_active:
+            active_root_qs = ExpenseCategory.objects.filter(
+                scope=self.scope,
+                parent__isnull=True,
+                is_active=True,
+            )
+            if self.pk:
+                active_root_qs = active_root_qs.exclude(pk=self.pk)
+            if active_root_qs.exists():
+                raise ValidationError({'scope': 'Only one active root is allowed per scope.'})
+
+        # Guard against sibling duplicates before DB constraint kicks in.
+        sibling_qs = ExpenseCategory.objects.filter(
+            scope=self.scope,
+            parent=self.parent,
+        ).annotate(
+            normalized_name=Lower(Trim('name'))
+        ).filter(normalized_name=normalized_name.lower())
+        if self.pk:
+            sibling_qs = sibling_qs.exclude(pk=self.pk)
+        if sibling_qs.exists():
+            raise ValidationError(
+                {'name': 'Category with this name already exists under the same parent.'}
+            )
 
 
 class MonthPeriod(models.Model):

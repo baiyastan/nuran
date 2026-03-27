@@ -465,6 +465,10 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
         scope = self.request.query_params.get('scope')
         if scope:
             queryset = queryset.filter(scope=scope)
+
+        kind = self.request.query_params.get('kind')
+        if kind:
+            queryset = queryset.filter(kind=kind)
         
         # Filter by parent
         parent = self.request.query_params.get('parent')
@@ -477,6 +481,13 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(parent_id=parent_id)
                 except ValueError:
                     pass
+
+        is_system_root_param = self.request.query_params.get('is_system_root')
+        if is_system_root_param is not None:
+            if is_system_root_param.lower() == 'true':
+                queryset = queryset.filter(is_system_root=True)
+            elif is_system_root_param.lower() == 'false':
+                queryset = queryset.filter(is_system_root=False)
         
         # Ordering
         ordering_param = self.request.query_params.get('ordering')
@@ -493,6 +504,12 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
                 queryset = queryset.order_by('name')
         
         return queryset.select_related('parent')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Reserved for controlled bootstrap endpoints/commands only.
+        context['allow_root_creation'] = False
+        return context
     
     def perform_create(self, serializer):
         """Create category - validation handled by serializer (calls model.clean())."""
