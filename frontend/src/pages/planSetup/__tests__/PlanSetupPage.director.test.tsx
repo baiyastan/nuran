@@ -111,6 +111,7 @@ describe('PlanSetupPage – director read-only', () => {
             parent: null,
             parent_id: null,
             is_active: true,
+            is_system_root: false,
             children_count: 0,
             created_at: '',
             updated_at: '',

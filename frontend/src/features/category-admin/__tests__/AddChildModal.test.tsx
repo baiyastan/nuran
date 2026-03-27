@@ -25,6 +25,7 @@ const parentCategory: ExpenseCategory = {
   parent: null,
   parent_id: null,
   is_active: true,
+  is_system_root: false,
   children_count: 2,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',

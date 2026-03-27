@@ -27,6 +27,7 @@ const minimalLeafCategory = {
   parent: 1,
   parent_id: 1,
   is_active: true,
+  is_system_root: false,
   children_count: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
