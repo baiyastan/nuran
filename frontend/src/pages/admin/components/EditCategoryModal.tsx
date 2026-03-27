@@ -40,18 +40,21 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
     { skip: !category }
   )
 
-  const rootCategories = rootCategoriesData?.results || []
+  const rootCategories = (rootCategoriesData?.results || []).filter(
+    (cat) => cat.is_system_root && cat.parent_id === null
+  )
+  const canonicalRoot = rootCategories[0] ?? null
 
   useEffect(() => {
     if (isOpen && category) {
       setFormData({
         name: category.name,
-        parent: category.parent_id,
+        parent: category.parent_id ?? canonicalRoot?.id ?? null,
         is_active: category.is_active,
       })
       setError('')
     }
-  }, [isOpen, category])
+  }, [isOpen, category, canonicalRoot?.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,6 +67,11 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
 
     if (!formData.name.trim()) {
       setError(t('categories.modals.edit.nameRequired') || 'Name is required')
+      return
+    }
+
+    if (!formData.parent) {
+      setError('Системный root не найден. Обратитесь к администратору.')
       return
     }
 
@@ -106,17 +114,19 @@ export function EditCategoryModal({ isOpen, onClose, onSuccess, category }: Edit
           <label className="input-label">{t('categories.parentSelectorLabel')}</label>
           <select
             className="input"
-            value={formData.parent || rootCategories[0]?.id || ''}
+            value={formData.parent || canonicalRoot?.id || ''}
             onChange={(e) =>
               setFormData({ ...formData, parent: e.target.value ? Number(e.target.value) : null })
             }
             disabled
           >
-            {rootCategories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {displayCategoryName(cat.name)}
+            {canonicalRoot ? (
+              <option value={canonicalRoot.id}>
+                {displayCategoryName(canonicalRoot.name)} (системный root)
               </option>
-            ))}
+            ) : (
+              <option value="">Системный root не найден</option>
+            )}
           </select>
         </div>
 

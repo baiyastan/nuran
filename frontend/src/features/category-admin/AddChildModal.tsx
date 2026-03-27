@@ -41,6 +41,11 @@ export function AddChildModal({ isOpen, onClose, parent, onSuccess }: AddChildMo
       return
     }
 
+    if (!parent.is_system_root || parent.parent_id !== null) {
+      setError('Родителем может быть только системный root.')
+      return
+    }
+
     if (!formData.name.trim()) {
       setError(t('categories.modals.addChild.nameRequired'))
       return
@@ -70,7 +75,7 @@ export function AddChildModal({ isOpen, onClose, parent, onSuccess }: AddChildMo
           <input
             type="text"
             className="input"
-            value={parent.name}
+            value={`${parent.name} (системный root)`}
             disabled
             readOnly
           />

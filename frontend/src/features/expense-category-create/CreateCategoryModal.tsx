@@ -31,7 +31,10 @@ export function CreateCategoryModal({
     parent: null,
     is_system_root: true,
   })
-  const canonicalRoot = rootCategories?.results?.[0] ?? null
+  const validRoots = (rootCategories?.results ?? []).filter(
+    (category) => category.is_system_root && category.parent_id === null
+  )
+  const canonicalRoot = validRoots[0] ?? null
 
   useEffect(() => {
     if (isOpen) {
@@ -124,7 +127,7 @@ export function CreateCategoryModal({
               disabled
             >
               {canonicalRoot ? (
-                <option value={canonicalRoot.id}>{canonicalRoot.name}</option>
+                <option value={canonicalRoot.id}>{canonicalRoot.name} (системный root)</option>
               ) : (
                 <option value="">Системный root не найден</option>
               )}

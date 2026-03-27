@@ -187,3 +187,107 @@ def test_unique_active_root_per_scope_enforced():
         )
         second.full_clean()
 
+
+@pytest.mark.django_db
+def test_create_without_parent_rejected(admin_client):
+    ensure_canonical_expense_roots()
+    response = admin_client.post(
+        '/api/v1/budgets/expense-categories/',
+        {
+            'name': 'No parent category',
+            'scope': 'office',
+            'kind': 'EXPENSE',
+        },
+        format='json',
+    )
+    assert response.status_code == 400
+    assert 'parent' in response.data
+
+
+@pytest.mark.django_db
+def test_cannot_create_category_under_ordinary_child(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='office', is_system_root=True, parent__isnull=True)
+    ordinary_child = ExpenseCategory.objects.create(
+        name='Office Child',
+        scope='office',
+        kind='EXPENSE',
+        parent=root,
+        is_active=True,
+    )
+
+    response = admin_client.post(
+        '/api/v1/budgets/expense-categories/',
+        {
+            'name': 'Nested Child',
+            'scope': 'office',
+            'kind': 'EXPENSE',
+            'parent': ordinary_child.id,
+        },
+        format='json',
+    )
+    assert response.status_code == 400
+    assert 'parent' in response.data
+
+
+@pytest.mark.django_db
+def test_cannot_update_category_to_become_manual_root(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='project', is_system_root=True, parent__isnull=True)
+    child = ExpenseCategory.objects.create(
+        name='Concrete',
+        scope='project',
+        kind='EXPENSE',
+        parent=root,
+        is_active=True,
+    )
+
+    response = admin_client.patch(
+        f'/api/v1/budgets/expense-categories/{child.id}/',
+        {'parent': None},
+        format='json',
+    )
+    assert response.status_code == 400
+    assert 'parent' in response.data
+
+
+@pytest.mark.django_db
+def test_cannot_move_category_under_non_root_child(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='charity', is_system_root=True, parent__isnull=True)
+    first_child = ExpenseCategory.objects.create(
+        name='Medicine',
+        scope='charity',
+        kind='EXPENSE',
+        parent=root,
+        is_active=True,
+    )
+    second_child = ExpenseCategory.objects.create(
+        name='Food',
+        scope='charity',
+        kind='EXPENSE',
+        parent=root,
+        is_active=True,
+    )
+
+    response = admin_client.patch(
+        f'/api/v1/budgets/expense-categories/{second_child.id}/',
+        {'parent': first_child.id},
+        format='json',
+    )
+    assert response.status_code == 400
+    assert 'parent' in response.data
+
+
+@pytest.mark.django_db
+def test_cannot_edit_system_root_name_manually(admin_client):
+    ensure_canonical_expense_roots()
+    root = ExpenseCategory.objects.get(scope='office', is_system_root=True, parent__isnull=True)
+
+    response = admin_client.patch(
+        f'/api/v1/budgets/expense-categories/{root.id}/',
+        {'name': 'Renamed root'},
+        format='json',
+    )
+    assert response.status_code == 400
+

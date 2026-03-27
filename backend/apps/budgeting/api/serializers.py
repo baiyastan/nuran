@@ -186,6 +186,12 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
                         'parent': f'Parent category with id={parent} does not exist.'
                     })
                 parent = parent_obj
+
+            # Enforce two-level hierarchy: only system roots can be parent.
+            if not parent.is_system_root or parent.parent_id is not None:
+                raise serializers.ValidationError({
+                    'parent': 'Only system root categories can be selected as parent.'
+                })
             
             if scope and scope != parent.scope:
                 errors['scope'] = f'Scope must match parent scope. Parent "{parent.name}" has scope="{parent.scope}", but provided scope="{scope}".'
@@ -201,6 +207,14 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
                 data['scope'] = parent.scope
             if not kind:
                 data['kind'] = parent.kind
+
+        # System roots are controlled by bootstrap path only.
+        if self.instance and self.instance.is_system_root and not allow_root_creation:
+            immutable_fields = ('name', 'scope', 'kind', 'parent')
+            if any(field in data for field in immutable_fields):
+                raise serializers.ValidationError({
+                    'detail': 'System root categories are managed automatically and cannot be edited manually.'
+                })
 
         # Duplicate sibling guard (trim + collapsed spaces + case-insensitive)
         siblings = ExpenseCategory.objects.filter(

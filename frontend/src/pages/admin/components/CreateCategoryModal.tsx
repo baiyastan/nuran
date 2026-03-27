@@ -33,7 +33,9 @@ export function CreateCategoryModal({
     { skip: !isOpen }
   )
 
-  const rootCategories = rootCategoriesData?.results ?? []
+  const rootCategories = (rootCategoriesData?.results ?? []).filter(
+    (category) => category.is_system_root && category.parent_id === null
+  )
   const canonicalRoot = rootCategories[0] ?? null
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export function CreateCategoryModal({
             }
             disabled
           >
-            <option value={canonicalRoot.id}>{canonicalRoot.name}</option>
+            <option value={canonicalRoot.id}>{canonicalRoot.name} (системный root)</option>
           </select>
         </div>
         {error && <div className="form-error">{error}</div>}
