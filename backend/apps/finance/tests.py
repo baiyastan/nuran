@@ -346,6 +346,7 @@ class TestIncomeEntryRBAC:
         # Create
         data = {
             'finance_period': finance_period.id,
+            'account': 'CASH',
             'amount': '1000.00',
             'received_at': '2024-01-15',
             'comment': 'Test income',
@@ -402,6 +403,7 @@ class TestIncomeEntryRBAC:
         # Director cannot create
         data = {
             'finance_period': finance_period.id,
+            'account': 'CASH',
             'amount': '2000.00',
             'received_at': '2024-01-16',
             'comment': 'New income',
@@ -417,90 +419,70 @@ class TestIncomeEntryRBAC:
         response = client.delete(f'/api/v1/income-entries/{income_entry.id}/')
         assert response.status_code == 403
     
-    def test_foreman_read_only_assigned_projects(self, month_period, admin_user, foreman_user):
-        """Test that foreman can only see income entries for assigned projects."""
+    def test_foreman_read_only_all_project_income_entries(self, month_period, admin_user, foreman_user):
+        """Foreman sees all project fund_kind income entries without ProjectAssignment."""
         from rest_framework.test import APIClient
         from rest_framework_simplejwt.tokens import RefreshToken
-        
-        # Create two projects
-        assigned_project = Project.objects.create(
-            name='Assigned Project',
+
+        project_a = Project.objects.create(
+            name='Project A',
             status='active',
             created_by=admin_user
         )
-        unassigned_project = Project.objects.create(
-            name='Unassigned Project',
+        project_b = Project.objects.create(
+            name='Project B',
             status='active',
             created_by=admin_user
         )
-        
-        # Assign foreman to only one project
-        ProjectAssignment.objects.create(
-            project=assigned_project,
-            prorab=foreman_user
-        )
-        
-        # Create finance periods
-        assigned_fp = FinancePeriod.objects.create(
+
+        month_b = MonthPeriod.objects.create(month='2024-02', status='OPEN')
+        fp_a = FinancePeriod.objects.create(
             month_period=month_period,
             fund_kind='project',
-            project=assigned_project,
+            project=project_a,
             created_by=admin_user
         )
-        unassigned_fp = FinancePeriod.objects.create(
-            month_period=month_period,
+        fp_b = FinancePeriod.objects.create(
+            month_period=month_b,
             fund_kind='project',
-            project=unassigned_project,
+            project=project_b,
             created_by=admin_user
         )
-        
-        # Create income entries
-        assigned_entry = IncomeEntry.objects.create(
-            finance_period=assigned_fp,
+
+        entry_a = IncomeEntry.objects.create(
+            finance_period=fp_a,
             account='CASH',
             amount=Decimal('1000.00'),
             received_at='2024-01-15',
-            comment='Assigned project income',
+            comment='Project A income',
             created_by=admin_user
         )
-        unassigned_entry = IncomeEntry.objects.create(
-            finance_period=unassigned_fp,
+        entry_b = IncomeEntry.objects.create(
+            finance_period=fp_b,
             account='CASH',
             amount=Decimal('2000.00'),
             received_at='2024-01-15',
-            comment='Unassigned project income',
+            comment='Project B income',
             created_by=admin_user
         )
-        
+
         client = APIClient()
         token = RefreshToken.for_user(foreman_user)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
-        
-        # Foreman should only see assigned project income entry
+
         response = client.get('/api/v1/income-entries/')
         assert response.status_code == 200
         entry_ids = [entry['id'] for entry in response.data['results']]
-        assert assigned_entry.id in entry_ids
-        assert unassigned_entry.id not in entry_ids
-        
-        # Foreman can retrieve assigned entry
-        response = client.get(f'/api/v1/income-entries/{assigned_entry.id}/')
-        assert response.status_code == 200
-        
-        # Foreman cannot retrieve unassigned entry
-        response = client.get(f'/api/v1/income-entries/{unassigned_entry.id}/')
-        assert response.status_code == 404
+        assert entry_a.id in entry_ids
+        assert entry_b.id in entry_ids
+
+        assert client.get(f'/api/v1/income-entries/{entry_a.id}/').status_code == 200
+        assert client.get(f'/api/v1/income-entries/{entry_b.id}/').status_code == 200
     
     def test_foreman_cannot_see_office_charity(self, month_period, admin_user, foreman_user, project):
         """Test that foreman cannot see office/charity income entries."""
         from rest_framework.test import APIClient
         from rest_framework_simplejwt.tokens import RefreshToken
-        
-        # Create project assignment
-        ProjectAssignment.objects.create(
-            project=project,
-            prorab=foreman_user
-        )
         
         # Create finance periods
         project_fp = FinancePeriod.objects.create(
@@ -569,6 +551,7 @@ class TestIncomeEntryFiltering:
         from rest_framework.test import APIClient
         from rest_framework_simplejwt.tokens import RefreshToken
         
+        month_b = MonthPeriod.objects.create(month='2024-02', status='OPEN')
         finance_period1 = FinancePeriod.objects.create(
             month_period=month_period,
             fund_kind='project',
@@ -576,7 +559,7 @@ class TestIncomeEntryFiltering:
             created_by=admin_user
         )
         finance_period2 = FinancePeriod.objects.create(
-            month_period=month_period,
+            month_period=month_b,
             fund_kind='project',
             project=project,
             created_by=admin_user
@@ -709,6 +692,7 @@ class TestIncomeEntryFiltering:
             created_by=admin_user
         )
         
+        month_b = MonthPeriod.objects.create(month='2024-02', status='OPEN')
         fp1 = FinancePeriod.objects.create(
             month_period=month_period,
             fund_kind='project',
@@ -716,7 +700,7 @@ class TestIncomeEntryFiltering:
             created_by=admin_user
         )
         fp2 = FinancePeriod.objects.create(
-            month_period=month_period,
+            month_period=month_b,
             fund_kind='project',
             project=project2,
             created_by=admin_user
@@ -876,61 +860,50 @@ class TestIncomeEntryFiltering:
         response = client.delete(f'/api/v1/finance-periods/{finance_period.id}/')
         assert response.status_code == 403
     
-    def test_foreman_cannot_see_unassigned_project(self, month_period, admin_user, foreman_user):
-        """Test that foreman cannot see project finance periods for unassigned projects."""
+    def test_foreman_sees_all_project_finance_periods_without_assignment(
+        self, month_period, admin_user, foreman_user
+    ):
+        """Foreman lists/retrieves all project fund_kind finance periods (no assignment filter)."""
         from rest_framework.test import APIClient
         from rest_framework_simplejwt.tokens import RefreshToken
-        
-        # Create two projects
-        assigned_project = Project.objects.create(
-            name='Assigned Project',
+
+        project_a = Project.objects.create(
+            name='Project A',
             status='active',
             created_by=admin_user
         )
-        unassigned_project = Project.objects.create(
-            name='Unassigned Project',
+        project_b = Project.objects.create(
+            name='Project B',
             status='active',
             created_by=admin_user
         )
-        
-        # Assign foreman to only one project
-        ProjectAssignment.objects.create(
-            project=assigned_project,
-            prorab=foreman_user
-        )
-        
-        # Create finance periods for both projects
-        assigned_fp = FinancePeriod.objects.create(
+
+        month_b = MonthPeriod.objects.create(month='2024-02', status='OPEN')
+        fp_a = FinancePeriod.objects.create(
             month_period=month_period,
             fund_kind='project',
-            project=assigned_project,
+            project=project_a,
             created_by=admin_user
         )
-        unassigned_fp = FinancePeriod.objects.create(
-            month_period=month_period,
+        fp_b = FinancePeriod.objects.create(
+            month_period=month_b,
             fund_kind='project',
-            project=unassigned_project,
+            project=project_b,
             created_by=admin_user
         )
-        
-        # Foreman should only see assigned project finance period
+
         client = APIClient()
         token = RefreshToken.for_user(foreman_user)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
-        
+
         response = client.get('/api/v1/finance-periods/')
         assert response.status_code == 200
         finance_period_ids = [fp['id'] for fp in response.data['results']]
-        assert assigned_fp.id in finance_period_ids
-        assert unassigned_fp.id not in finance_period_ids
-        
-        # Foreman should be able to retrieve assigned project finance period
-        response = client.get(f'/api/v1/finance-periods/{assigned_fp.id}/')
-        assert response.status_code == 200
-        
-        # Foreman should not be able to retrieve unassigned project finance period
-        response = client.get(f'/api/v1/finance-periods/{unassigned_fp.id}/')
-        assert response.status_code == 404
+        assert fp_a.id in finance_period_ids
+        assert fp_b.id in finance_period_ids
+
+        assert client.get(f'/api/v1/finance-periods/{fp_a.id}/').status_code == 200
+        assert client.get(f'/api/v1/finance-periods/{fp_b.id}/').status_code == 200
 
 
 class TestFinancePeriodFiltering:
@@ -1142,6 +1115,7 @@ class TestDashboardKpiTransfers:
         assert data['income_fact'] == '1000.00'
         # No expenses created in this test, stays zero
         assert data['expense_fact'] == '0.00'
+        assert data['planning_actual_expense_total'] == '0.00'
 
         # Transfer totals reflect only internal movements
         assert data['bank_to_cash_month'] == '300.00'
@@ -1183,6 +1157,7 @@ class TestDashboardKpiTransfers:
         # Profit is based only on external income
         assert data['income_fact'] == '500.00'
         assert data['expense_fact'] == '0.00'
+        assert data['planning_actual_expense_total'] == '0.00'
 
         # Transfer KPI fields are present
         assert data['bank_to_cash_month'] == '200.00'
@@ -1673,7 +1648,7 @@ class TestIncomePlanMonthPeriodValidation:
         with pytest.raises(PermissionDenied) as exc_info:
             IncomePlanService.assert_period_open(income_plan)
         
-        assert "Month period is closed/locked" in str(exc_info.value)
+        assert "Month is locked" in str(exc_info.value)
     
     def test_income_plan_creation_succeeds_when_month_period_open(self, admin_user):
         """Test that IncomePlan creation succeeds when MonthPeriod is OPEN and FinancePeriod is 'open'."""

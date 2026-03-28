@@ -41,6 +41,8 @@ export interface DashboardKpiResponse {
   month: string
   income_fact: string
   expense_fact: string
+  /** Sum of apps.planning.ActualExpense for the month; not in expense_fact or balance. */
+  planning_actual_expense_total: string
   net: string
   income_plan: string
   expense_plan: string

@@ -8,31 +8,48 @@ from django.db.models import Sum
 from decimal import Decimal
 import logging
 from apps.audit.services import AuditLogService
-from apps.finance.services import assert_month_open, FinancePeriodService
+from apps.reports.invalidation import invalidate_dashboard_kpi_for_month_period
+from apps.finance.services import (
+    FinancePeriodService,
+    assert_month_open_for_planning,
+    assert_month_open_for_posted_facts,
+)
 from apps.finance.models import FinancePeriod
 from apps.finance.constants import MONTH_REQUIRED_MSG
 from .models import PlanPeriod, PlanItem, ProrabPlan, ProrabPlanItem, ActualExpense, Expense
-from .constants import PLAN_PERIOD_MODIFY_BLOCKED_STATUSES
+from .constants import PLAN_PERIOD_MODIFY_BLOCKED_STATUSES, PLAN_PERIOD_NOT_EDITABLE_MSG
 from apps.budgeting.models import MonthPeriod
 
 logger = logging.getLogger(__name__)
 
 
 def assert_plan_editing_allowed(month_period, user):
-    """Assert that plan editing is allowed for the given month period and user.
-    
-    Raises ValidationError if:
-    - Foreman tries to edit when month is LOCKED
-    - Admin and director can still edit when month is LOCKED (not strict mode)
-    """
-    if not month_period:
-        # If no month_period is set, allow editing (backward compatibility)
-        return
-    
-    if month_period.status == 'LOCKED':
-        # Only block foreman when month is LOCKED; admin/director can still edit
-        if user.role == 'foreman':
-            raise ValidationError("Plan editing is not allowed when month is locked")
+    """Require OPEN MonthPeriod for planning mutations (all roles). user is unused; kept for call sites."""
+    assert_month_open_for_planning(month_period)
+
+
+def assert_plan_editable(plan_period):
+    """PlanPeriod content mutations (plan items, planning expenses, etc.): not allowed in blocked statuses."""
+    if plan_period is None:
+        raise ValidationError("Plan period is required.")
+    if plan_period.status in PLAN_PERIOD_MODIFY_BLOCKED_STATUSES:
+        raise ValidationError(PLAN_PERIOD_NOT_EDITABLE_MSG)
+
+
+def is_plan_period_editable(plan_period):
+    """True when PlanPeriod allows structural planning writes (items, prorab lines tied to period, etc.)."""
+    return (
+        plan_period is not None
+        and plan_period.status not in PLAN_PERIOD_MODIFY_BLOCKED_STATUSES
+    )
+
+
+def assert_foreman_project_plan_period_scope(plan_period):
+    """Foreman planning targets project-scoped plan periods only (no ProjectAssignment check)."""
+    if plan_period.fund_kind != 'project':
+        raise ValidationError('Foreman can only work with project plan periods.')
+    if not plan_period.project_id:
+        raise ValidationError('A project is required for project plan periods.')
 
 
 class PlanPeriodService:
@@ -93,6 +110,7 @@ class PlanPeriodService:
     @staticmethod
     def submit(plan_period, user):
         """Submit a plan period for approval."""
+        assert_month_open_for_planning(plan_period.month_period)
         if plan_period.status != 'draft':
             raise ValidationError("Only draft plan periods can be submitted")
         
@@ -112,6 +130,7 @@ class PlanPeriodService:
     @staticmethod
     def approve(plan_period, user, comments=''):
         """Approve a plan period."""
+        assert_month_open_for_planning(plan_period.month_period)
         if plan_period.status != 'submitted':
             raise ValidationError("Only submitted plan periods can be approved")
         
@@ -133,6 +152,7 @@ class PlanPeriodService:
     @staticmethod
     def return_to_draft(plan_period, user, comments=''):
         """Return a plan period to draft status."""
+        assert_month_open_for_planning(plan_period.month_period)
         if plan_period.status not in ('submitted', 'approved'):
             raise ValidationError("Only submitted or approved plan periods can be returned to draft")
         
@@ -153,6 +173,7 @@ class PlanPeriodService:
     @staticmethod
     def lock(plan_period, user):
         """Lock a plan period (final state)."""
+        assert_month_open_for_planning(plan_period.month_period)
         if plan_period.status != 'approved':
             raise ValidationError("Only approved plan periods can be locked")
         
@@ -174,12 +195,6 @@ class PlanItemService:
     """Service for PlanItem business logic."""
     
     @staticmethod
-    def _ensure_period_editable_for_foreman(plan_period):
-        """Ensure plan period is editable for foreman (not yet accepted by admin)."""
-        if plan_period.status in PLAN_PERIOD_MODIFY_BLOCKED_STATUSES:
-            raise ValidationError("Cannot create/update plan items after plan has been accepted by admin")
-    
-    @staticmethod
     def create(user, **data):
         """Create a new plan item (append-only)."""
         plan_period = data.get('plan_period')
@@ -191,39 +206,17 @@ class PlanItemService:
         # Check month period lock status before creating
         month_period = plan_period.month_period if plan_period else None
         assert_plan_editing_allowed(month_period, user)
-        
-        # Admin can always create (if month is not locked)
+        assert_plan_editable(plan_period)
+
         if user.role == 'admin':
             data['created_by'] = user
             plan_item = PlanItem.objects.create(**data)
             AuditLogService.log_create(user, plan_item)
             return plan_item
-        
-        # Foreman validation: can only create for project plans assigned to them
+
         if user.role == 'foreman':
-            PlanItemService._ensure_period_editable_for_foreman(plan_period)
-            
-            # Reject if fund_kind is not 'project'
-            if plan_period.fund_kind != 'project':
-                raise ValidationError("Foreman can only create plan items for project plans")
-            
-            # Reject if project is null
-            if not plan_period.project:
-                raise ValidationError("Foreman can only create plan items for project plans with an assigned project")
-            
-            # Only enforce assignment check if assignments exist for this project (backward compatibility)
-            from apps.projects.models import ProjectAssignment
-            project_has_assignments = ProjectAssignment.objects.filter(project=plan_period.project).exists()
-            if project_has_assignments:
-                # If assignments exist, verify foreman is assigned
-                if not ProjectAssignment.objects.filter(project=plan_period.project, prorab=user).exists():
-                    raise ValidationError("You are not assigned to this project")
-            # If no assignments exist, allow creation (backward compatibility)
-        
-        # Validate plan period is not locked
-        if plan_period.status == 'locked':
-            raise ValidationError("Cannot add plan items to a locked plan period")
-        
+            assert_foreman_project_plan_period_scope(plan_period)
+
         data['created_by'] = user
         plan_item = PlanItem.objects.create(**data)
         
@@ -253,40 +246,21 @@ class PlanItemService:
     @staticmethod
     def update(plan_item, user, **data):
         """Update a plan item."""
-        # Director can update when plan period status is 'draft' or 'open' (legacy alias)
-        if user.role == 'director':
-            status = plan_item.plan_period.status
-            if status not in ('draft', 'open'):
-                raise ValidationError("Director cannot update plan items when plan period is not in draft status")
-        
         # Check month period lock status before updating
         month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
         assert_plan_editing_allowed(month_period, user)
-        
-        # Admin can always update (if month is not locked)
+        assert_plan_editable(plan_item.plan_period)
+
         if user.role == 'admin':
-            pass  # Allow update
-        # Foreman validation: can only update for project plans assigned to them
+            pass
         elif user.role == 'foreman':
-            PlanItemService._ensure_period_editable_for_foreman(plan_item.plan_period)
-            
-            # Reject if fund_kind is not 'project'
-            if plan_item.plan_period.fund_kind != 'project':
-                raise ValidationError("Foreman can only update plan items for project plans")
-            
-            # Reject if project is null
-            if not plan_item.plan_period.project:
-                raise ValidationError("Foreman can only update plan items for project plans with an assigned project")
-            
-            # Only enforce assignment check if assignments exist for this project (backward compatibility)
-            from apps.projects.models import ProjectAssignment
-            project_has_assignments = ProjectAssignment.objects.filter(project=plan_item.plan_period.project).exists()
-            if project_has_assignments:
-                # If assignments exist, verify foreman is assigned
-                if not ProjectAssignment.objects.filter(project=plan_item.plan_period.project, prorab=user).exists():
-                    raise ValidationError("You are not assigned to this project")
-            # If no assignments exist, allow update (backward compatibility)
-        # Check if user can modify (for other roles)
+            assert_foreman_project_plan_period_scope(plan_item.plan_period)
+        elif user.role == 'director':
+            status = plan_item.plan_period.status
+            if status not in ('draft', 'open'):
+                raise ValidationError(
+                    "Director cannot update plan items when plan period is not in draft status"
+                )
         elif not PlanItemService.can_modify(plan_item, user):
             raise ValidationError("You do not have permission to modify this plan item")
         
@@ -315,7 +289,8 @@ class PlanItemService:
         # Check month period lock status before deleting
         month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
         assert_plan_editing_allowed(month_period, user)
-        
+        assert_plan_editable(plan_item.plan_period)
+
         if not PlanItemService.can_modify(plan_item, user):
             raise ValidationError("You do not have permission to delete this plan item")
         
@@ -364,21 +339,21 @@ class ProrabPlanService:
         if plan.prorab != prorab:
             return False
         
-        # Period must be OPEN
-        if plan.period.status != 'open':
+        if not is_plan_period_editable(plan.period):
             return False
-        
-        # Plan status must be DRAFT or REJECTED
+
         if plan.status not in ('draft', 'rejected'):
             return False
-        
+
         return True
     
     @staticmethod
     def submit_plan(plan, prorab):
         """Submit a plan for approval."""
         if not ProrabPlanService.can_edit(plan, prorab):
-            raise ValidationError("Plan cannot be submitted. Period must be OPEN and plan must be DRAFT or REJECTED.")
+            raise ValidationError(
+                "Plan cannot be submitted. Plan period must be editable, and plan must be DRAFT or REJECTED."
+            )
         
         if plan.status != 'draft':
             raise ValidationError("Only draft plans can be submitted")
@@ -491,9 +466,9 @@ class ActualExpenseService:
         finance_period = data.get('finance_period')
         if not finance_period:
             raise ValidationError("finance_period is required")
-        
-        # Note: Month period lock does NOT affect expenses - expenses can be created even when month is LOCKED
-        
+
+        assert_month_open_for_posted_facts(finance_period.month_period)
+
         # Validate comment is not empty
         comment = data.get('comment', '').strip()
         if not comment:
@@ -511,14 +486,17 @@ class ActualExpenseService:
         
         # Audit log
         AuditLogService.log_create(user, expense)
-        
+
+        invalidate_dashboard_kpi_for_month_period(finance_period.month_period)
         return expense
     
     @staticmethod
     def update(expense, user, **data):
         """Update an actual expense."""
-        # Note: Month period lock does NOT affect expenses - expenses can be updated even when month is LOCKED
-        
+        assert_month_open_for_posted_facts(expense.finance_period.month_period)
+
+        old_mp = expense.finance_period.month_period
+
         # Validate comment is not empty if provided
         if 'comment' in data:
             comment = data['comment'].strip() if data['comment'] else ''
@@ -541,16 +519,22 @@ class ActualExpenseService:
         
         # Audit log
         AuditLogService.log_update(user, expense, before_state)
-        
+
+        expense.refresh_from_db()
+        new_mp = expense.finance_period.month_period
+        invalidate_dashboard_kpi_for_month_period(old_mp)
+        if new_mp.pk != old_mp.pk:
+            invalidate_dashboard_kpi_for_month_period(new_mp)
         return expense
     
     @staticmethod
     def delete(expense, user):
         """Delete an actual expense."""
-        # Note: Month period lock does NOT affect expenses - expenses can be deleted even when month is LOCKED
-        
+        assert_month_open_for_posted_facts(expense.finance_period.month_period)
+
         # Capture object_id BEFORE deletion
         object_id = expense.pk
+        month_period = expense.finance_period.month_period
         
         before_state = {
             'id': expense.id,
@@ -564,6 +548,8 @@ class ActualExpenseService:
         
         # Audit log
         AuditLogService.log_delete(user, expense, before_state, object_id_override=object_id)
+
+        invalidate_dashboard_kpi_for_month_period(month_period)
 
 
 class ExpenseService:
@@ -591,6 +577,10 @@ class ExpenseService:
                 category = plan_item_obj.category
                 data['category'] = category
         
+        if plan_period is not None:
+            assert_month_open_for_planning(getattr(plan_period, 'month_period', None))
+            assert_plan_editable(plan_period)
+
         # Validate category scope matches plan_period.fund_kind (defense-in-depth)
         if category and plan_period:
             if hasattr(category, 'id'):
@@ -617,6 +607,10 @@ class ExpenseService:
     @staticmethod
     def update(expense, user, **data):
         """Update an expense."""
+        if expense.plan_period:
+            assert_month_open_for_planning(expense.plan_period.month_period)
+            assert_plan_editable(expense.plan_period)
+
         plan_item = data.get('plan_item')
         category = data.get('category')
         
@@ -653,15 +647,18 @@ class ExpenseService:
     @staticmethod
     def delete(expense, user):
         """Delete an expense."""
-        # Capture object_id BEFORE deletion
+        if expense.plan_period:
+            assert_month_open_for_planning(expense.plan_period.month_period)
+            assert_plan_editable(expense.plan_period)
+
         object_id = expense.pk
-        
+
         before_state = {
             'id': expense.id,
             'amount': str(expense.amount),
             'plan_period_id': expense.plan_period_id,
         }
-        
+
         expense.delete()
         
         # Audit log
@@ -728,12 +725,12 @@ class PlanningExpenseActualExpenseSyncService:
         
         # Create FinancePeriod if it doesn't exist
         if not finance_period:
+            # Posted-facts path requires OPEN month; do not auto-create shell periods under LOCKED.
+            assert_month_open_for_posted_facts(month_period)
+
             # Use a system user or the expense creator for FinancePeriod creation
-            # Since we're syncing server-side, we'll use the expense creator if available
             creator = expense.created_by if hasattr(expense, 'created_by') and expense.created_by else None
-            
-            # Create FinancePeriod (bypassing month lock check for sync)
-            # We'll create it directly since sync should work even if month is locked
+
             try:
                 # Derive finance period status from MonthPeriod status.
                 if month_period.status == 'LOCKED':

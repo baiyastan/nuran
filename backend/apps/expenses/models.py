@@ -69,6 +69,7 @@ class ActualExpense(models.Model):
             models.Index(fields=['category']),
             models.Index(fields=['spent_at']),
             models.Index(fields=['account']),
+            models.Index(fields=['account', 'spent_at']),
         ]
 
     def clean(self):

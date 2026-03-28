@@ -3,7 +3,6 @@ Finance API views.
 """
 from decimal import Decimal
 
-from django.db import transaction
 from django.db.models import Sum, Count, DecimalField, Value, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
@@ -13,17 +12,17 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 
+from apps.audit.services import optional_audit_reason
 from apps.budgeting.models import MonthPeriod
-from apps.expenses.services import get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG
-from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer, ACCOUNT_CHOICES, AccountLedgerLock
+from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer
 from ..services import (
     FinancePeriodService,
     IncomeEntryService,
     IncomePlanService,
     IncomeSummaryService,
+    TransferService,
     assert_month_open,
-    assert_month_exists_for_facts,
 )
 from ..serializers import FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer, IncomePlanSerializer, IncomeSummarySerializer, TransferSerializer
 from ..permissions import FinancePeriodPermission, IncomeEntryPermission, IncomeSourcePermission, IncomePlanPermission, TransferPermission
@@ -96,13 +95,9 @@ class FinancePeriodViewSet(viewsets.ModelViewSet):
         if self.request.user.role == 'director':
             return queryset
         
-        # Foreman: can only see project fund_kind for assigned projects
+        # Foreman: all project-scoped finance periods (fund_kind=project), no assignment filter
         if self.request.user.role == 'foreman':
-            queryset = queryset.filter(
-                fund_kind='project',
-                project__assignments__prorab=self.request.user
-            ).distinct()
-            return queryset
+            return queryset.filter(fund_kind='project')
         
         # Others: no access (permission class handles this)
         return queryset.none()
@@ -164,13 +159,8 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
     ordering = ['-received_at', '-created_at']
     
     def get_queryset(self):
-        """Return all income entries with optimized queries.
-        
-        Permission checks are handled by permission classes and service layer.
-        This allows object lookup to succeed, enabling proper 403 responses
-        instead of 404 when business rules (e.g., locked months) are violated.
-        """
-        return (
+        """Return income entries; foreman sees all project fund_kind rows (no assignment filter)."""
+        qs = (
             IncomeEntry.objects
             .select_related(
                 'finance_period',
@@ -179,6 +169,12 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
                 'created_by'
             )
         )
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if getattr(user, 'role', None) == 'foreman':
+            qs = qs.filter(finance_period__fund_kind='project')
+        return qs
 
     def list(self, request, *args, **kwargs):
         """
@@ -247,41 +243,39 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Create income entry with audit logging."""
-        # Fail-fast: require related MonthPeriod to exist (OPEN or LOCKED allowed)
-        # Serializer validates finance_period is required, so direct access is safe
         finance_period = serializer.validated_data['finance_period']
         if not finance_period:
             raise ValidationError({'finance_period': 'Finance period is required'})
-        
-        assert_month_exists_for_facts(finance_period.month_period)
-        
+
         # Call service
         income_entry = IncomeEntryService.create(
             user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
             **serializer.validated_data
         )
         serializer.instance = income_entry
     
     def perform_update(self, serializer):
         """Update income entry with audit logging."""
-        # Fail-fast: require related MonthPeriod to exist (from validated_data or instance)
         finance_period = serializer.validated_data.get('finance_period', serializer.instance.finance_period)
-        assert_month_exists_for_facts(finance_period.month_period)
-        
+
         # Call service
         IncomeEntryService.update(
             income_entry=serializer.instance,
             user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
             **serializer.validated_data
         )
     
     def perform_destroy(self, instance):
         """Delete income entry with audit logging."""
-        # Fail-fast: require related MonthPeriod to exist
-        assert_month_exists_for_facts(instance.finance_period.month_period)
-        
+
         # Call service
-        IncomeEntryService.delete(income_entry=instance, user=self.request.user)
+        IncomeEntryService.delete(
+            income_entry=instance,
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+        )
 
 
 class IncomeSourceViewSet(viewsets.ModelViewSet):
@@ -459,53 +453,24 @@ class TransferViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        src = serializer.validated_data.get('source_account')
-        amount = serializer.validated_data.get('amount')
-        transferred_at = serializer.validated_data.get('transferred_at')
-
-        if src in dict(ACCOUNT_CHOICES) and amount is not None and transferred_at is not None:
-            with transaction.atomic():
-                # Lock per-account row to serialize debits from this source account
-                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
-                # Re-check balance inside locked transaction
-                balance = get_balance_for_account(
-                    src,
-                    transferred_at,
-                    exclude_expense_id=None,
-                    exclude_transfer_id=None,
-                )
-                if balance < amount:
-                    label = dict(ACCOUNT_CHOICES).get(src, src)
-                    raise ValidationError(
-                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
-                    )
-                serializer.save(created_by=self.request.user)
-        else:
-            serializer.save(created_by=self.request.user)
+        transfer = TransferService.create(
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+            **serializer.validated_data,
+        )
+        serializer.instance = transfer
 
     def perform_update(self, serializer):
-        instance = serializer.instance
-        src = serializer.validated_data.get('source_account', getattr(instance, 'source_account', None))
-        amount = serializer.validated_data.get('amount', getattr(instance, 'amount', None))
-        transferred_at = serializer.validated_data.get('transferred_at', getattr(instance, 'transferred_at', None))
-
-        if src in dict(ACCOUNT_CHOICES) and amount is not None and transferred_at is not None:
-            with transaction.atomic():
-                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
-                balance = get_balance_for_account(
-                    src,
-                    transferred_at,
-                    exclude_expense_id=None,
-                    exclude_transfer_id=getattr(instance, 'pk', None),
-                )
-                if balance < amount:
-                    label = dict(ACCOUNT_CHOICES).get(src, src)
-                    raise ValidationError(
-                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
-                    )
-                serializer.save()
-        else:
-            serializer.save()
+        TransferService.update(
+            serializer.instance,
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+            **serializer.validated_data,
+        )
 
     def perform_destroy(self, instance):
-        instance.delete()
+        TransferService.delete(
+            instance,
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+        )

@@ -237,6 +237,7 @@ class IncomeEntry(models.Model):
             models.Index(fields=['received_at']),
             models.Index(fields=['source']),
             models.Index(fields=['account']),
+            models.Index(fields=['account', 'received_at']),
         ]
     
     def clean(self):
@@ -300,6 +301,8 @@ class Transfer(models.Model):
         indexes = [
             models.Index(fields=['transferred_at']),
             models.Index(fields=['source_account', 'destination_account']),
+            models.Index(fields=['source_account', 'transferred_at']),
+            models.Index(fields=['destination_account', 'transferred_at']),
         ]
 
     def clean(self):

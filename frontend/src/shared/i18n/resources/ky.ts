@@ -84,6 +84,9 @@ export default {
     goToPlanSetup: 'План түзүүгө баруу',
     goToReports: 'Отчётторго баруу',
     generic: 'Ката чыкты',
+    api: {
+      badRequest: 'Сураныч, маалыматыңызды текшериңиз же кийинчерээк кайра аракет кылыңыз.',
+    },
   },
   planning: {
     plan: 'План',
@@ -1017,6 +1020,12 @@ export default {
         amountPositive: 'Сумма оң сан болушу керек',
         spentAtRequired: 'Чыгым күнү талап кылынат',
         commentRequired: 'Комментарий талап кылынат',
+        insufficientBalance: {
+          cash: 'Кассада акча жетишсиз. Жеткиликтүү: {{available}}. Киргизилген сумма: {{entered}}.',
+          bank: 'Банкта акча жетишсиз. Жеткиликтүү: {{available}}. Киргизилген сумма: {{entered}}.',
+        },
+        insufficientBalanceHint: 'Сумманы азайтыңыз же башка эсепти тандаңыз.',
+        insufficientBalanceAmountField: 'Бул сумма эсептеги жеткиликтүү калдыкка жатпайт.',
       },
     },
     delete: {

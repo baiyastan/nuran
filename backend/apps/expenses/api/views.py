@@ -11,6 +11,8 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
+from apps.audit.services import AuditLogService, optional_audit_reason
+from apps.reports.invalidation import invalidate_for_expense_actual_write
 from apps.expenses.models import ActualExpense
 from apps.expenses.permissions import ActualExpensePermission
 from apps.expenses.services import assert_sufficient_balance
@@ -113,12 +115,32 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
                 except ValueError as e:
                     raise DRFValidationError({'amount': [str(e)]})
                 serializer.save()
+                AuditLogService.log_create(
+                    self.request.user,
+                    serializer.instance,
+                    reason=optional_audit_reason(self.request),
+                )
+                invalidate_for_expense_actual_write(
+                    invalidate_monthly_pairs=[(serializer.instance.month_period, serializer.instance.scope)],
+                )
         else:
-            serializer.save()
+            with transaction.atomic():
+                serializer.save()
+                AuditLogService.log_create(
+                    self.request.user,
+                    serializer.instance,
+                    reason=optional_audit_reason(self.request),
+                )
+                invalidate_for_expense_actual_write(
+                    invalidate_monthly_pairs=[(serializer.instance.month_period, serializer.instance.scope)],
+                )
 
     def perform_update(self, serializer):
         # Resolve effective values after patch (fall back to instance for partial updates)
         instance = serializer.instance
+        before_state = AuditLogService.model_field_snapshot(instance)
+        old_mp = instance.month_period
+        old_scope = instance.scope
         account = serializer.validated_data.get('account', getattr(instance, 'account', None))
         amount = serializer.validated_data.get('amount', getattr(instance, 'amount', None))
         spent_at = serializer.validated_data.get('spent_at', getattr(instance, 'spent_at', None))
@@ -136,8 +158,49 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
                 except ValueError as e:
                     raise DRFValidationError({'amount': [str(e)]})
                 serializer.save()
+                AuditLogService.log_update(
+                    self.request.user,
+                    serializer.instance,
+                    before_state,
+                    reason=optional_audit_reason(self.request),
+                )
+                inst = serializer.instance
+                invalidate_for_expense_actual_write(
+                    invalidate_monthly_pairs=[
+                        (old_mp, old_scope),
+                        (inst.month_period, inst.scope),
+                    ],
+                )
         else:
-            serializer.save()
+            with transaction.atomic():
+                serializer.save()
+                AuditLogService.log_update(
+                    self.request.user,
+                    serializer.instance,
+                    before_state,
+                    reason=optional_audit_reason(self.request),
+                )
+                inst = serializer.instance
+                invalidate_for_expense_actual_write(
+                    invalidate_monthly_pairs=[
+                        (old_mp, old_scope),
+                        (inst.month_period, inst.scope),
+                    ],
+                )
 
     def perform_destroy(self, instance):
-        instance.delete()
+        object_id = instance.pk
+        before_state = AuditLogService.model_field_snapshot(instance)
+        before_state['id'] = instance.id
+        reason = optional_audit_reason(self.request)
+        mp, scope = instance.month_period, instance.scope
+        with transaction.atomic():
+            instance.delete()
+            AuditLogService.log_delete(
+                self.request.user,
+                instance,
+                before_state,
+                object_id_override=object_id,
+                reason=reason,
+            )
+        invalidate_for_expense_actual_write(invalidate_monthly_pairs=[(mp, scope)])
