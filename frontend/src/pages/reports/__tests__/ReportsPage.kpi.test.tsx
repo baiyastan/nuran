@@ -92,6 +92,7 @@ describe('ReportsPage – dashboard KPIs', () => {
         month: '2026-02',
         income_fact: '1000.00',
         expense_fact: '400.00',
+        planning_actual_expense_total: '0.00',
         net: '600.00',
         income_plan: '0.00',
         expense_plan: '0.00',

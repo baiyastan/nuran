@@ -6,12 +6,12 @@ from rest_framework import serializers
 from apps.expenses.models import ActualExpense
 from apps.finance.models import ACCOUNT_CHOICES
 from apps.budgeting.models import ExpenseCategory, MonthPeriod
-from apps.finance.services import assert_month_exists_for_facts
+from apps.finance.services import assert_month_open_for_posted_facts
 from apps.expenses.services import assert_sufficient_balance
 
 
 class ActualExpenseSerializer(serializers.ModelSerializer):
-    """Serializer for ActualExpense. Keyed by month_period + scope. Validates month_period.status == OPEN on write."""
+    """Serializer for ActualExpense. Writes require MonthPeriod OPEN (posted fact)."""
 
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True, allow_null=True)
@@ -44,11 +44,9 @@ class ActualExpenseSerializer(serializers.ModelSerializer):
         return value
 
     def validate_month_period(self, value):
-        """Ensure month period exists (OPEN or LOCKED allowed for facts)."""
         if not value:
             return value
-        # Enforce existence only; status may be OPEN or LOCKED
-        assert_month_exists_for_facts(value)
+        assert_month_open_for_posted_facts(value)
         return value
 
     def validate_comment(self, value):
@@ -100,8 +98,7 @@ class ActualExpenseSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {'month': 'Month period does not exist. Please open the month first.'}
                     )
-                # Enforce existence only; status may be OPEN or LOCKED
-                assert_month_exists_for_facts(mp)
+                assert_month_open_for_posted_facts(mp)
                 attrs['month_period'] = mp
                 attrs.pop('month', None)
             elif not month_period:

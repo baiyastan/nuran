@@ -38,11 +38,16 @@ class BudgetPlanReportSerializer(serializers.Serializer):
     summary_comment = serializers.CharField(allow_null=True)
 
 
-class ForemanProjectSummaryItemSerializer(serializers.Serializer):
-    """Serializer for per-project foreman summary row."""
+class ForemanAssignedProjectSerializer(serializers.Serializer):
+    """Projects the foreman is assigned to (access context only; no per-project budget split)."""
 
     project_id = serializers.IntegerField()
     project_name = serializers.CharField()
+
+
+class ForemanProjectScopeSummarySerializer(serializers.Serializer):
+    """Single PROJECT-scope totals for the month (matches BudgetPlan unique per period+scope)."""
+
     planned_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     actual_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     difference = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -52,5 +57,6 @@ class ForemanProjectSummaryDataSerializer(serializers.Serializer):
     """Serializer for foreman project summary payload."""
 
     month = serializers.CharField()
-    projects = ForemanProjectSummaryItemSerializer(many=True)
+    summary = ForemanProjectScopeSummarySerializer()
+    assigned_projects = ForemanAssignedProjectSerializer(many=True)
 

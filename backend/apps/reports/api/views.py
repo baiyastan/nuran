@@ -1,13 +1,10 @@
 """
-Reports API views.
+Reports API views — thin HTTP layer; aggregation lives in apps.reports.services.
 """
-import calendar
 import re
-from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
 
-from django.db.models import Sum, Q, Count
+from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status, views
@@ -15,391 +12,27 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.budgeting.models import BudgetLine, BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod
+from apps.budgeting.models import BudgetLine, BudgetPlan, ExpenseCategory, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
-from apps.planning.models import ActualExpense as PlanningActualExpense
-from apps.expenses.services import aggregate_by_category, sum_expenses, get_balance_for_account
 from apps.finance.constants import MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
-from apps.finance.models import IncomeEntry, IncomePlan, IncomeSource, Transfer
-from apps.projects.models import ProjectAssignment
-from apps.reports.services.pdf import (
-    build_report_detail_pdf,
-    build_report_section_pdf,
-    build_transfer_direction_pdf,
+from apps.reports.cache import (
+    dashboard_kpi_cache_key,
+    get_cached_report,
+    monthly_report_cache_key,
+    reports_cache_enabled,
+    set_cached_report,
 )
+from apps.reports.services.access import ensure_owner_dashboard_access
+from apps.reports.services import dashboard as dashboard_service
+from apps.reports.services import foreman as foreman_service
+from apps.reports.services import monthly as monthly_service
+from apps.reports.services.helpers import to_decimal_str
+from apps.reports.services.month_input import get_validated_month_period
+from apps.reports.services.query_params import parse_nullable_target_id
+from apps.reports.services import pdf_exports
+from apps.reports.services import transfers as transfers_service
 
 from .serializers import BudgetPlanReportSerializer, ForemanProjectSummaryDataSerializer
-
-
-def _foreman_has_project_assignment(user) -> bool:
-    """Reports/expense facts for foreman require at least one project assignment (SoT in codebase)."""
-    return ProjectAssignment.objects.filter(prorab=user).exists()
-
-
-def _to_decimal_str(value: Decimal) -> str:
-    return str((value or Decimal('0.00')).quantize(Decimal('0.00')))
-
-
-def _ensure_owner_dashboard_access(request) -> None:
-    role = getattr(request.user, "role", None)
-    if not (request.user.is_superuser or role in ("admin", "director")):
-        raise PermissionDenied(ADMIN_ONLY_MSG)
-
-
-def _get_validated_month_period(month_param: str | None) -> tuple[tuple[str, MonthPeriod] | None, Response | None]:
-    if not month_param:
-        return None, Response(
-            {'month': 'month parameter is required (format: YYYY-MM)'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    month = month_param.strip()
-    if not re.match(r'^\d{4}-\d{2}$', month):
-        return None, Response(
-            {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        month_period = MonthPeriod.objects.get(month=month)
-    except MonthPeriod.DoesNotExist:
-        return None, Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
-
-    return (month, month_period), None
-
-
-def _build_dashboard_expense_categories_data(
-    month: str, month_period: MonthPeriod, account: str | None = None
-) -> dict[str, Any]:
-    plan_qs = BudgetLine.objects.filter(
-        plan__period=month_period,
-    ).values('category_id', 'category__name').annotate(
-        plan=Sum('amount_planned')
-    )
-
-    plan_by_category = {}
-    for row in plan_qs:
-        cid = row['category_id']
-        plan_by_category[cid] = {
-            'category_id': cid,
-            'category_name': row['category__name'] or '',
-            'plan': row['plan'] or Decimal('0.00'),
-        }
-
-    fact_qs = ExpenseActualExpense.objects.filter(
-        month_period=month_period,
-    )
-    if account in ('CASH', 'BANK'):
-        fact_qs = fact_qs.filter(account=account)
-    fact_qs = fact_qs.values('category_id', 'category__name').annotate(
-        fact=Sum('amount'),
-        count=Count('id'),
-    )
-
-    fact_by_category = {}
-    for row in fact_qs:
-        cid = row['category_id']
-        fact_by_category[cid] = {
-            'category_id': cid,
-            'category_name': row['category__name'] or '',
-            'fact': row['fact'] or Decimal('0.00'),
-            'count': row['count'] or 0,
-        }
-
-    all_category_ids = set(plan_by_category.keys()) | set(fact_by_category.keys())
-    rows = []
-    total_plan = Decimal('0.00')
-    total_fact = Decimal('0.00')
-
-    for cid in all_category_ids:
-        plan_data = plan_by_category.get(cid)
-        fact_data = fact_by_category.get(cid)
-
-        plan = plan_data['plan'] if plan_data else Decimal('0.00')
-        fact = fact_data['fact'] if fact_data else Decimal('0.00')
-        count = fact_data['count'] if fact_data else 0
-
-        category_name = ''
-        if plan_data and plan_data.get('category_name'):
-            category_name = plan_data['category_name']
-        elif fact_data and fact_data.get('category_name'):
-            category_name = fact_data['category_name']
-
-        diff = fact - plan
-        total_plan += plan
-        total_fact += fact
-        rows.append({
-            'category_id': cid,
-            'category_name': category_name,
-            'plan': plan,
-            'fact': fact,
-            'diff': diff,
-            'count': count,
-        })
-
-    if account in ('CASH', 'BANK'):
-        rows = [r for r in rows if r['fact'] != Decimal('0.00') or r['count'] != 0]
-
-    if account in ('CASH', 'BANK'):
-        total_plan = sum(r['plan'] for r in rows)
-        total_fact = sum(r['fact'] for r in rows)
-
-    for row in rows:
-        fact = row['fact']
-        if total_fact > 0:
-            share_percent = (fact / total_fact) * Decimal('100')
-            row['sharePercent'] = float(share_percent)
-        else:
-            row['sharePercent'] = None
-
-    serialized_rows = [
-        {
-            'category_id': row['category_id'],
-            'category_name': row['category_name'],
-            'plan': _to_decimal_str(row['plan']),
-            'fact': _to_decimal_str(row['fact']),
-            'diff': _to_decimal_str(row['diff']),
-            'count': row['count'],
-            'sharePercent': row['sharePercent'],
-        }
-        for row in rows
-    ]
-
-    return {
-        'month': month,
-        'month_status': month_period.status,
-        'totals': {
-            'plan': _to_decimal_str(total_plan),
-            'fact': _to_decimal_str(total_fact),
-        },
-        'rows': serialized_rows,
-    }
-
-
-def _build_dashboard_income_sources_data(
-    month: str, month_period: MonthPeriod, account: str | None = None
-) -> dict[str, Any]:
-    plan_qs = IncomePlan.objects.filter(
-        period__month_period=month_period,
-    ).values('source_id', 'source__name').annotate(
-        plan=Sum('amount')
-    )
-
-    plan_by_source: dict[object, dict[str, object]] = {}
-    for row in plan_qs:
-        sid = row['source_id']
-        plan_by_source[sid] = {
-            'source_id': sid,
-            'source_name': row['source__name'] or '',
-            'plan': row['plan'] or Decimal('0.00'),
-        }
-
-    fact_qs = IncomeEntry.objects.filter(
-        finance_period__month_period=month_period,
-    )
-    if account in ('CASH', 'BANK'):
-        fact_qs = fact_qs.filter(account=account)
-    fact_qs = fact_qs.values('source_id', 'source__name').annotate(
-        fact=Sum('amount'),
-        count=Count('id'),
-    )
-
-    fact_by_source: dict[object, dict[str, object]] = {}
-    for row in fact_qs:
-        sid = row['source_id']
-        fact_by_source[sid] = {
-            'source_id': sid,
-            'source_name': row['source__name'] or '',
-            'fact': row['fact'] or Decimal('0.00'),
-            'count': row['count'] or 0,
-        }
-
-    all_source_ids = set(plan_by_source.keys()) | set(fact_by_source.keys())
-    rows: list[dict[str, object]] = []
-    total_plan = Decimal('0.00')
-    total_fact = Decimal('0.00')
-
-    for sid in all_source_ids:
-        plan_data = plan_by_source.get(sid)
-        fact_data = fact_by_source.get(sid)
-
-        plan = plan_data['plan'] if plan_data else Decimal('0.00')
-        fact = fact_data['fact'] if fact_data else Decimal('0.00')
-        count = fact_data['count'] if fact_data else 0
-
-        source_name = ''
-        if plan_data and plan_data.get('source_name'):
-            source_name = plan_data['source_name']
-        elif fact_data and fact_data.get('source_name'):
-            source_name = fact_data['source_name']
-
-        diff = fact - plan
-        total_plan += plan
-        total_fact += fact
-        rows.append(
-            {
-                'source_id': sid,
-                'source_name': source_name,
-                'plan': plan,
-                'fact': fact,
-                'diff': diff,
-                'count': count,
-            }
-        )
-
-    if account in ('CASH', 'BANK'):
-        rows = [r for r in rows if r['fact'] != Decimal('0.00') or r['count'] != 0]
-
-    if account in ('CASH', 'BANK'):
-        total_plan = sum(r['plan'] for r in rows)
-        total_fact = sum(r['fact'] for r in rows)
-
-    for row in rows:
-        fact_value = row['fact']
-        if total_fact > 0:
-            share_percent = (fact_value / total_fact) * Decimal('100')
-            row['sharePercent'] = float(share_percent)
-        else:
-            row['sharePercent'] = None
-
-    serialized_rows = [
-        {
-            'source_id': row['source_id'],
-            'source_name': row['source_name'],
-            'plan': _to_decimal_str(row['plan']),
-            'fact': _to_decimal_str(row['fact']),
-            'diff': _to_decimal_str(row['diff']),
-            'count': row['count'],
-            'sharePercent': row['sharePercent'],
-        }
-        for row in rows
-    ]
-
-    return {
-        'month': month,
-        'month_status': month_period.status,
-        'totals': {
-            'plan': _to_decimal_str(total_plan),
-            'fact': _to_decimal_str(total_fact),
-        },
-        'rows': serialized_rows,
-    }
-
-
-def _get_nullable_target_id(
-    request,
-    param_name: str,
-) -> tuple[tuple[int | None, bool] | None, Response | None]:
-    raw_value = request.query_params.get(param_name)
-    if raw_value is None:
-        return None, Response(
-            {param_name: f'{param_name} query parameter is required'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    raw_value = raw_value.strip()
-    if raw_value == 'null':
-        return (None, True), None
-
-    try:
-        return (int(raw_value), False), None
-    except (TypeError, ValueError):
-        return None, Response(
-            {param_name: f'{param_name} must be an integer or "null"'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-
-def _build_income_source_detail_pdf_data(
-    month: str,
-    month_period: MonthPeriod,
-    source_id: int | None,
-    is_uncategorized: bool,
-    account: str | None = None,
-) -> dict[str, Any]:
-    queryset = (
-        IncomeEntry.objects.select_related('source')
-        .filter(finance_period__month_period=month_period)
-        .order_by('-received_at', '-created_at')
-    )
-
-    if account in ('CASH', 'BANK'):
-        queryset = queryset.filter(account=account)
-
-    if is_uncategorized:
-        queryset = queryset.filter(source__isnull=True)
-        item_name = 'Без источника'
-    else:
-        source = get_object_or_404(IncomeSource, pk=source_id)
-        queryset = queryset.filter(source_id=source.id)
-        item_name = source.name
-
-    total_count = queryset.count()
-    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-    return {
-        'month': month,
-        'month_status': month_period.status,
-        'item_name': item_name,
-        'total_count': total_count,
-        'total_amount': _to_decimal_str(total_amount),
-        'rows': [
-            {
-                'date': entry.received_at.strftime('%d.%m.%Y'),
-                'account': entry.account,
-                'amount': _to_decimal_str(entry.amount),
-                'name': entry.source.name if entry.source else '',
-                'comment': entry.comment,
-            }
-            for entry in queryset
-        ],
-    }
-
-
-def _build_expense_category_detail_pdf_data(
-    month: str,
-    month_period: MonthPeriod,
-    category_id: int | None,
-    is_uncategorized: bool,
-    account: str | None = None,
-) -> dict[str, Any]:
-    queryset = (
-        ExpenseActualExpense.objects.select_related('category')
-        .filter(month_period=month_period)
-        .order_by('-spent_at', '-created_at')
-    )
-
-    if account in ('CASH', 'BANK'):
-        queryset = queryset.filter(account=account)
-
-    if is_uncategorized:
-        queryset = queryset.filter(category__isnull=True)
-        item_name = 'Без категории'
-    else:
-        category = get_object_or_404(ExpenseCategory, pk=category_id)
-        queryset = queryset.filter(category_id=category.id)
-        item_name = category.name
-
-    total_count = queryset.count()
-    total_amount = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-    return {
-        'month': month,
-        'month_status': month_period.status,
-        'item_name': item_name,
-        'total_count': total_count,
-        'total_amount': _to_decimal_str(total_amount),
-        'rows': [
-            {
-                'date': expense.spent_at.strftime('%d.%m.%Y'),
-                'account': expense.account,
-                'amount': _to_decimal_str(expense.amount),
-                'name': expense.category.name if expense.category else '',
-                'comment': expense.comment,
-            }
-            for expense in queryset
-        ],
-    }
 
 
 class BudgetPlanReportView(views.APIView):
@@ -409,32 +42,33 @@ class BudgetPlanReportView(views.APIView):
 
     def get(self, request, budget_id):
         """Get budget plan report."""
-        budget_plan = get_object_or_404(BudgetPlan, pk=budget_id)
+        budget_plan = get_object_or_404(
+            BudgetPlan.objects.select_related('summary_comment'),
+            pk=budget_id,
+        )
 
-        # Planned total from budget lines
         planned_total = BudgetLine.objects.filter(plan=budget_plan).aggregate(
             total=Sum('amount_planned')
         )['total'] or Decimal('0.00')
 
-        # Actual expenses: apps.expenses ActualExpense by month_period + scope
         actual_expenses_qs = ExpenseActualExpense.objects.filter(
             month_period=budget_plan.period,
             scope=budget_plan.scope,
         ).select_related('category', 'created_by').order_by('-spent_at', '-created_at')
 
-        actual_total = sum_expenses(actual_expenses_qs, amount_field='amount')
-        delta = actual_total - planned_total
-        over_budget = delta > 0
-
-        # Actuals by category (ExpenseActualExpense has category FK)
+        actual_expenses_list = list(actual_expenses_qs)
         actual_by_cat = {}
-        for exp in actual_expenses_qs:
+        actual_total = Decimal('0.00')
+        for exp in actual_expenses_list:
+            actual_total += exp.amount
             cid = exp.category_id
             if cid not in actual_by_cat:
                 actual_by_cat[cid] = Decimal('0.00')
             actual_by_cat[cid] += exp.amount
 
-        # Per-category breakdown
+        delta = actual_total - planned_total
+        over_budget = delta > 0
+
         budget_lines = BudgetLine.objects.filter(plan=budget_plan).select_related('category')
         per_category = []
         for line in budget_lines:
@@ -447,23 +81,18 @@ class BudgetPlanReportView(views.APIView):
                 'delta': category_actual - line.amount_planned,
             })
 
-        # Add categories that have actuals but no budget line
         line_cat_ids = {line.category_id for line in budget_lines}
-        for cid, total in actual_by_cat.items():
-            if cid is not None and cid not in line_cat_ids:
-                try:
-                    cat = ExpenseCategory.objects.get(pk=cid)
-                    per_category.append({
-                        'category_id': cat.id,
-                        'category_name': cat.name,
-                        'planned': Decimal('0.00'),
-                        'actual': total,
-                        'delta': total,
-                    })
-                except ExpenseCategory.DoesNotExist:
-                    pass
+        extra_cat_ids = [cid for cid in actual_by_cat if cid is not None and cid not in line_cat_ids]
+        for cid, cat in ExpenseCategory.objects.in_bulk(extra_cat_ids).items():
+            total = actual_by_cat[cid]
+            per_category.append({
+                'category_id': cat.id,
+                'category_name': cat.name,
+                'planned': Decimal('0.00'),
+                'actual': total,
+                'delta': total,
+            })
 
-        # Expenses list (real fields from ExpenseActualExpense)
         expenses_list = [
             {
                 'id': exp.id,
@@ -473,14 +102,11 @@ class BudgetPlanReportView(views.APIView):
                 'comment': exp.comment,
                 'created_by': exp.created_by.username if exp.created_by else 'Unknown',
             }
-            for exp in actual_expenses_qs
+            for exp in actual_expenses_list
         ]
 
-        summary_comment = None
-        try:
-            summary_comment = budget_plan.summary_comment.comment_text
-        except BudgetPlanSummaryComment.DoesNotExist:
-            pass
+        sc = getattr(budget_plan, 'summary_comment', None)
+        summary_comment = sc.comment_text if sc else None
 
         report_data = {
             'planned_total': planned_total,
@@ -500,6 +126,10 @@ class BudgetPlanReportView(views.APIView):
 class MonthlyReportView(views.APIView):
     """
     Monthly Plan vs Fact report: one endpoint for plan vs actual by category.
+
+    Actuals (facts.totals.actual, per-row actual) use only apps.expenses.ActualExpense
+    for the MonthPeriod and scope (OFFICE|PROJECT|CHARITY). apps.planning.ActualExpense
+    is not included — it has no scope/account alignment with this report.
 
     GET /api/v1/reports/monthly/?month=YYYY-MM&scope=OFFICE|PROJECT|CHARITY
     - Admin, director: any scope. Foreman: scope=PROJECT only. Other roles: 403.
@@ -543,113 +173,21 @@ class MonthlyReportView(views.APIView):
                 {'scope': 'scope must be one of: OFFICE, PROJECT, CHARITY'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
-        # Resolve MonthPeriod without auto-creating it.
+
         try:
             month_period = MonthPeriod.objects.get(month=month)
         except MonthPeriod.DoesNotExist:
             return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Scope -> category.scope / fund_kind mapping
-        scope_lower = {'OFFICE': 'office', 'PROJECT': 'project', 'CHARITY': 'charity'}[scope]
-
-        # Plan: one BudgetPlan per (period, scope); filter by period and scope only
-        plans = BudgetPlan.objects.filter(period=month_period, scope=scope)
-        plan = plans.first()
-        plan_id = plan.id if plan else None
-
-        # Planned: sum BudgetLine.amount_planned grouped by category_id (all plans for this period/scope)
-        planned_by_category = {}
-        if plans.exists():
-            lines = BudgetLine.objects.filter(plan__in=plans).values('category_id', 'category__name').annotate(
-                planned=Sum('amount_planned')
-            )
-            for row in lines:
-                cid = row['category_id']
-                planned_by_category[cid] = {
-                    'category_id': cid,
-                    'category_name': row['category__name'] or '',
-                    'planned': row['planned'],
-                }
-
-        # Actual: ExpenseActualExpense by month + scope (no finance_period)
-        actual_qs = ExpenseActualExpense.objects.filter(
-            month_period__month=month,
-            scope=scope,
-        )
-        facts_count = actual_qs.count()
-        facts_total_actual = float(actual_qs.aggregate(s=Sum('amount'))['s'] or 0)
-        uncategorized_count = actual_qs.filter(category__isnull=True).count()
-        actual_by_category = aggregate_by_category(
-            actual_qs,
-            amount_field='amount',
-            category_field='category',
-        )
-
-        # Uncategorized: category is null
-        uncategorized_actual = actual_by_category.get(None, {}).get('total', Decimal('0.00'))
-        uncategorized = {
-            'planned': 0.0,
-            'actual': float(uncategorized_actual),
-            'delta': float(uncategorized_actual),
-        }
-
-        # Merge planned and actual by category_id (exclude uncategorized from rows)
-        category_ids = set(planned_by_category.keys()) | {
-            k for k in actual_by_category.keys() if k is not None
-        }
-        rows = []
-        total_planned = Decimal('0.00')
-        total_actual = Decimal('0.00')
-
-        for cid in category_ids:
-            planned_data = planned_by_category.get(cid)
-            planned = planned_data['planned'] if planned_data else Decimal('0.00')
-            category_name = (planned_data or {}).get('category_name') or ''
-            actual_data = actual_by_category.get(cid)
-            actual = (actual_data.get('total') if actual_data else Decimal('0.00'))
-            if not category_name and actual_data:
-                category_name = actual_data.get('category_name', '') or ''
-            delta = actual - planned
-            percent = (actual / planned * 100) if planned > 0 else None
-            total_planned += planned
-            total_actual += actual
-            rows.append({
-                'category_id': cid,
-                'category_name': category_name,
-                'planned': float(planned),
-                'actual': float(actual),
-                'delta': float(delta),
-                'percent': float(percent) if percent is not None else None,
-            })
-
-        # Add uncategorized actuals to totals (they are excluded from rows)
-        total_actual += uncategorized_actual
-
-        # Sort: overspend first (delta desc), then category_name asc
-        rows.sort(key=lambda x: (-x['delta'], (x['category_name'] or '')))
-
-        total_delta = total_actual - total_planned
-        total_percent = float(total_actual / total_planned * 100) if total_planned > 0 else 0.0
-
-        return Response({
-            'month': month,
-            'scope': scope,
-            'plan_id': plan_id,
-            'facts': {
-                'count': facts_count,
-                'total_actual': facts_total_actual,
-                'uncategorized_count': uncategorized_count,
-            },
-            'totals': {
-                'planned': float(total_planned),
-                'actual': float(total_actual),
-                'delta': float(total_delta),
-                'percent': total_percent,
-            },
-            'rows': rows,
-            'uncategorized': uncategorized,
-        }, status=status.HTTP_200_OK)
+        if reports_cache_enabled():
+            cache_key = monthly_report_cache_key(month, scope, month_period.pk)
+            payload = get_cached_report(cache_key)
+            if payload is not None:
+                return Response(payload, status=status.HTTP_200_OK)
+        payload = monthly_service.build_monthly_report_payload(month, scope, month_period)
+        if reports_cache_enabled():
+            set_cached_report(monthly_report_cache_key(month, scope, month_period.pk), payload)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class DashboardExpenseCategoriesView(views.APIView):
@@ -664,15 +202,15 @@ class DashboardExpenseCategoriesView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
-        response_data = _build_dashboard_expense_categories_data(month, month_period, account=account)
+        response_data = dashboard_service.build_dashboard_expense_categories_data(month, month_period, account=account)
         return Response(
             {
                 'month': response_data['month'],
@@ -695,15 +233,15 @@ class DashboardIncomeSourcesView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
-        response_data = _build_dashboard_income_sources_data(month, month_period, account=account)
+        response_data = dashboard_service.build_dashboard_income_sources_data(month, month_period, account=account)
         return Response(
             {
                 'month': response_data['month'],
@@ -724,8 +262,8 @@ class ExportSectionPdfView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
@@ -737,30 +275,13 @@ class ExportSectionPdfView(views.APIView):
             )
 
         month, month_period = validated
-        if section_type == 'income_sources':
-            account_param = (request.query_params.get('account') or '').strip().upper()
-            account = account_param if account_param in ('CASH', 'BANK') else None
-            section_data = _build_dashboard_income_sources_data(
-                month, month_period, account=account
-            )
-            section_data['account_filter_label'] = (
-                'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
-            )
-        else:
-            account_param = (request.query_params.get('account') or '').strip().upper()
-            account = account_param if account_param in ('CASH', 'BANK') else None
-            section_data = _build_dashboard_expense_categories_data(
-                month, month_period, account=account
-            )
-            section_data['account_filter_label'] = (
-                'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
-            )
-
-        pdf_content = build_report_section_pdf(section_type, section_data)
-        response = HttpResponse(pdf_content, content_type='application/pdf')
-        response['Content-Disposition'] = (
-            f'attachment; filename="{month}_{section_type}_report.pdf"'
+        account_param = (request.query_params.get('account') or '').strip().upper()
+        account = account_param if account_param in ('CASH', 'BANK') else None
+        pdf_content, filename = pdf_exports.run_export_section_pdf(
+            month, month_period, section_type, account
         )
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 
@@ -774,12 +295,12 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
-        parsed_target, target_error = _get_nullable_target_id(request, 'source_id')
+        parsed_target, target_error = parse_nullable_target_id(request, 'source_id')
         if target_error:
             return target_error
 
@@ -787,22 +308,15 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
         source_id, is_uncategorized = parsed_target
-        detail_data = _build_income_source_detail_pdf_data(
+        pdf_content, filename = pdf_exports.run_export_income_source_detail_pdf(
             month,
             month_period,
             source_id,
             is_uncategorized,
-            account=account,
+            account,
         )
-        detail_data['account_filter_label'] = (
-            'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
-        )
-        pdf_content = build_report_detail_pdf('income_source', detail_data)
         response = HttpResponse(pdf_content, content_type='application/pdf')
-        filename_target = 'uncategorized' if is_uncategorized else str(source_id)
-        response['Content-Disposition'] = (
-            f'attachment; filename="{month}_income_source_{filename_target}_detail_report.pdf"'
-        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 
@@ -816,12 +330,12 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
-        parsed_target, target_error = _get_nullable_target_id(request, 'category_id')
+        parsed_target, target_error = parse_nullable_target_id(request, 'category_id')
         if target_error:
             return target_error
 
@@ -829,28 +343,28 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
         category_id, is_uncategorized = parsed_target
-        detail_data = _build_expense_category_detail_pdf_data(
+        pdf_content, filename = pdf_exports.run_export_expense_category_detail_pdf(
             month,
             month_period,
             category_id,
             is_uncategorized,
-            account=account,
+            account,
         )
-        detail_data['account_filter_label'] = (
-            'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
-        )
-        pdf_content = build_report_detail_pdf('expense_category', detail_data)
         response = HttpResponse(pdf_content, content_type='application/pdf')
-        filename_target = 'uncategorized' if is_uncategorized else str(category_id)
-        response['Content-Disposition'] = (
-            f'attachment; filename="{month}_expense_category_{filename_target}_detail_report.pdf"'
-        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 
 class DashboardKpiView(views.APIView):
     """
-    Dashboard KPI view: aggregates all income and expense facts for a month.
+    Dashboard KPI view: aggregates income and expense facts for a month.
+
+    Semantics (aligned with get_balance_for_account and MonthlyReportView actuals):
+    - expense_fact: sum of apps.expenses.ActualExpense for the MonthPeriod (all scopes).
+      These rows carry CASH/BANK and drive balance and cash_*_outflow_month.
+    - planning_actual_expense_total: sum of apps.planning.ActualExpense for the month
+      (via finance_period.month_period). No account field — not included in expense_fact
+      or balance; reported separately for transparency.
 
     GET /api/v1/reports/dashboard-kpis/?month=YYYY-MM
     - Admin, director: allowed
@@ -864,208 +378,20 @@ class DashboardKpiView(views.APIView):
         if not (request.user.is_superuser or role in ("admin", "director")):
             raise PermissionDenied(ADMIN_ONLY_MSG)
 
-        month = request.query_params.get('month')
-        if not month:
-            return Response(
-                {'month': 'month parameter is required (format: YYYY-MM)'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        month = month.strip()
-        if not re.match(r'^\d{4}-\d{2}$', month):
-            return Response(
-                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
 
-        # Ensure MonthPeriod exists (same semantics as other reporting endpoints)
-        try:
-            month_period = MonthPeriod.objects.get(month=month)
-        except MonthPeriod.DoesNotExist:
-            return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Income Fact: sum of all IncomeEntry.amount for this month (all fund_kinds, projects, sources)
-        income_qs = IncomeEntry.objects.filter(
-            finance_period__month_period=month_period,
-        )
-        income_total = income_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-        # Expense Fact: sum of expenses.ActualExpense + planning.ActualExpense for this month
-        expense_qs = ExpenseActualExpense.objects.filter(
-            month_period=month_period,
-        )
-        expense_total = expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        planning_expense_qs = PlanningActualExpense.objects.filter(
-            finance_period__month_period=month_period,
-        )
-        planning_expense_total = planning_expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        expense_total = expense_total + planning_expense_total
-
-        # Income Plan: sum of all IncomePlan.amount for this month across all fund_kinds
-        income_plan_qs = IncomePlan.objects.filter(
-            period__month_period=month_period,
-        )
-        income_plan_total = income_plan_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-        # Expense Plan: sum of all BudgetLine.amount_planned for this month across all scopes
-        expense_plan_qs = BudgetLine.objects.filter(
-            plan__period=month_period,
-        )
-        expense_plan_total = expense_plan_qs.aggregate(total=Sum('amount_planned'))['total'] or Decimal('0.00')
-
-        net_total = income_total - expense_total
-        net_plan_total = income_plan_total - expense_plan_total
-
-        def to_decimal_str(value: Decimal) -> str:
-            return str(value.quantize(Decimal('0.00')))
-
-        # Opening/closing balances and monthly inflows/outflows per account
-        try:
-            year_int = int(month[:4])
-            month_int = int(month[5:7])
-            first_day = date(year_int, month_int, 1)
-            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
-            prev_day = first_day.replace(day=1) - timedelta(days=1)
-        except (ValueError, IndexError):
-            # Fallback to zeros if parsing fails (should not happen due to earlier validation)
-            cash_opening_balance = Decimal('0.00')
-            bank_opening_balance = Decimal('0.00')
-            cash_closing_balance = Decimal('0.00')
-            bank_closing_balance = Decimal('0.00')
-            cash_inflow_month = Decimal('0.00')
-            cash_outflow_month = Decimal('0.00')
-            bank_inflow_month = Decimal('0.00')
-            bank_outflow_month = Decimal('0.00')
-            bank_to_cash_month = Decimal('0.00')
-            cash_to_bank_month = Decimal('0.00')
-        else:
-            # Opening and closing balances using shared helper
-            cash_opening_balance = get_balance_for_account('CASH', prev_day)
-            bank_opening_balance = get_balance_for_account('BANK', prev_day)
-            cash_closing_balance = get_balance_for_account('CASH', last_day)
-            bank_closing_balance = get_balance_for_account('BANK', last_day)
-
-            # Monthly transfer totals between BANK and CASH (do not affect profit/loss)
-            bank_to_cash_month = (
-                Transfer.objects.filter(
-                    source_account='BANK',
-                    destination_account='CASH',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            cash_to_bank_month = (
-                Transfer.objects.filter(
-                    source_account='CASH',
-                    destination_account='BANK',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-
-            # Monthly inflows/outflows for CASH
-            income_cash_month = (
-                IncomeEntry.objects.filter(
-                    account='CASH',
-                    received_at__gte=first_day,
-                    received_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            transfers_in_cash_month = (
-                Transfer.objects.filter(
-                    destination_account='CASH',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            cash_inflow_month = income_cash_month + transfers_in_cash_month
-
-            expenses_cash_month = (
-                ExpenseActualExpense.objects.filter(
-                    account='CASH',
-                    spent_at__gte=first_day,
-                    spent_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            transfers_out_cash_month = (
-                Transfer.objects.filter(
-                    source_account='CASH',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            cash_outflow_month = expenses_cash_month + transfers_out_cash_month
-
-            # Monthly inflows/outflows for BANK
-            income_bank_month = (
-                IncomeEntry.objects.filter(
-                    account='BANK',
-                    received_at__gte=first_day,
-                    received_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            transfers_in_bank_month = (
-                Transfer.objects.filter(
-                    destination_account='BANK',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            bank_inflow_month = income_bank_month + transfers_in_bank_month
-
-            expenses_bank_month = (
-                ExpenseActualExpense.objects.filter(
-                    account='BANK',
-                    spent_at__gte=first_day,
-                    spent_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            transfers_out_bank_month = (
-                Transfer.objects.filter(
-                    source_account='BANK',
-                    transferred_at__gte=first_day,
-                    transferred_at__lte=last_day,
-                ).aggregate(t=Sum('amount'))['t']
-                or Decimal('0.00')
-            )
-            bank_outflow_month = expenses_bank_month + transfers_out_bank_month
-
-        # Backward-compatible aliases for closing balances
-        cash_balance = cash_closing_balance
-        bank_balance = bank_closing_balance
-
-        return Response(
-            {
-                'month': month,
-                'income_fact': to_decimal_str(income_total),
-                'expense_fact': to_decimal_str(expense_total),
-                'net': to_decimal_str(net_total),
-                'income_plan': to_decimal_str(income_plan_total),
-                'expense_plan': to_decimal_str(expense_plan_total),
-                'net_plan': to_decimal_str(net_plan_total),
-                'cash_opening_balance': to_decimal_str(cash_opening_balance),
-                'bank_opening_balance': to_decimal_str(bank_opening_balance),
-                'cash_inflow_month': to_decimal_str(cash_inflow_month),
-                'cash_outflow_month': to_decimal_str(cash_outflow_month),
-                'bank_inflow_month': to_decimal_str(bank_inflow_month),
-                'bank_outflow_month': to_decimal_str(bank_outflow_month),
-                'cash_closing_balance': to_decimal_str(cash_closing_balance),
-                'bank_closing_balance': to_decimal_str(bank_closing_balance),
-                'cash_balance': to_decimal_str(cash_balance),
-                'bank_balance': to_decimal_str(bank_balance),
-                'bank_to_cash_month': to_decimal_str(bank_to_cash_month),
-                'cash_to_bank_month': to_decimal_str(cash_to_bank_month),
-            },
-            status=status.HTTP_200_OK,
-        )
+        month, month_period = validated
+        if reports_cache_enabled():
+            cache_key = dashboard_kpi_cache_key(month, month_period.pk)
+            data = get_cached_report(cache_key)
+            if data is not None:
+                return Response(data, status=status.HTTP_200_OK)
+        data = dashboard_service.build_dashboard_kpi_response_data(month, month_period)
+        if reports_cache_enabled():
+            set_cached_report(dashboard_kpi_cache_key(month, month_period.pk), data)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class TransferDetailsView(views.APIView):
@@ -1080,49 +406,24 @@ class TransferDetailsView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
-        month, month_period = validated
-
-        # Use the same month parsing semantics as DashboardKpiView
-        try:
-            year_int = int(month[:4])
-            month_int = int(month[5:7])
-            first_day = date(year_int, month_int, 1)
-            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
-        except (ValueError, IndexError):
+        month, _month_period = validated
+        payload = transfers_service.build_transfer_details_payload(month)
+        if payload.get('_parse_error'):
             return Response(
                 {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        base_qs = Transfer.objects.select_related('created_by').filter(
-            transferred_at__gte=first_day,
-            transferred_at__lte=last_day,
-        )
-
-        bank_to_cash_qs = base_qs.filter(source_account='BANK', destination_account='CASH')
-        cash_to_bank_qs = base_qs.filter(source_account='CASH', destination_account='BANK')
-
-        def serialize_transfer(t: Transfer) -> dict[str, object]:
-            return {
-                'id': t.id,
-                'transferred_at': t.transferred_at.isoformat(),
-                'source_account': t.source_account,
-                'destination_account': t.destination_account,
-                'amount': _to_decimal_str(t.amount),
-                'comment': t.comment or '',
-                'created_by_username': t.created_by.username if t.created_by else None,
-            }
-
         return Response(
             {
-                'month': month,
-                'bank_to_cash': [serialize_transfer(t) for t in bank_to_cash_qs],
-                'cash_to_bank': [serialize_transfer(t) for t in cash_to_bank_qs],
+                'month': payload['month'],
+                'bank_to_cash': payload['bank_to_cash'],
+                'cash_to_bank': payload['cash_to_bank'],
             },
             status=status.HTTP_200_OK,
         )
@@ -1138,12 +439,12 @@ class ExportTransfersDirectionPdfView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _ensure_owner_dashboard_access(request)
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
 
-        month, month_period = validated
+        month, _month_period = validated
 
         raw_direction = (request.query_params.get('direction') or '').strip().upper()
         if raw_direction not in ('BANK_TO_CASH', 'CASH_TO_BANK'):
@@ -1152,72 +453,30 @@ class ExportTransfersDirectionPdfView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if raw_direction == 'BANK_TO_CASH':
-            source_account = 'BANK'
-            destination_account = 'CASH'
-            direction_label = 'Банк → Касса'
-            filename_direction = 'bank_to_cash'
-        else:
-            source_account = 'CASH'
-            destination_account = 'BANK'
-            direction_label = 'Касса → Банк'
-            filename_direction = 'cash_to_bank'
-
-        # Parse month (YYYY-MM) into first/last day
-        try:
-            year_int = int(month[:4])
-            month_int = int(month[5:7])
-            first_day = date(year_int, month_int, 1)
-            last_day = date(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
-        except (ValueError, IndexError):
+        built = pdf_exports.run_export_transfer_direction_pdf(month, raw_direction)
+        if built is None:
             return Response(
                 {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        qs = (
-            Transfer.objects.filter(
-                source_account=source_account,
-                destination_account=destination_account,
-                transferred_at__gte=first_day,
-                transferred_at__lte=last_day,
-            )
-            .order_by('transferred_at', 'id')
-        )
-
-        total_amount = qs.aggregate(t=Sum('amount'))['t'] or Decimal('0.00')
-
-        detail_rows = [
-            {
-                'transferred_at': t.transferred_at.isoformat(),
-                'source_account': t.source_account,
-                'destination_account': t.destination_account,
-                'amount': t.amount,
-                'comment': t.comment or '',
-            }
-            for t in qs
-        ]
-
-        pdf_bytes = build_transfer_direction_pdf(
-            month=month,
-            direction_label=direction_label,
-            total_amount=total_amount,
-            detail_rows=detail_rows,
-        )
-
+        pdf_bytes, filename = built
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        response['Content-Disposition'] = (
-            f'attachment; filename="transfers_{filename_direction}_{month}.pdf"'
-        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 
 class ForemanProjectSummaryView(views.APIView):
     """
-    Foreman-focused project summary:
-    - planned_total: sum(BudgetLine.amount_planned) for month + PROJECT scope + project
-    - actual_total: sum(expenses.ActualExpense.amount) for month + PROJECT scope
-    - difference: planned_total - actual_total
+    Foreman summary for the single PROJECT-scope budget for a month.
+
+    BudgetPlan is unique per (period, scope) and BudgetPlan.project must stay NULL
+    (see apps.budgeting.models.BudgetPlan.clean). There is no per-project split of
+    planned amounts in the data model.
+
+    Returns:
+    - summary: one planned_total (all BudgetLine for the PROJECT plan for this month),
+      one actual_total (all expenses.ActualExpense with scope=PROJECT), difference.
+    - assigned_projects: this user's ProjectAssignment rows (id + name); may be empty.
     """
 
     permission_classes = [IsAuthenticated]
@@ -1226,59 +485,15 @@ class ForemanProjectSummaryView(views.APIView):
         role = getattr(request.user, 'role', None)
         if not (request.user.is_superuser or role == 'foreman'):
             raise PermissionDenied('This endpoint is available for foreman only.')
-        if role == 'foreman' and not _foreman_has_project_assignment(request.user):
-            raise PermissionDenied('You do not have access to project reports.')
 
-        validated, error_response = _get_validated_month_period(request.query_params.get('month'))
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
         month, month_period = validated
 
-        # Current codebase source-of-truth for foreman->project visibility is ProjectAssignment.
-        assignments = (
-            ProjectAssignment.objects
-            .select_related('project')
-            .filter(prorab=request.user)
-            .order_by('project__name', 'project_id')
+        data_payload = foreman_service.build_foreman_project_summary_data_payload(
+            month, month_period, request.user
         )
-
-        # expenses.ActualExpense has no project field in this codebase.
-        # Keep actual strictly from expenses app and PROJECT scope (as requested).
-        actual_total_global = (
-            ExpenseActualExpense.objects
-            .filter(month_period=month_period, scope='PROJECT')
-            .aggregate(total=Sum('amount'))['total']
-            or Decimal('0.00')
-        )
-
-        projects = []
-        for assignment in assignments:
-            project = assignment.project
-            planned_total = (
-                BudgetLine.objects
-                .filter(
-                    plan__period=month_period,
-                    plan__scope='PROJECT',
-                    plan__project_id=project.id,
-                )
-                .aggregate(total=Sum('amount_planned'))['total']
-                or Decimal('0.00')
-            )
-            difference = planned_total - actual_total_global
-            projects.append(
-                {
-                    'project_id': project.id,
-                    'project_name': project.name,
-                    'planned_total': planned_total,
-                    'actual_total': actual_total_global,
-                    'difference': difference,
-                }
-            )
-
-        data_payload = {
-            'month': month,
-            'projects': projects,
-        }
         serializer = ForemanProjectSummaryDataSerializer(data=data_payload)
         serializer.is_valid(raise_exception=True)
         return Response(
@@ -1290,8 +505,3 @@ class ForemanProjectSummaryView(views.APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
-# Manual test (curl):
-# curl -H "Authorization: Bearer $TOKEN" "http://localhost:8000/api/v1/reports/monthly/?month=2026-02&scope=OFFICE"
-

@@ -1,7 +1,6 @@
 """
 Tests for ActualExpense API with MonthPeriod lock semantics.
 """
-from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -10,7 +9,6 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.budgeting.models import MonthPeriod, ExpenseCategory
-from apps.expenses.models import ActualExpense
 from apps.finance.models import FinancePeriod, IncomeEntry
 
 
@@ -51,17 +49,14 @@ def expense_category_office(db):
 class TestActualExpenseMonthLock:
     """Fact-side ActualExpense behavior with MonthPeriod locks."""
 
-    def test_locked_month_allows_actualexpense_create(self, api_client, admin_user, locked_month_period, expense_category_office):
+    def test_locked_month_blocks_actualexpense_create(self, api_client, admin_user, locked_month_period, expense_category_office):
         """
-        Creating ActualExpense is allowed when MonthPeriod is LOCKED,
-        as long as the month exists and permissions allow.
+        Posted ActualExpense cannot be created when MonthPeriod is LOCKED;
+        admin must unlock the month first.
         """
         token = RefreshToken.for_user(admin_user)
         api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
 
-        # Seed positive CASH balance before the expense date so overdraft
-        # prevention does not block this request. The purpose of this test
-        # is to verify LOCKED month behavior, not negative-balance handling.
         prev_month = MonthPeriod.objects.create(month="2026-02", status="OPEN")
         finance_period_office = FinancePeriod.objects.create(
             month_period=prev_month,
@@ -89,11 +84,45 @@ class TestActualExpenseMonthLock:
         }
 
         response = api_client.post("/api/v1/actual-expenses/", payload, format="json")
+        assert response.status_code == 403
+
+    def test_admin_can_create_actualexpense_after_month_unlocked(
+        self, api_client, admin_user, expense_category_office
+    ):
+        locked = MonthPeriod.objects.create(month="2026-04", status="LOCKED")
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
+
+        prev_month = MonthPeriod.objects.create(month="2026-03", status="OPEN")
+        fp = FinancePeriod.objects.create(
+            month_period=prev_month,
+            fund_kind="office",
+            project=None,
+            created_by=admin_user,
+        )
+        IncomeEntry.objects.create(
+            finance_period=fp,
+            account="CASH",
+            amount=Decimal("5000.00"),
+            received_at="2026-03-15",
+            comment="Seed",
+            created_by=admin_user,
+        )
+
+        payload = {
+            "month_period": locked.id,
+            "scope": "OFFICE",
+            "category": expense_category_office.id,
+            "account": "CASH",
+            "amount": "100.00",
+            "spent_at": "2026-04-05",
+            "comment": "After unlock",
+        }
+        assert api_client.post("/api/v1/actual-expenses/", payload, format="json").status_code == 403
+
+        locked.status = "OPEN"
+        locked.save(update_fields=["status"])
+
+        response = api_client.post("/api/v1/actual-expenses/", payload, format="json")
         assert response.status_code == 201
-        assert response.data["amount"] == "1234.56"
-        assert response.data["comment"] == "Locked month actual expense"
-
-        actual = ActualExpense.objects.get(id=response.data["id"])
-        assert actual.month_period == locked_month_period
-        assert actual.month_period.status == "LOCKED"
-
+        assert response.data["amount"] == "100.00"

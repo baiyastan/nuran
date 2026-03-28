@@ -130,10 +130,10 @@ class TestPlanPeriodForemanPermissions:
         response = api_client.post('/api/v1/plan-periods/', data)
         assert response.status_code == 201
 
-    def test_foreman_cannot_create_for_unassigned_project(
+    def test_foreman_can_create_plan_period_without_project_assignment(
         self, api_client, foreman_user, unassigned_project, month_period
     ):
-        """Foreman cannot create PlanPeriod for unassigned project -> 403 or 404."""
+        """Foreman can create a project PlanPeriod without any ProjectAssignment."""
         from rest_framework_simplejwt.tokens import RefreshToken
         token = RefreshToken.for_user(foreman_user)
         api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
@@ -144,9 +144,7 @@ class TestPlanPeriodForemanPermissions:
             'period': month_period.month,
         }
         response = api_client.post('/api/v1/plan-periods/', data)
-        assert response.status_code in (403, 404)
-        if response.status_code == 403:
-            assert 'access' in response.data.get('detail', '').lower() or 'project' in response.data.get('detail', '').lower()
+        assert response.status_code == 201
 
     def test_foreman_cannot_create_office_fund_kind(
         self, api_client, foreman_user, month_period
@@ -163,23 +161,15 @@ class TestPlanPeriodForemanPermissions:
         response = api_client.post('/api/v1/plan-periods/', data)
         assert response.status_code == 403
 
-    def test_foreman_cannot_update_plan_period_for_unassigned_project(
-        self, api_client, foreman_user, plan_period, unassigned_project
+    def test_foreman_can_repoint_plan_period_to_different_project_without_assignment(
+        self, api_client, foreman_user, plan_period
     ):
-        """Foreman cannot update PlanPeriod for unassigned project -> 403 or 404."""
+        """Foreman may PATCH plan period to another project without ProjectAssignment."""
         from rest_framework_simplejwt.tokens import RefreshToken
-        # Remove assignment so foreman loses access (plan_period uses project with assignment)
-        ProjectAssignment.objects.filter(project=plan_period.project, prorab=foreman_user).delete()
-        # Create assignment for a different project, then try to update this one to unassigned project
-        ProjectAssignment.objects.create(project=unassigned_project, prorab=foreman_user)
-        # plan_period is for project (assigned), but we'll try to change it to unassigned_project - wait,
-        # unassigned_project has no assignment. So foreman is assigned to unassigned_project now. Let me fix.
-        # Actually: create another project with no assignment. Foreman has assignment to plan_period.project.
-        # To test "cannot update for unassigned project": we need foreman to try updating a plan period
-        # to a project they're not assigned to. So: plan_period is for project A (foreman assigned).
-        # We try to PATCH project to B (unassigned). That should 403.
+        ProjectAssignment.objects.filter(prorab=foreman_user).delete()
+
         other_project = Project.objects.create(
-            name='Other Unassigned',
+            name='Other Project',
             status='active',
             created_by=plan_period.created_by
         )
@@ -187,23 +177,22 @@ class TestPlanPeriodForemanPermissions:
         api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
         response = api_client.patch(
             f'/api/v1/plan-periods/{plan_period.id}/',
-            {'project': other_project.id}
+            {'project': other_project.id},
         )
-        assert response.status_code in (403, 404)
+        assert response.status_code == 200
+        assert response.data['project'] == other_project.id
 
-    def test_foreman_cannot_delete_plan_period_when_not_assigned(
+    def test_foreman_can_delete_plan_period_without_assignment(
         self, api_client, foreman_user, plan_period
     ):
-        """Foreman cannot delete PlanPeriod when not assigned -> 404 (object not in queryset)."""
+        """Foreman can delete a project PlanPeriod without ProjectAssignment."""
         from rest_framework_simplejwt.tokens import RefreshToken
-        # Remove foreman's assignment to the project
         ProjectAssignment.objects.filter(project=plan_period.project, prorab=foreman_user).delete()
 
         token = RefreshToken.for_user(foreman_user)
         api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
-        # Foreman won't see it (get_queryset filters), so get_object returns 404
         response = api_client.delete(f'/api/v1/plan-periods/{plan_period.id}/')
-        assert response.status_code == 404
+        assert response.status_code == 204
 
     def test_foreman_can_update_plan_period_for_assigned_project(
         self, api_client, foreman_user, plan_period, project_assignment
@@ -349,5 +338,176 @@ class TestPlanItemPermissions:
         
         # Foreman cannot approve
         response = api_client.post(f'/api/v1/plan-periods/{plan_period.id}/approve/')
+        assert response.status_code == 403
+
+    def test_foreman_can_create_plan_item_without_project_assignment(
+        self, api_client, foreman_user, plan_period
+    ):
+        """Planning writes do not require ProjectAssignment."""
+        from rest_framework_simplejwt.tokens import RefreshToken
+        ProjectAssignment.objects.filter(prorab=foreman_user).delete()
+        token = RefreshToken.for_user(foreman_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.post(
+            '/api/v1/plan-items/',
+            {
+                'plan_period': plan_period.id,
+                'title': 'No assignment item',
+                'qty': '1.0',
+                'unit': 'u',
+                'amount': '100.0',
+            },
+            format='json',
+        )
+        assert response.status_code == 201
+
+    def test_foreman_plan_item_create_fails_when_month_locked(
+        self, api_client, foreman_user, admin_user, project
+    ):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        locked = MonthPeriod.objects.create(month='2099-07', status='LOCKED')
+        pp = PlanPeriod.objects.create(
+            project=project,
+            period='2099-07',
+            fund_kind='project',
+            status='draft',
+            month_period=locked,
+            created_by=admin_user,
+        )
+        token = RefreshToken.for_user(foreman_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.post(
+            '/api/v1/plan-items/',
+            {
+                'plan_period': pp.id,
+                'title': 'Locked month',
+                'amount': '50.0',
+            },
+            format='json',
+        )
+        assert response.status_code == 403
+
+    def test_admin_cannot_create_plan_item_after_plan_submitted(
+        self, api_client, admin_user, foreman_user, plan_period
+    ):
+        """Admin follows the same PlanPeriod status rules as other roles for line mutations."""
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.planning.services import PlanPeriodService
+
+        PlanPeriodService.submit(plan_period, foreman_user)
+
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.post(
+            '/api/v1/plan-items/',
+            {
+                'plan_period': plan_period.id,
+                'title': 'Admin late line',
+                'qty': '1.0',
+                'unit': 'u',
+                'amount': '10.0',
+            },
+            format='json',
+        )
+        assert response.status_code == 400
+        assert 'accepted by admin' in str(response.data)
+
+    def test_admin_cannot_update_plan_item_after_plan_submitted(
+        self, api_client, admin_user, foreman_user, plan_item, plan_period
+    ):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.planning.services import PlanPeriodService
+
+        PlanPeriodService.submit(plan_period, foreman_user)
+
+        token = RefreshToken.for_user(admin_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.patch(
+            f'/api/v1/plan-items/{plan_item.id}/',
+            {'title': 'Admin patch'},
+            format='json',
+        )
+        assert response.status_code == 400
+        assert 'accepted by admin' in str(response.data)
+
+
+class TestProrabPlanItemEditability:
+    """Prorab plan item writes respect ProrabPlan status (draft vs submitted)."""
+
+    def test_foreman_prorab_plan_item_create_fails_when_prorab_plan_submitted(
+        self, api_client, foreman_user, admin_user, project
+    ):
+        from decimal import Decimal
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.budgeting.models import ExpenseCategory
+        from apps.planning.models import ProrabPlan
+        from apps.planning.services import ProrabPlanService
+
+        root = ExpenseCategory.objects.create(
+            name='ProrabRoot',
+            scope='project',
+            parent=None,
+            is_active=True,
+            kind='EXPENSE',
+        )
+        leaf = ExpenseCategory.objects.create(
+            name='ProrabLeaf',
+            scope='project',
+            parent=root,
+            is_active=True,
+            kind='EXPENSE',
+        )
+        mp = MonthPeriod.objects.create(month='2099-12', status='OPEN')
+        pp = PlanPeriod.objects.create(
+            project=project,
+            period='2099-12',
+            fund_kind='project',
+            status='draft',
+            month_period=mp,
+            limit_amount=Decimal('100000.00'),
+            created_by=admin_user,
+        )
+        plan = ProrabPlan.objects.create(period=pp, prorab=foreman_user, status='draft')
+        ProrabPlanService.submit_plan(plan, foreman_user)
+
+        token = RefreshToken.for_user(foreman_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.post(
+            f'/api/v1/prorab/plans/{plan.id}/items/',
+            {'plan': plan.id, 'category': leaf.id, 'name': 'AB', 'amount': '10.00'},
+            format='json',
+        )
+        assert response.status_code == 409
+
+
+class TestForemanPostedFactsStillBlocked:
+    """Foreman must not write posted financial facts (regression)."""
+
+    def test_foreman_cannot_post_income_entry(self, api_client, foreman_user, admin_user, project):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.finance.models import FinancePeriod, IncomeSource
+
+        mp = MonthPeriod.objects.create(month='2099-08', status='OPEN')
+        fp = FinancePeriod.objects.create(
+            month_period=mp,
+            fund_kind='project',
+            project=project,
+            created_by=admin_user,
+        )
+        src = IncomeSource.objects.create(name='Src', is_active=True)
+        token = RefreshToken.for_user(foreman_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        response = api_client.post(
+            '/api/v1/income-entries/',
+            {
+                'finance_period': fp.id,
+                'source_id': src.id,
+                'account': 'CASH',
+                'amount': '10.00',
+                'received_at': '2099-08-10',
+                'comment': 'blocked',
+            },
+            format='json',
+        )
         assert response.status_code == 403
 

@@ -4,8 +4,6 @@ Admin: full CRUD. Director: read-only. Foreman: read-only for scope=PROJECT (SAF
 """
 from rest_framework import permissions
 
-from apps.projects.models import ProjectAssignment
-
 
 def _is_safe(request):
     return request.method in permissions.SAFE_METHODS
@@ -23,10 +21,6 @@ def _is_foreman(user):
     return getattr(user, 'role', None) == 'foreman'
 
 
-def _foreman_has_project_assignment(user):
-    return ProjectAssignment.objects.filter(prorab=user).exists()
-
-
 class ActualExpensePermission(permissions.BasePermission):
     """Admin: full CRUD. Director: read-only. Foreman: read-only for scope=PROJECT only (SAFE_METHODS)."""
 
@@ -41,8 +35,6 @@ class ActualExpensePermission(permissions.BasePermission):
             return request.method in permissions.SAFE_METHODS
         if _is_foreman(request.user):
             if request.method not in permissions.SAFE_METHODS:
-                return False
-            if not _foreman_has_project_assignment(request.user):
                 return False
             if view.kwargs.get('pk'):
                 return True

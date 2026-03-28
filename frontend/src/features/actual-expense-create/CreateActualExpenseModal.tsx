@@ -6,7 +6,7 @@ import type { ExpenseCategory } from '@/shared/api/expenseCategoriesApi'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { Input } from '@/shared/ui/Input/Input'
 import { Button } from '@/shared/ui/Button/Button'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { resolveActualExpenseCreateMutationError } from '@/shared/lib/actualExpenseCreateMutationError'
 import './CreateActualExpenseModal.css'
 
 type ScopeUI = 'OFFICE' | 'PROJECT' | 'CHARITY'
@@ -46,6 +46,8 @@ export function CreateActualExpenseModal({
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
+  const [balanceAlert, setBalanceAlert] = useState<{ title: string; hint: string } | null>(null)
+  const [amountApiError, setAmountApiError] = useState('')
   const [categorySearch, setCategorySearch] = useState('')
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
@@ -84,6 +86,8 @@ export function CreateActualExpenseModal({
       })
       setErrors({})
       setApiError('')
+      setBalanceAlert(null)
+      setAmountApiError('')
       setCategorySearch('')
       setIsCategoryOpen(false)
       setHighlightedIndex(null)
@@ -121,6 +125,8 @@ export function CreateActualExpenseModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError('')
+    setBalanceAlert(null)
+    setAmountApiError('')
 
     if (!validateForm()) {
       return
@@ -138,8 +144,14 @@ export function CreateActualExpenseModal({
       }).unwrap()
       onClose()
     } catch (err: unknown) {
-      const errorMessage = getErrorMessage(err)
-      setApiError(errorMessage || t('expenses.loadError'))
+      const { balanceAlert, amountApiError, apiError } = resolveActualExpenseCreateMutationError(
+        err,
+        t,
+        formData.amount,
+      )
+      setBalanceAlert(balanceAlert)
+      setAmountApiError(amountApiError)
+      setApiError(apiError)
     }
   }
 
@@ -171,7 +183,11 @@ export function CreateActualExpenseModal({
           <select
             className="input"
             value={formData.account}
-            onChange={(e) => setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })}
+            onChange={(e) => {
+              setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })
+              setBalanceAlert(null)
+              setAmountApiError('')
+            }}
           >
             <option value="CASH">{t('expenses.form.accountCash')}</option>
             <option value="BANK">{t('expenses.form.accountBank')}</option>
@@ -283,8 +299,15 @@ export function CreateActualExpenseModal({
           step="0.01"
           min="0.01"
           value={formData.amount}
-          onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-          error={errors.amount}
+          onChange={(e) => {
+            setFormData({ ...formData, amount: e.target.value })
+            setAmountApiError('')
+            setBalanceAlert(null)
+            if (errors.amount) {
+              setErrors((prev) => ({ ...prev, amount: '' }))
+            }
+          }}
+          error={errors.amount || amountApiError || undefined}
           required
         />
 
@@ -317,7 +340,13 @@ export function CreateActualExpenseModal({
           {errors.comment && <span className="input-error-text">{errors.comment}</span>}
         </div>
 
-        {apiError && <div className="form-error">{apiError}</div>}
+        {balanceAlert && (
+          <div className="form-error-block" role="alert">
+            <p className="form-error-block__title">{balanceAlert.title}</p>
+            <p className="form-error-block__hint">{balanceAlert.hint}</p>
+          </div>
+        )}
+        {apiError && <div className="form-error" role="alert">{apiError}</div>}
 
         <div className="form-actions">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>

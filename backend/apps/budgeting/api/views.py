@@ -11,7 +11,9 @@ from django.utils import timezone
 from django.db import transaction
 from core.permissions import IsAdmin, IsDirector
 from apps.projects.models import ProjectAssignment
-from apps.finance.services import assert_month_open_for_plans
+from apps.audit.services import AuditLogService, optional_audit_reason
+from apps.reports.invalidation import invalidate_for_budget_plan
+from apps.finance.services import assert_month_open_for_plans, FinancePeriodService
 from apps.finance.constants import MONTH_REQUIRED_MSG
 from ..models import BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod, BudgetLine, BudgetExpense
 from ..permissions import BudgetPlanPermission, BudgetLinePermission, BudgetExpensePermission, IsAdminOrReadOnly, ExpenseCategoryPermission
@@ -109,6 +111,7 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(budget_plan)
         headers = self.get_success_headers(serializer.data)
+        invalidate_for_budget_plan(budget_plan)
         if created:
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         return Response(serializer.data, status=status.HTTP_200_OK, headers=headers)
@@ -131,10 +134,15 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        invalidate_for_budget_plan(serializer.instance)
     
     def perform_destroy(self, instance):
         """Delete BudgetPlan - blocked when related month is locked or missing."""
         assert_month_open_for_plans(instance.period)
+        invalidate_for_budget_plan(instance)
         super().perform_destroy(instance)
     
     @action(detail=True, methods=['patch'], url_path='summary-comment')
@@ -367,6 +375,7 @@ class BudgetLineViewSet(viewsets.ModelViewSet):
             ).order_by('category__name')
             lines_serializer = BudgetLineSerializer(lines, many=True)
 
+        invalidate_for_budget_plan(plan)
         return Response({
             'plan': plan.id,
             'updated': updated,
@@ -381,6 +390,7 @@ class BudgetLineViewSet(viewsets.ModelViewSet):
         if plan:
             assert_month_open_for_plans(plan.period)
         serializer.save()
+        invalidate_for_budget_plan(serializer.instance.plan)
     
     def perform_update(self, serializer):
         """Update budget line (permission: admin only)."""
@@ -388,11 +398,14 @@ class BudgetLineViewSet(viewsets.ModelViewSet):
         if plan:
             assert_month_open_for_plans(plan.period)
         serializer.save()
+        invalidate_for_budget_plan(serializer.instance.plan)
     
     def perform_destroy(self, instance):
         """Delete budget line (permission: admin only)."""
         assert_month_open_for_plans(instance.plan.period)
+        plan = instance.plan
         instance.delete()
+        invalidate_for_budget_plan(plan)
 
 
 class BudgetExpenseViewSet(viewsets.ModelViewSet):
@@ -564,8 +577,6 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
         month_period.status = 'OPEN'
         month_period.save()
         
-        # Sync FinancePeriod status
-        from apps.finance.services import FinancePeriodService
         FinancePeriodService.sync_status_from_month_period(month_period)
         
         serializer = self.get_serializer(month_period)
@@ -581,13 +592,18 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
                 {'error': f'Month period status is {month_period.status}. Only LOCKED periods can be unlocked.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        month_period.status = 'OPEN'
-        month_period.save()
-        
-        # Sync FinancePeriod status
-        from apps.finance.services import FinancePeriodService
-        FinancePeriodService.sync_status_from_month_period(month_period)
+
+        reason = optional_audit_reason(request)
+        before = {'status': month_period.status, 'month': str(month_period.month)}
+        with transaction.atomic():
+            month_period.status = 'OPEN'
+            month_period.save()
+            FinancePeriodService.sync_status_from_month_period(month_period)
+            after = AuditLogService.merge_audit_reason(
+                {'status': month_period.status, 'month': str(month_period.month)},
+                reason,
+            )
+            AuditLogService.log(request.user, 'update', month_period, before=before, after=after)
         
         serializer = self.get_serializer(month_period)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -606,8 +622,6 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
         month_period.status = 'LOCKED'
         month_period.save()
         
-        # Sync FinancePeriod status
-        from apps.finance.services import FinancePeriodService
         FinancePeriodService.sync_status_from_month_period(month_period)
         
         serializer = self.get_serializer(month_period)

@@ -8,7 +8,20 @@ from django.db.models import Sum, Count, Q, Value, DecimalField
 from django.db.models.functions import Coalesce
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.audit.services import AuditLogService
-from .models import FinancePeriod, IncomeEntry, IncomePlan, IncomeSource
+from apps.reports.invalidation import (
+    invalidate_all_dashboard_kpi_caches,
+    invalidate_dashboard_kpi_for_month_period,
+)
+from apps.expenses.services import get_balance_for_account
+from .models import (
+    FinancePeriod,
+    IncomeEntry,
+    IncomePlan,
+    IncomeSource,
+    Transfer,
+    AccountLedgerLock,
+    ACCOUNT_CHOICES,
+)
 from .constants import MONTH_LOCKED_MSG, MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
 
 
@@ -18,32 +31,12 @@ def assert_month_open(month_period):
         raise PermissionDenied(MONTH_LOCKED_MSG)
 
 
-def assert_month_open_or_admin(user, month_period):
-    """Assert that month period is open OR user is admin.
-    
-    Args:
-        user: User instance
-        month_period: MonthPeriod instance or None
-        
-    Raises:
-        PermissionDenied: If month is locked and user is not admin
-    """
-    if not month_period:
-        raise PermissionDenied(MONTH_LOCKED_MSG)
-    
-    if month_period.status == 'OPEN':
-        return
-    
-    if month_period.status == 'LOCKED' and getattr(user, "role", None) == 'admin':
-        return
-    
-    raise PermissionDenied(MONTH_LOCKED_MSG)
+def assert_month_open_for_posted_facts(month_period):
+    """Posted financial facts require MonthPeriod OPEN (all roles, including admin).
 
-
-def assert_month_open_for_plans(month_period):
-    """Assert that MonthPeriod exists and is OPEN for plan-side writes.
-    
-    This applies to all users equally (no admin bypass).
+    Applies to: IncomeEntry, Transfer, apps.expenses.models.ActualExpense,
+    apps.planning.models.ActualExpense (admin-recorded), and sync paths that create them.
+    Unlock MonthPeriod explicitly before writes when the month was LOCKED.
     """
     if not month_period:
         raise PermissionDenied(MONTH_REQUIRED_MSG)
@@ -51,8 +44,46 @@ def assert_month_open_for_plans(month_period):
         raise PermissionDenied(MONTH_LOCKED_MSG)
 
 
+def assert_month_open_for_planning(month_period):
+    """Planning-side writes require MonthPeriod OPEN (all roles).
+
+    Applies to: PlanPeriod/PlanItem mutations, ProrabPlanItem writes, planning Expense,
+    and workflow actions on PlanPeriod while tied to this month.
+    If month_period is None (legacy row), the check is skipped.
+    """
+    if not month_period:
+        return
+    if month_period.status != 'OPEN':
+        raise PermissionDenied(MONTH_LOCKED_MSG)
+
+
+# Backwards-compatible alias (prefer assert_month_open_for_planning in new code).
+assert_month_open_for_planning_writes = assert_month_open_for_planning
+
+
+def assert_month_open_for_transfer_on_date(transferred_at):
+    """Transfers are posted facts: resolve MonthPeriod from date and require OPEN."""
+    from apps.budgeting.models import MonthPeriod
+
+    if not transferred_at:
+        raise PermissionDenied(MONTH_REQUIRED_MSG)
+    month_str = f"{transferred_at.year:04d}-{transferred_at.month:02d}"
+    try:
+        mp = MonthPeriod.objects.get(month=month_str)
+    except MonthPeriod.DoesNotExist:
+        raise PermissionDenied(MONTH_REQUIRED_MSG)
+    assert_month_open_for_posted_facts(mp)
+
+
+def assert_month_open_for_plans(month_period):
+    """Budget plan / BudgetLine: MonthPeriod must exist and be OPEN (same rule as planning writes)."""
+    if not month_period:
+        raise PermissionDenied(MONTH_REQUIRED_MSG)
+    assert_month_open_for_planning(month_period)
+
+
 def assert_month_exists_for_facts(month_period):
-    """Assert that MonthPeriod exists for fact-side writes (OPEN or LOCKED allowed)."""
+    """Assert MonthPeriod exists (legacy name; prefer assert_month_open_for_posted_facts for writes)."""
     if not month_period:
         raise PermissionDenied(MONTH_REQUIRED_MSG)
 
@@ -150,7 +181,7 @@ class IncomeEntryService:
     """Service for IncomeEntry business logic."""
     
     @staticmethod
-    def create(user, **data):
+    def create(user, audit_reason=None, **data):
         """Create a new income entry."""
         # Validate comment is not empty
         comment = data.get('comment', '').strip()
@@ -167,18 +198,18 @@ class IncomeEntryService:
         if not finance_period:
             raise ValidationError("Finance period is required")
         
-        # Check that related MonthPeriod exists (OPEN or LOCKED allowed for facts)
-        assert_month_exists_for_facts(finance_period.month_period)
+        assert_month_open_for_posted_facts(finance_period.month_period)
 
         data['created_by'] = user
         with transaction.atomic():
             income_entry = IncomeEntry.objects.create(**data)
-            AuditLogService.log_create(user, income_entry)
+            AuditLogService.log_create(user, income_entry, reason=audit_reason)
 
+        invalidate_all_dashboard_kpi_caches()
         return income_entry
     
     @staticmethod
-    def update(income_entry, user, **data):
+    def update(income_entry, user, audit_reason=None, **data):
         """Update an income entry."""
         # Validate comment is not empty if provided
         if 'comment' in data:
@@ -192,47 +223,36 @@ class IncomeEntryService:
             if amount <= 0:
                 raise ValidationError("Amount must be greater than zero.")
         
-        # Check that related MonthPeriod exists (from validated_data or existing instance)
         finance_period = data.get('finance_period', income_entry.finance_period)
-        assert_month_exists_for_facts(finance_period.month_period)
+        assert_month_open_for_posted_facts(finance_period.month_period)
 
-        before_state = {}
-        for field in income_entry._meta.fields:
-            if field.name not in ['id', 'created_at', 'updated_at']:
-                value = getattr(income_entry, field.name, None)
-                if value is not None:
-                    if hasattr(value, 'pk'):
-                        before_state[field.name] = value.pk
-                    else:
-                        before_state[field.name] = value
+        before_state = AuditLogService.model_field_snapshot(income_entry)
 
         with transaction.atomic():
             for key, value in data.items():
                 setattr(income_entry, key, value)
             income_entry.save()
-            AuditLogService.log_update(user, income_entry, before_state)
+            AuditLogService.log_update(user, income_entry, before_state, reason=audit_reason)
 
+        invalidate_all_dashboard_kpi_caches()
         return income_entry
     
     @staticmethod
-    def delete(income_entry, user):
+    def delete(income_entry, user, audit_reason=None):
         """Delete an income entry."""
-        # Check that related MonthPeriod exists
-        assert_month_exists_for_facts(income_entry.finance_period.month_period)
+        assert_month_open_for_posted_facts(income_entry.finance_period.month_period)
 
-        # Capture object_id BEFORE deletion
         object_id = income_entry.pk
-
-        before_state = {
-            'id': income_entry.id,
-            'finance_period_id': income_entry.finance_period_id,
-            'amount': str(income_entry.amount),
-            'received_at': str(income_entry.received_at),
-        }
+        before_state = AuditLogService.model_field_snapshot(income_entry)
+        before_state['id'] = income_entry.id
 
         with transaction.atomic():
             income_entry.delete()
-            AuditLogService.log_delete(user, income_entry, before_state, object_id_override=object_id)
+            AuditLogService.log_delete(
+                user, income_entry, before_state, object_id_override=object_id, reason=audit_reason
+            )
+
+        invalidate_all_dashboard_kpi_caches()
 
 
 class IncomePlanService:
@@ -401,6 +421,7 @@ class IncomePlanService:
         except IntegrityError as exc:
             IncomePlanService._raise_duplicate_plan_validation_error(exc)
 
+        invalidate_dashboard_kpi_for_month_period(income_plan.period.month_period)
         return income_plan
     
     @staticmethod
@@ -418,6 +439,8 @@ class IncomePlanService:
         
         # Check period is open
         IncomePlanService.assert_period_open(income_plan)
+
+        old_month_period = income_plan.period.month_period
 
         before_state = {}
         for field in income_plan._meta.fields:
@@ -442,6 +465,10 @@ class IncomePlanService:
         except IntegrityError as exc:
             IncomePlanService._raise_duplicate_plan_validation_error(exc)
 
+        new_month_period = income_plan.period.month_period
+        invalidate_dashboard_kpi_for_month_period(old_month_period)
+        if new_month_period.pk != old_month_period.pk:
+            invalidate_dashboard_kpi_for_month_period(new_month_period)
         return income_plan
     
     @staticmethod
@@ -452,6 +479,7 @@ class IncomePlanService:
 
         # Capture object_id BEFORE deletion
         object_id = income_plan.pk
+        month_period = income_plan.period.month_period
 
         before_state = {
             'id': income_plan.id,
@@ -463,6 +491,8 @@ class IncomePlanService:
         with transaction.atomic():
             income_plan.delete()
             AuditLogService.log_delete(user, income_plan, before_state, object_id_override=object_id)
+
+        invalidate_dashboard_kpi_for_month_period(month_period)
 
 
 class IncomeSummaryService:
@@ -583,3 +613,90 @@ class IncomeSummaryService:
             'actual_total': str(actual_total.quantize(Decimal('0.01'))),
             'diff_total': str(diff_total.quantize(Decimal('0.01')))
         }
+
+
+_ACCOUNT_CHOICES_DICT = dict(ACCOUNT_CHOICES)
+
+
+class TransferService:
+    """Transfer (cash↔bank) CRUD with month lock checks and audit trail."""
+
+    @staticmethod
+    def create(user, audit_reason=None, **validated_data):
+        transferred_at = validated_data.get('transferred_at')
+        assert_month_open_for_transfer_on_date(transferred_at)
+        src = validated_data.get('source_account')
+        amount = validated_data.get('amount')
+        validated_data = dict(validated_data)
+        validated_data['created_by'] = user
+
+        if src in _ACCOUNT_CHOICES_DICT and amount is not None and transferred_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                balance = get_balance_for_account(
+                    src,
+                    transferred_at,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=None,
+                )
+                if balance < amount:
+                    label = _ACCOUNT_CHOICES_DICT.get(src, src)
+                    raise ValidationError(
+                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                    )
+                transfer = Transfer.objects.create(**validated_data)
+                AuditLogService.log_create(user, transfer, reason=audit_reason)
+        else:
+            with transaction.atomic():
+                transfer = Transfer.objects.create(**validated_data)
+                AuditLogService.log_create(user, transfer, reason=audit_reason)
+        invalidate_all_dashboard_kpi_caches()
+        return transfer
+
+    @staticmethod
+    def update(transfer, user, audit_reason=None, **data):
+        transferred_at = data.get('transferred_at', transfer.transferred_at)
+        assert_month_open_for_transfer_on_date(transferred_at)
+        src = data.get('source_account', transfer.source_account)
+        amount = data.get('amount', transfer.amount)
+        before_state = AuditLogService.model_field_snapshot(transfer)
+
+        if src in _ACCOUNT_CHOICES_DICT and amount is not None and transferred_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                balance = get_balance_for_account(
+                    src,
+                    transferred_at,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=transfer.pk,
+                )
+                if balance < amount:
+                    label = _ACCOUNT_CHOICES_DICT.get(src, src)
+                    raise ValidationError(
+                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                    )
+                for key, value in data.items():
+                    setattr(transfer, key, value)
+                transfer.save()
+                AuditLogService.log_update(user, transfer, before_state, reason=audit_reason)
+        else:
+            with transaction.atomic():
+                for key, value in data.items():
+                    setattr(transfer, key, value)
+                transfer.save()
+                AuditLogService.log_update(user, transfer, before_state, reason=audit_reason)
+        invalidate_all_dashboard_kpi_caches()
+        return transfer
+
+    @staticmethod
+    def delete(transfer, user, audit_reason=None):
+        assert_month_open_for_transfer_on_date(transfer.transferred_at)
+        object_id = transfer.pk
+        before_state = AuditLogService.model_field_snapshot(transfer)
+        before_state['id'] = transfer.id
+        with transaction.atomic():
+            transfer.delete()
+            AuditLogService.log_delete(
+                user, transfer, before_state, object_id_override=object_id, reason=audit_reason
+            )
+        invalidate_all_dashboard_kpi_caches()

@@ -250,11 +250,11 @@ class TestActualExpenseRBAC:
         response = client.get(f'/api/v1/actual-expenses/{office_expense.id}/')
         assert response.status_code == 403
 
-    def test_foreman_without_assignment_cannot_access_project_expenses(
+    def test_foreman_without_assignment_can_list_project_expenses(
         self, month_period, category_project, foreman_user, admin_user
     ):
-        """Foreman must have at least one ProjectAssignment to use PROJECT expense reports APIs."""
-        ActualExpense.objects.create(
+        """PROJECT-scope expense reads do not require ProjectAssignment."""
+        expense = ActualExpense.objects.create(
             month_period=month_period,
             scope='PROJECT',
             category=category_project,
@@ -269,4 +269,6 @@ class TestActualExpenseRBAC:
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
 
         response = client.get('/api/v1/actual-expenses/?scope=PROJECT')
-        assert response.status_code == 403
+        assert response.status_code == 200
+        ids = [exp['id'] for exp in response.data['results']]
+        assert expense.id in ids

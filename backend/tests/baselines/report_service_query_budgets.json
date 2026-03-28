@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "Upper bounds on SQL query count for cold report builders (REPORTS_CACHE_ENABLED=false, minimal MonthPeriod-only DB). Measured on SQLite with empty related rows; tighten after PostgreSQL baselines if needed.",
+  "with_minimal_db": {
+    "dashboard_kpi": { "max_queries": 40 },
+    "monthly_office": { "max_queries": 8 },
+    "monthly_project": { "max_queries": 8 },
+    "monthly_charity": { "max_queries": 8 },
+    "dashboard_expense_categories_all": { "max_queries": 8 },
+    "dashboard_income_sources_all": { "max_queries": 8 },
+    "transfer_details_json": { "max_queries": 8 }
+  }
+}

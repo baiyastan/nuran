@@ -17,8 +17,17 @@ from core.exceptions import (
 )
 from apps.finance.constants import MONTH_REQUIRED_MSG
 from ..models import PlanPeriod, PlanItem, ProrabPlan, ProrabPlanItem, ActualExpense, Expense
-from ..services import PlanPeriodService, PlanItemService, ProrabPlanService, ActualExpenseService, ExpenseService, PlanningExpenseActualExpenseSyncService, assert_plan_editing_allowed
-from apps.finance.services import assert_month_open
+from ..services import (
+    PlanPeriodService,
+    PlanItemService,
+    ProrabPlanService,
+    ActualExpenseService,
+    ExpenseService,
+    PlanningExpenseActualExpenseSyncService,
+    assert_plan_editing_allowed,
+    assert_plan_editable,
+)
+from apps.finance.services import assert_month_open_for_planning
 from .serializers import (
     PlanPeriodSerializer, PlanItemSerializer,
     ProjectAssignmentSerializer, ProrabPlanPeriodSerializer,
@@ -28,7 +37,7 @@ from .serializers import (
 )
 from ..permissions import PlanPeriodPermission, PlanItemPermission, ProrabPlanPermission, ActualExpensePermission, ExpensePermission
 from ..filters import PlanItemFilter
-from apps.projects.models import ProjectAssignment, Project
+from apps.projects.models import Project
 from apps.projects.api.serializers import ProjectSerializer
 
 
@@ -49,12 +58,9 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         queryset = queryset.select_related('project', 'created_by')
         
-        # Foreman can only see plan periods for assigned projects
         if self.request.user.role == 'foreman':
-            queryset = queryset.filter(
-                project__assignments__prorab=self.request.user
-            ).distinct()
-        
+            queryset = queryset.filter(fund_kind='project')
+
         return queryset
     
     def perform_create(self, serializer):
@@ -65,15 +71,12 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         project = serializer.validated_data.get('project')
         user = self.request.user
         
-        # Foreman can only create project plans for assigned projects
         if user.role == 'foreman':
             if fund_kind != 'project':
                 raise PermissionDenied('Foreman can only create project plans. Office/charity plans are not allowed.')
             if not project:
                 raise PermissionDenied('Project is required for foreman plan creation.')
-            if not ProjectAssignment.objects.filter(project=project, prorab=user).exists():
-                raise PermissionDenied("You don't have access to this project.")
-        
+
         if fund_kind == 'project':
             if not project:
                 from rest_framework.exceptions import ValidationError
@@ -113,9 +116,7 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         plan_period = serializer.instance
         user = self.request.user
 
-        # Foreman: can only update project plans for assigned projects
         if user.role == 'foreman':
-            # Merge validated_data with instance to get effective values after update
             effective_fund_kind = serializer.validated_data.get('fund_kind', plan_period.fund_kind)
             effective_project = serializer.validated_data.get('project', plan_period.project)
             if effective_project is None and 'project' in serializer.validated_data:
@@ -125,8 +126,6 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
                 raise PermissionDenied('Foreman can only update project plans. Office/charity plans are not allowed.')
             if not effective_project:
                 raise PermissionDenied('Project is required for foreman plan update.')
-            if not ProjectAssignment.objects.filter(project=effective_project, prorab=user).exists():
-                raise PermissionDenied("You don't have access to this project.")
 
         service = PlanPeriodService()
         plan_period = service.update(
@@ -140,15 +139,13 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         """Delete plan period with foreman access check."""
         user = self.request.user
 
-        # Foreman: can only delete project plans for assigned projects
         if user.role == 'foreman':
             if instance.fund_kind != 'project':
                 raise PermissionDenied('Foreman can only delete project plans. Office/charity plans are not allowed.')
             if not instance.project:
                 raise PermissionDenied('Foreman cannot delete plan periods without a project.')
-            if not ProjectAssignment.objects.filter(project=instance.project, prorab=user).exists():
-                raise PermissionDenied("You don't have access to this project.")
 
+        assert_month_open_for_planning(instance.month_period)
         instance.delete()
     
     @action(detail=True, methods=['post'], url_path='submit')
@@ -244,22 +241,9 @@ class PlanItemViewSet(viewsets.ModelViewSet):
             'created_by'
         )
         
-        # Foreman can only see plan items from assigned projects (exclude office/charity)
-        # Only filter if assignments exist for projects (backward compatibility)
         if self.request.user.role == 'foreman':
-            from apps.projects.models import ProjectAssignment
-            # Check if any projects have assignments at all
-            has_any_assignments = ProjectAssignment.objects.exists()
-            if has_any_assignments:
-                # If assignments exist, filter by assignment
-                queryset = queryset.filter(
-                    plan_period__fund_kind='project',
-                    plan_period__project__assignments__prorab=self.request.user
-                ).distinct()
-            else:
-                # If no assignments exist, allow foreman to see all project plan items (backward compatibility)
-                queryset = queryset.filter(plan_period__fund_kind='project')
-        
+            queryset = queryset.filter(plan_period__fund_kind='project')
+
         return queryset
     
     def perform_create(self, serializer):
@@ -267,32 +251,9 @@ class PlanItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         plan_period = serializer.validated_data.get('plan_period')
         
-        # Defense-in-depth: check month period lock status
         if plan_period:
-            month_period = plan_period.month_period
-            assert_plan_editing_allowed(month_period, user)
-        
-        # Defense-in-depth: foreman validation
-        if user.role == 'foreman':
-            if not plan_period:
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({'plan_period': 'Plan period is required'})
-            
-            # Reject if fund_kind is not 'project'
-            if plan_period.fund_kind != 'project':
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({'plan_period': 'Foreman can only create plan items for project plans'})
-            
-            # Reject if project is null
-            if not plan_period.project:
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({'plan_period': 'Foreman can only create plan items for project plans with an assigned project'})
-            
-            # Verify foreman is assigned to the project
-            if not ProjectAssignment.objects.filter(project=plan_period.project, prorab=user).exists():
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({'plan_period': 'You are not assigned to this project'})
-        
+            assert_plan_editing_allowed(plan_period.month_period, user)
+
         service = PlanItemService()
         plan_item = service.create(
             user=user,
@@ -327,16 +288,19 @@ class PlanItemViewSet(viewsets.ModelViewSet):
 
 
 class ProrabProjectsViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for listing projects assigned to the current prorab."""
+    """ViewSet for listing projects in prorab context (all active projects; assignment not required for planning)."""
     
     serializer_class = ProrabProjectSerializer
     permission_classes = [ProrabPlanPermission]
     
     def get_queryset(self):
-        """Get projects assigned to the current prorab."""
-        return Project.objects.filter(
-            assignments__prorab=self.request.user
-        ).distinct().select_related('created_by').prefetch_related('assignments').exclude(name__iexact='office')
+        """Active projects (PROJECT scope); `assigned_at` in serializer is optional per row."""
+        return (
+            Project.objects.filter(status='active')
+            .select_related('created_by')
+            .prefetch_related('assignments')
+            .exclude(name__iexact='office')
+        )
     
     def get_serializer_context(self):
         """Add request to serializer context for assigned_at calculation."""
@@ -352,20 +316,11 @@ class ProrabPlanPeriodsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [ProrabPlanPermission]
     
     def get_queryset(self):
-        """Get plan periods for the project assigned to the current prorab."""
+        """Plan periods for a project (foreman; no ProjectAssignment gate)."""
         project_id = self.kwargs.get('project_id')
-        
-        # Verify prorab is assigned to this project
-        is_assigned = ProjectAssignment.objects.filter(
-            project_id=project_id,
-            prorab=self.request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
         return PlanPeriod.objects.filter(
-            project_id=project_id
+            project_id=project_id,
+            fund_kind='project',
         ).select_related('project').order_by('-period')
 
 
@@ -391,15 +346,6 @@ class ProrabPlanViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import NotFound
             raise NotFound(detail='Plan period not found')
         
-        # Verify assignment
-        is_assigned = ProjectAssignment.objects.filter(
-            project=period.project,
-            prorab=request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
         # Get or create plan
         plan = ProrabPlanService.get_or_create_plan(period, request.user)
         
@@ -418,16 +364,7 @@ class ProrabPlanViewSet(viewsets.ModelViewSet):
         plan = get_object_or_404(ProrabPlan.objects.all(), pk=pk)
         # Explicitly check object permissions to enforce RBAC
         self.check_object_permissions(request, plan)
-        
-        # Verify assignment
-        is_assigned = ProjectAssignment.objects.filter(
-            project=plan.period.project,
-            prorab=request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
+
         # Calculate totals
         totals = ActualExpenseService.calculate_totals(plan)
         
@@ -447,16 +384,7 @@ class ProrabPlanViewSet(viewsets.ModelViewSet):
         plan = get_object_or_404(ProrabPlan.objects.all(), pk=pk)
         # Explicitly check object permissions to enforce RBAC
         self.check_object_permissions(request, plan)
-        
-        # Verify assignment
-        is_assigned = ProjectAssignment.objects.filter(
-            project=plan.period.project,
-            prorab=request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
+
         # Get expenses for this plan
         expenses = ActualExpenseService.get_expenses_for_plan(plan)
         
@@ -485,16 +413,10 @@ class ProrabPlanItemViewSet(viewsets.ModelViewSet):
             )
         except ProrabPlan.DoesNotExist:
             raise ForbiddenError(detail='Plan not found or access denied')
-        
-        # Verify ProjectAssignment exists
-        is_assigned = ProjectAssignment.objects.filter(
-            project=plan.period.project,
-            prorab=self.request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
+
+        assert_month_open_for_planning(plan.period.month_period)
+        assert_plan_editable(plan.period)
+
         # Check if editable - only DRAFT status allows editing
         if plan.status != 'draft':
             raise NotEditableError(detail=f'Plan cannot be edited. Current status: {plan.status}. Only DRAFT plans can be edited.')
@@ -516,16 +438,10 @@ class ProrabPlanItemViewSet(viewsets.ModelViewSet):
         # Verify plan belongs to user
         if plan.prorab != self.request.user:
             raise ForbiddenError(detail='Plan not found or access denied')
-        
-        # Verify ProjectAssignment exists
-        is_assigned = ProjectAssignment.objects.filter(
-            project=plan.period.project,
-            prorab=self.request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
+
+        assert_month_open_for_planning(plan.period.month_period)
+        assert_plan_editable(plan.period)
+
         # Check if editable - only DRAFT status allows editing
         if plan.status != 'draft':
             raise NotEditableError(detail=f'Plan cannot be edited. Current status: {plan.status}. Only DRAFT plans can be edited.')
@@ -544,16 +460,10 @@ class ProrabPlanItemViewSet(viewsets.ModelViewSet):
         # Verify plan belongs to user
         if plan.prorab != self.request.user:
             raise ForbiddenError(detail='Plan not found or access denied')
-        
-        # Verify ProjectAssignment exists
-        is_assigned = ProjectAssignment.objects.filter(
-            project=plan.period.project,
-            prorab=self.request.user
-        ).exists()
-        
-        if not is_assigned:
-            raise ForbiddenError(detail='You are not assigned to this project')
-        
+
+        assert_month_open_for_planning(plan.period.month_period)
+        assert_plan_editable(plan.period)
+
         # Check if editable - only DRAFT status allows editing
         if plan.status != 'draft':
             raise NotEditableError(detail=f'Plan cannot be edited. Current status: {plan.status}. Only DRAFT plans can be edited.')
@@ -578,7 +488,9 @@ class ProrabPlanSubmitView(APIView):
         except ProrabPlan.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound(detail='Plan not found or access denied')
-        
+
+        assert_month_open_for_planning(plan.period.month_period)
+
         try:
             plan = ProrabPlanService.submit_plan(plan, request.user)
             serializer = ProrabPlanSerializer(plan)
@@ -628,22 +540,15 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
         if self.request.user.role == 'director':
             return queryset
         
-        # Foreman: can only see expenses for projects assigned to that foreman
+        # Foreman: all project fund_kind actuals (no assignment filter)
         if self.request.user.role == 'foreman':
-            queryset = queryset.filter(
-                finance_period__fund_kind='project',
-                finance_period__project__assignments__prorab=self.request.user
-            ).distinct()
-            return queryset
+            return queryset.filter(finance_period__fund_kind='project')
         
         # Others: no access (permission class handles this)
         return queryset.none()
     
     def perform_create(self, serializer):
         """Create actual expense with audit logging."""
-        # Note: Month period lock does NOT affect expenses - expenses can be created even when month is LOCKED
-        
-        # Call service
         expense = ActualExpenseService.create(
             user=self.request.user,
             **serializer.validated_data
@@ -652,9 +557,6 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
     
     def perform_update(self, serializer):
         """Update actual expense with audit logging."""
-        # Note: Month period lock does NOT affect expenses - expenses can be updated even when month is LOCKED
-        
-        # Call service
         ActualExpenseService.update(
             expense=serializer.instance,
             user=self.request.user,
@@ -663,9 +565,6 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
     
     def perform_destroy(self, instance):
         """Delete actual expense with audit logging."""
-        # Note: Month period lock does NOT affect expenses - expenses can be deleted even when month is LOCKED
-        
-        # Call service
         ActualExpenseService.delete(expense=instance, user=self.request.user)
 
 

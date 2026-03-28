@@ -213,5 +213,21 @@ if REDIS_URL:
             },
         }
     }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'default-locmem',
+        }
+    }
+
+# Short TTL for dashboard KPI / monthly report aggregates (safe, read-only snapshots).
+REPORTS_CACHE_TTL = int(os.environ.get('REPORTS_CACHE_TTL', '90'))
+# Off by default when DEBUG=True (tests/local); enable in production or set REPORTS_CACHE_ENABLED=1.
+_reports_cache_env = os.environ.get('REPORTS_CACHE_ENABLED')
+if _reports_cache_env is not None:
+    REPORTS_CACHE_ENABLED = _reports_cache_env.lower() in ('1', 'true', 'yes')
+else:
+    REPORTS_CACHE_ENABLED = not DEBUG
 
 

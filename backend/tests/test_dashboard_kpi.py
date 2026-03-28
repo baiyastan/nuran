@@ -1,6 +1,8 @@
 """
 Tests for dashboard KPI endpoint.
 """
+import calendar
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -12,6 +14,8 @@ from apps.projects.models import Project
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
 from apps.finance.constants import MONTH_REQUIRED_MSG
 from apps.finance.models import FinancePeriod, IncomeEntry, IncomePlan, IncomeSource
+from apps.planning.models import ActualExpense as PlanningActualExpense
+from apps.expenses.services import get_balance_for_account
 
 
 User = get_user_model()
@@ -166,6 +170,7 @@ class TestDashboardKpiAPI:
     assert Decimal(data["bank_outflow_month"]) == Decimal("0.00")
     assert Decimal(data["cash_closing_balance"]) == Decimal("0.00")
     assert Decimal(data["bank_closing_balance"]) == Decimal("0.00")
+    assert Decimal(data["planning_actual_expense_total"]) == Decimal("0.00")
 
   def test_aggregates_income_and_expenses_across_scopes(
       self,
@@ -580,4 +585,89 @@ class TestDashboardKpiAPI:
     assert Decimal(data["expense_plan"]) == Decimal("500.00")
     # Net plan: 600 - 500 = 100
     assert Decimal(data["net_plan"]) == Decimal("100.00")
+
+
+class TestDashboardKpiPlanningVsExpenseActualSemantics:
+    """planning.ActualExpense is exposed separately; expense_fact matches expenses app only."""
+
+    def test_expense_fact_and_net_use_only_expense_app_actuals(
+        self,
+        api_client_admin,
+        month_period_open,
+        finance_period_office,
+    ):
+        ExpenseActualExpense.objects.create(
+            month_period=month_period_open,
+            scope="OFFICE",
+            category=None,
+            account="CASH",
+            amount=Decimal("100.00"),
+            spent_at="2024-02-01",
+            comment="cash expense",
+            created_by=finance_period_office.created_by,
+        )
+        PlanningActualExpense.objects.create(
+            finance_period=finance_period_office,
+            name="Planning spend",
+            amount=Decimal("999.00"),
+            spent_at="2024-02-02",
+            comment="synced planning",
+            created_by=finance_period_office.created_by,
+        )
+
+        r = api_client_admin.get("/api/v1/reports/dashboard-kpis/?month=2024-02")
+        assert r.status_code == 200
+        d = r.data
+        assert Decimal(d["expense_fact"]) == Decimal("100.00")
+        assert Decimal(d["planning_actual_expense_total"]) == Decimal("999.00")
+        assert Decimal(d["net"]) == Decimal("-100.00")
+
+    def test_planning_only_month_shows_zero_expense_fact_nonzero_planning_field(
+        self,
+        api_client_admin,
+        month_period_open,
+        finance_period_office,
+    ):
+        PlanningActualExpense.objects.create(
+            finance_period=finance_period_office,
+            name="Only planning",
+            amount=Decimal("50.00"),
+            spent_at="2024-02-10",
+            comment="c",
+            created_by=finance_period_office.created_by,
+        )
+        r = api_client_admin.get("/api/v1/reports/dashboard-kpis/?month=2024-02")
+        assert r.status_code == 200
+        d = r.data
+        assert Decimal(d["expense_fact"]) == Decimal("0.00")
+        assert Decimal(d["planning_actual_expense_total"]) == Decimal("50.00")
+        assert Decimal(d["net"]) == Decimal("0.00")
+
+    def test_get_balance_for_account_ignores_planning_actual_expense(
+        self,
+        month_period_open,
+        finance_period_office,
+    ):
+        """Balance helper uses only apps.expenses.ActualExpense; planning rows do not debit CASH/BANK."""
+        ExpenseActualExpense.objects.create(
+            month_period=month_period_open,
+            scope="OFFICE",
+            category=None,
+            account="CASH",
+            amount=Decimal("75.00"),
+            spent_at="2024-02-14",
+            comment="e",
+            created_by=finance_period_office.created_by,
+        )
+        PlanningActualExpense.objects.create(
+            finance_period=finance_period_office,
+            name="Planning",
+            amount=Decimal("999.00"),
+            spent_at="2024-02-15",
+            comment="p",
+            created_by=finance_period_office.created_by,
+        )
+        last = date(2024, 2, calendar.monthrange(2024, 2)[1])
+        bal = get_balance_for_account("CASH", last)
+        assert bal == Decimal("-75.00")
 

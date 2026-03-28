@@ -3,8 +3,10 @@ Planning permissions.
 """
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
-from apps.projects.models import ProjectAssignment
 from apps.finance.constants import ADMIN_ONLY_MSG
+
+from .models import PlanPeriod, ProrabPlan, ProrabPlanItem
+from .services import is_plan_period_editable
 
 
 # Helper functions
@@ -33,21 +35,12 @@ def _is_foreman(user):
     return user.role == 'foreman'
 
 
-def _foreman_assigned_to_project(user, project):
-    """Check if foreman is assigned to project."""
-    if not project:
-        return False
-    return ProjectAssignment.objects.filter(
-        project=project,
-        prorab=user
-    ).exists()
-
-
 def _foreman_can_see_actual_expense(user, actual_expense):
-    """Check if foreman can see actual expense (project fund_kind and assigned)."""
-    if not actual_expense.finance_period or actual_expense.finance_period.fund_kind != 'project':
-        return False
-    return _foreman_assigned_to_project(user, actual_expense.finance_period.project)
+    """Foreman may read planning actuals tied to project finance periods only."""
+    return (
+        actual_expense.finance_period is not None
+        and actual_expense.finance_period.fund_kind == 'project'
+    )
 
 
 class ActualExpensePermission(permissions.BasePermission):
@@ -88,7 +81,7 @@ class ActualExpensePermission(permissions.BasePermission):
                 return True
             _deny()
         
-        # Foreman: read-only (SAFE_METHODS only) AND can only see expenses for projects assigned to that foreman
+        # Foreman: read-only; project fund_kind only
         if _is_foreman(request.user):
             if _is_safe(request):
                 return _foreman_can_see_actual_expense(request.user, obj)
@@ -187,77 +180,48 @@ class PlanItemPermission(permissions.BasePermission):
         return request.user.role == 'admin'
 
 
+def _resolve_prorab_permission_period_and_plan(obj):
+    """Return (plan_period, prorab_plan_or_none). prorab_plan is None when obj is only PlanPeriod."""
+    if isinstance(obj, PlanPeriod):
+        return obj, None
+    if isinstance(obj, ProrabPlan):
+        return obj.period, obj
+    if isinstance(obj, ProrabPlanItem):
+        return obj.plan.period, obj.plan
+    return None, None
+
+
 class ProrabPlanPermission(permissions.BasePermission):
-    """Permission for ProrabPlan operations - foreman can only access assigned projects."""
-    
+    """Prorab API: foreman only; project scope without ProjectAssignment; month/plan rules in views/services."""
+
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        
-        # Only foreman can access prorab endpoints
         if request.user.role != 'foreman':
             return False
-        
-        # Read operations: foreman can access assigned projects
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if not request.user or request.user.role != 'foreman':
+            return False
+
+        period, prorab_plan = _resolve_prorab_permission_period_and_plan(obj)
+        if period is None or period.fund_kind != 'project' or not period.project_id:
+            return False
+
         if request.method in permissions.SAFE_METHODS:
             return True
-        
-        # Write operations: check in has_object_permission
-        return True
-    
-    def has_object_permission(self, request, view, obj):
-        """Object-level permission check for prorab plans."""
-        from apps.projects.models import ProjectAssignment
-        
-        # Read: foreman can access if assigned to project
-        if request.method in permissions.SAFE_METHODS:
-            # Check if prorab is assigned to the project
-            period = getattr(obj, 'period', None)
-            if not period:
-                # For plan items, get period through plan
-                plan = getattr(obj, 'plan', None)
-                if plan:
-                    period = plan.period
-                else:
-                    return False
-            
-            project = period.project
-            is_assigned = ProjectAssignment.objects.filter(
-                project=project,
-                prorab=request.user
-            ).exists()
-            return is_assigned
-        
-        # Write operations: only when period is OPEN and plan status is DRAFT or REJECTED
-        period = getattr(obj, 'period', None)
-        if not period:
-            plan = getattr(obj, 'plan', None)
-            if plan:
-                period = plan.period
-                plan_obj = plan
-            else:
+
+        if not is_plan_period_editable(period):
+            return False
+
+        if prorab_plan is not None:
+            if prorab_plan.status not in ('draft', 'rejected'):
                 return False
         else:
-            plan_obj = obj
-        
-        # Check assignment
-        project = period.project
-        is_assigned = ProjectAssignment.objects.filter(
-            project=project,
-            prorab=request.user
-        ).exists()
-        
-        if not is_assigned:
-            return False
-        
-        # Check period status (must be OPEN)
-        if period.status != 'open':
-            return False
-        
-        # Check plan status (must be DRAFT or REJECTED for editing)
-        if plan_obj.status not in ('draft', 'rejected'):
-            return False
-        
+            if period.status not in ('draft', 'open'):
+                return False
+
         return True
 
 

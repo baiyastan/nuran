@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from decimal import Decimal
 from apps.budgeting.models import BudgetPlan, BudgetLine, ExpenseCategory, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
+from apps.planning.models import ActualExpense as PlanningActualExpense
 from apps.projects.models import Project, ProjectAssignment
 from apps.finance.models import FinancePeriod
 from apps.finance.constants import MONTH_REQUIRED_MSG
@@ -350,5 +351,43 @@ class TestMonthlyReportAPI:
         response = foreman_api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
         assert response.status_code == 200
         assert response.data['scope'] == 'PROJECT'
+
+    def test_planning_actual_expense_does_not_affect_monthly_report_actuals(
+        self,
+        api_client,
+        budget_plan_project,
+        subcategory_project,
+        month_period,
+        finance_period_project,
+        admin_user,
+    ):
+        """Monthly report actuals = ExpenseActualExpense only; planning.ActualExpense ignored."""
+        BudgetLine.objects.create(
+            plan=budget_plan_project,
+            category=subcategory_project,
+            amount_planned=Decimal('100.00'),
+        )
+        ExpenseActualExpense.objects.create(
+            month_period=month_period,
+            scope='PROJECT',
+            category=subcategory_project,
+            account='CASH',
+            amount=Decimal('40.00'),
+            spent_at='2024-01-20',
+            comment='expense app',
+            created_by=admin_user,
+        )
+        PlanningActualExpense.objects.create(
+            finance_period=finance_period_project,
+            name='Planning only',
+            amount=Decimal('10000.00'),
+            spent_at='2024-01-21',
+            comment='planning track',
+            created_by=admin_user,
+        )
+        response = api_client.get('/api/v1/reports/monthly/?month=2024-01&scope=PROJECT')
+        assert response.status_code == 200
+        assert response.data['totals']['actual'] == 40.0
+        assert response.data['facts']['total_actual'] == 40.0
 
 

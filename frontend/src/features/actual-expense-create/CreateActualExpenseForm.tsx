@@ -5,7 +5,7 @@ import { useListExpenseCategoriesQuery } from '@/shared/api/expenseCategoriesApi
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Input } from '@/shared/ui/Input/Input'
 import { Button } from '@/shared/ui/Button/Button'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { resolveActualExpenseCreateMutationError } from '@/shared/lib/actualExpenseCreateMutationError'
 import { CreateCategoryModal } from '@/features/expense-category-create/CreateCategoryModal'
 import './CreateActualExpenseForm.css'
 
@@ -30,6 +30,7 @@ export function CreateActualExpenseForm({
   const { role } = useAuth()
   const canManage = role === 'admin'
   const { t } = useTranslation(['categories', 'common', 'expenses'])
+  const { t: tTrans } = useTranslation()
   const [formData, setFormData] = useState({
     scope: 'project' as 'project' | 'office' | 'charity',
     categoryId: null as number | null,
@@ -40,6 +41,8 @@ export function CreateActualExpenseForm({
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [apiError, setApiError] = useState('')
+  const [balanceAlert, setBalanceAlert] = useState<{ title: string; hint: string } | null>(null)
+  const [amountApiError, setAmountApiError] = useState('')
   const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false)
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
   const [categorySearch, setCategorySearch] = useState('')
@@ -99,6 +102,8 @@ export function CreateActualExpenseForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError('')
+    setBalanceAlert(null)
+    setAmountApiError('')
     setErrors({})
 
     if (!validateForm()) {
@@ -137,6 +142,9 @@ export function CreateActualExpenseForm({
 
       await createExpense(payload as unknown as Parameters<ReturnType<typeof useCreateActualExpenseMutation>[0]>[0]).unwrap()
       onSuccess?.()
+      setApiError('')
+      setBalanceAlert(null)
+      setAmountApiError('')
       setFormData({
         scope: 'project',
         categoryId: null,
@@ -146,8 +154,10 @@ export function CreateActualExpenseForm({
         comment: '',
       })
     } catch (err: unknown) {
-      const errorMessage = getErrorMessage(err)
-      setApiError(errorMessage || 'Failed to create expense')
+      const resolved = resolveActualExpenseCreateMutationError(err, tTrans, formData.amount)
+      setBalanceAlert(resolved.balanceAlert)
+      setAmountApiError(resolved.amountApiError)
+      setApiError(resolved.apiError)
     }
   }
 
@@ -286,8 +296,16 @@ export function CreateActualExpenseForm({
         step="0.01"
         min="0"
         value={formData.amount}
-        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-        error={errors.amount}
+        onChange={(e) => {
+          setFormData({ ...formData, amount: e.target.value })
+          setAmountApiError('')
+          setBalanceAlert(null)
+          setApiError('')
+          if (errors.amount) {
+            setErrors((prev) => ({ ...prev, amount: '' }))
+          }
+        }}
+        error={errors.amount || amountApiError || undefined}
         required
       />
 
@@ -320,7 +338,17 @@ export function CreateActualExpenseForm({
         {errors.comment && <span className="input-error-text">{errors.comment}</span>}
       </div>
 
-      {apiError && <div className="form-error">{apiError}</div>}
+      {balanceAlert && (
+        <div className="form-error-block" role="alert">
+          <p className="form-error-block__title">{balanceAlert.title}</p>
+          <p className="form-error-block__hint">{balanceAlert.hint}</p>
+        </div>
+      )}
+      {apiError && (
+        <div className="form-error" role="alert">
+          {apiError}
+        </div>
+      )}
 
       <div className="form-actions">
         {onCancel && (

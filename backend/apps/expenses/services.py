@@ -15,7 +15,13 @@ from .base import get_expenses_for_month, extract_year_month
 def get_balance_for_account(account, as_of_date, exclude_expense_id=None, exclude_transfer_id=None):
     """
     Compute available balance for an account (CASH or BANK) as of a given date.
-    Formula matches DashboardKpiView: income - expense + transfers_in - transfers_out.
+
+    Debits use only apps.expenses.models.ActualExpense (CASH/BANK + spent_at). This matches
+    DashboardKpiView cash_outflow_month / bank_outflow_month and expense_fact (which sums
+    the same ActualExpense rows for the month, all scopes). apps.planning.ActualExpense is
+    not used here — it has no account field and is not part of balance.
+
+    Formula: income (IncomeEntry on this account) - those expenses + transfers_in - transfers_out.
 
     Args:
         account: 'CASH' or 'BANK'

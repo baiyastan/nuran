@@ -4,6 +4,7 @@ Tests for PlanningExpenseActualExpenseSyncService month period resolution.
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied
 
 from apps.projects.models import Project
 from apps.planning.models import PlanPeriod, PlanItem, Expense
@@ -110,8 +111,8 @@ def test_resolve_finance_period_creates_open_financeperiod_for_open_month(projec
 
 
 @pytest.mark.django_db
-def test_resolve_finance_period_creates_locked_financeperiod_for_locked_month(project, admin_user):
-    """Auto-created FinancePeriod should inherit 'locked' status when MonthPeriod is LOCKED."""
+def test_resolve_finance_period_does_not_create_financeperiod_when_month_locked(project, admin_user):
+    """LOCKED month must not get a new FinancePeriod via sync (posted-facts rules; no admin bypass)."""
     month_period = MonthPeriod.objects.create(month='2099-09', status='LOCKED')
 
     plan_period = PlanPeriod.objects.create(
@@ -139,8 +140,8 @@ def test_resolve_finance_period_creates_locked_financeperiod_for_locked_month(pr
 
     assert FinancePeriod.objects.filter(month_period=month_period, fund_kind='project', project=project).count() == 0
 
-    finance_period = PlanningExpenseActualExpenseSyncService.resolve_finance_period(expense)
+    with pytest.raises(PermissionDenied):
+        PlanningExpenseActualExpenseSyncService.resolve_finance_period(expense)
 
-    assert finance_period.month_period == month_period
-    assert finance_period.status == 'locked'
+    assert FinancePeriod.objects.filter(month_period=month_period, fund_kind='project', project=project).count() == 0
 

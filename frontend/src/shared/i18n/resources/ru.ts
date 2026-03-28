@@ -84,6 +84,9 @@ export default {
     goToReports: 'Перейти к отчётам',
     required: 'Это поле обязательно для заполнения',
     generic: 'Произошла ошибка',
+    api: {
+      badRequest: 'Проверьте введённые данные или повторите попытку позже.',
+    },
   },
   planning: {
     plan: 'План',
@@ -1017,6 +1020,12 @@ export default {
         amountPositive: 'Сумма должна быть положительным числом',
         spentAtRequired: 'Дата расхода обязательна',
         commentRequired: 'Комментарий обязателен',
+        insufficientBalance: {
+          cash: 'Недостаточно средств в кассе. Доступно: {{available}}. Введенная сумма: {{entered}}.',
+          bank: 'Недостаточно средств в банке. Доступно: {{available}}. Введенная сумма: {{entered}}.',
+        },
+        insufficientBalanceHint: 'Уменьшите сумму или выберите другой счёт.',
+        insufficientBalanceAmountField: 'Сумма превышает доступный остаток по счёту.',
       },
     },
     delete: {

@@ -40,6 +40,27 @@
   font-size: 14px;
 }
 
+.create-actual-expense-modal-form .form-error-block {
+  padding: 0.75rem 1rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.create-actual-expense-modal-form .form-error-block__title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.create-actual-expense-modal-form .form-error-block__hint {
+  margin: 0;
+  font-size: 13px;
+  color: #664d03;
+}
+
 .create-actual-expense-modal-form .form-actions {
   display: flex;
   gap: 0.5rem;
