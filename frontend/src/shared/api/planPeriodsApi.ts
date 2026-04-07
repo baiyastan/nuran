@@ -67,6 +67,14 @@ export const planPeriodsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, id) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
     }),
+    returnPlanPeriodToDraft: builder.mutation<PlanPeriod, { id: number; comments?: string }>({
+      query: ({ id, comments }) => ({
+        url: `/plan-periods/${id}/return-to-draft/`,
+        method: 'POST',
+        data: comments ? { comments } : {},
+      }),
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'PlanPeriods', id }, 'PlanPeriods'],
+    }),
   }),
 })
 
@@ -78,5 +86,6 @@ export const {
   useApprovePlanPeriodMutation,
   useLockPlanPeriodMutation,
   useUnlockPlanPeriodMutation,
+  useReturnPlanPeriodToDraftMutation,
 } = planPeriodsApi
 

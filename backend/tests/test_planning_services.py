@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from apps.projects.models import Project
 from apps.planning.models import PlanPeriod, PlanItem
 from apps.planning.services import PlanPeriodService, PlanItemService
+from apps.budgeting.models import MonthPeriod
 
 User = get_user_model()
 
@@ -58,10 +59,13 @@ def project(db, admin_user):
 @pytest.fixture
 def plan_period(db, project, foreman_user):
     """Create a draft plan period."""
+    month_period = MonthPeriod.objects.create(month='2024-01', status='OPEN', planning_open=True)
     return PlanPeriod.objects.create(
         project=project,
         period='2024-01',
+        fund_kind='project',
         status='draft',
+        month_period=month_period,
         created_by=foreman_user
     )
 

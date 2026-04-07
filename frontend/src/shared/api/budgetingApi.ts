@@ -21,7 +21,7 @@ export interface BudgetPlan {
   scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
   project: number | null
   project_name: string | null
-  status: 'DRAFT' | 'OPEN' | 'SUBMITTED' | 'APPROVED' | 'CLOSED'
+  status: 'OPEN' | 'SUBMITTED' | 'APPROVED'
   submitted_at: string | null
   approved_by: number | null
   approved_at: string | null

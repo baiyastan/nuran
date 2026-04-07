@@ -1,10 +1,15 @@
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useGetPlanPeriodQuery } from '@/shared/api/planPeriodsApi'
+import {
+  useGetPlanPeriodQuery,
+  useUnlockPlanPeriodMutation,
+  useReturnPlanPeriodToDraftMutation,
+} from '@/shared/api/planPeriodsApi'
 import { useGetMonthPeriodQuery } from '@/shared/api/monthPeriodsApi'
 import { useListPlanItemsQuery } from '@/shared/api/planItemsApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { Table } from '@/shared/ui/Table/Table'
+import { Button } from '@/shared/ui/Button/Button'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
 import { formatDate } from '@/shared/lib/utils'
@@ -24,20 +29,44 @@ function PlanPeriodDetailsPage() {
     plan_period_id: planPeriodId,
   })
   const { role } = useAuth()
+  const [unlockPlanPeriod, { isLoading: isUnlocking }] = useUnlockPlanPeriodMutation()
+  const [returnPlanPeriodToDraft, { isLoading: isReturning }] = useReturnPlanPeriodToDraftMutation()
   
   // Check month gate status
   const { data: monthPeriod } = useGetMonthPeriodQuery(planPeriod?.period || '')
   const isMonthOpen = monthPeriod?.status === 'OPEN'
 
-  // Foreman can only create/edit PlanItems when plan_period.status === 'draft' AND month is open
-  // Admin can create when status !== 'locked' AND month is open
-  // Director is read-only (cannot create/edit/delete)
-  // Month lock (LOCKED status) blocks ALL plan editing (strict mode)
-  const canCreatePlanItem = isMonthOpen && (
-    role === 'foreman'
-      ? planPeriod?.status === 'draft'
-      : role === 'admin' && planPeriod?.status !== 'locked'
+  // Align action visibility with backend workflow + month gate.
+  const canCreatePlanItem = Boolean(
+    isMonthOpen &&
+      planPeriod?.status === 'draft' &&
+      (role === 'foreman' || role === 'admin')
   )
+  const canSubmit = Boolean(isMonthOpen && role === 'foreman' && planPeriod?.status === 'draft')
+  const canApprove = Boolean(isMonthOpen && (role === 'director' || role === 'admin') && planPeriod?.status === 'submitted')
+  const canLock = Boolean(isMonthOpen && role === 'admin' && planPeriod?.status === 'approved')
+  const canUnlock = Boolean(isMonthOpen && role === 'admin' && planPeriod?.status === 'locked')
+  const canReturnToDraft = Boolean(
+    isMonthOpen &&
+      (role === 'director' || role === 'admin') &&
+      (planPeriod?.status === 'submitted' || planPeriod?.status === 'approved')
+  )
+
+  const handleUnlock = async () => {
+    try {
+      await unlockPlanPeriod(planPeriodId).unwrap()
+    } catch {
+      // Action-level error is surfaced via global error handling.
+    }
+  }
+
+  const handleReturnToDraft = async () => {
+    try {
+      await returnPlanPeriodToDraft({ id: planPeriodId }).unwrap()
+    } catch {
+      // Action-level error is surfaced via global error handling.
+    }
+  }
 
   const totalAmount = planItems?.results.reduce((sum, item) => sum + Number(item.amount), 0) || 0
 
@@ -109,14 +138,24 @@ function PlanPeriodDetailsPage() {
           </div>
         </div>
         <div className="actions">
-          {role === 'foreman' && planPeriod.status === 'draft' && (
+          {canSubmit && (
             <SubmitPlanPeriodButton planPeriodId={planPeriodId} />
           )}
-          {role === 'director' && planPeriod.status === 'submitted' && (
+          {canApprove && (
             <ApprovePlanPeriodButton planPeriodId={planPeriodId} />
           )}
-          {role === 'admin' && planPeriod.status === 'approved' && (
+          {canLock && (
             <LockPlanPeriodButton planPeriodId={planPeriodId} />
+          )}
+          {canUnlock && (
+            <Button onClick={handleUnlock} disabled={isUnlocking} variant="secondary">
+              {isUnlocking ? 'Unlocking...' : 'Unlock Period'}
+            </Button>
+          )}
+          {canReturnToDraft && (
+            <Button onClick={handleReturnToDraft} disabled={isReturning} variant="secondary">
+              {isReturning ? 'Returning...' : 'Return to Draft'}
+            </Button>
           )}
         </div>
       </div>

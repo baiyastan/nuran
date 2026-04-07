@@ -7,6 +7,8 @@ import {
   useCreateMonthPeriodMutation,
   useLockMonthPeriodMutation,
   useUnlockMonthPeriodMutation,
+  useOpenPlanningMutation,
+  useClosePlanningMutation,
 } from '@/shared/api/monthPeriodsApi'
 import { useToastContext } from '@/shared/ui/Toast/ToastProvider'
 import { getErrorMessage } from '@/shared/lib/utils'
@@ -37,6 +39,8 @@ function MonthManagementPage() {
   const [createMonthPeriod, { isLoading: isCreating }] = useCreateMonthPeriodMutation()
   const [lockMonthPeriod, { isLoading: isLocking }] = useLockMonthPeriodMutation()
   const [unlockMonthPeriod, { isLoading: isUnlocking }] = useUnlockMonthPeriodMutation()
+  const [openPlanning, { isLoading: isOpeningPlanning }] = useOpenPlanningMutation()
+  const [closePlanning, { isLoading: isClosingPlanning }] = useClosePlanningMutation()
 
   const normalizedStatus: 'NOT_CREATED' | 'OPEN' | 'LOCKED' = useMemo(() => {
     if (!monthPeriod) return 'NOT_CREATED'
@@ -87,11 +91,33 @@ function MonthManagementPage() {
     }
   }
 
+  const handleOpenPlanning = async () => {
+    if (!monthPeriod || monthPeriod.status !== 'OPEN') return
+    try {
+      await openPlanning(monthPeriod.id).unwrap()
+      await refetch()
+      showSuccess('Planning opened')
+    } catch {
+      showError('Failed to open planning')
+    }
+  }
+
+  const handleClosePlanning = async () => {
+    if (!monthPeriod || monthPeriod.status !== 'OPEN') return
+    try {
+      await closePlanning(monthPeriod.id).unwrap()
+      await refetch()
+      showSuccess('Planning closed')
+    } catch {
+      showError('Failed to close planning')
+    }
+  }
+
   const goBack = () => {
     navigate(-1)
   }
 
-  const isMutating = isCreating || isLocking || isUnlocking
+  const isMutating = isCreating || isLocking || isUnlocking || isOpeningPlanning || isClosingPlanning
 
   const formattedMonth = selectedMonth
 
@@ -159,6 +185,21 @@ function MonthManagementPage() {
                     : t('desc.locked')}
                 </p>
 
+                {monthPeriod && (
+                  <div className="planning-status-row">
+                    <span className="planning-status-label">{t('planning.open')}</span>
+                    <span
+                      className={
+                        monthPeriod.planning_open
+                          ? 'planning-status-badge planning-status-badge--open'
+                          : 'planning-status-badge planning-status-badge--closed'
+                      }
+                    >
+                      {monthPeriod.planning_open ? t('planning.open') : t('planning.closed')}
+                    </span>
+                  </div>
+                )}
+
                 <div className="month-actions">
                   {normalizedStatus === 'NOT_CREATED' && (
                     <Button onClick={handleOpenMonth} disabled={isMutating}>
@@ -172,6 +213,16 @@ function MonthManagementPage() {
                       variant="danger"
                     >
                       {isLocking ? t('actions.locking') : t('actions.lock')}
+                    </Button>
+                  )}
+                  {normalizedStatus === 'OPEN' && monthPeriod?.planning_open === false && (
+                    <Button onClick={handleOpenPlanning} disabled={isMutating}>
+                      {isOpeningPlanning ? t('planning.openAction') : t('planning.openAction')}
+                    </Button>
+                  )}
+                  {normalizedStatus === 'OPEN' && monthPeriod?.planning_open === true && (
+                    <Button onClick={handleClosePlanning} disabled={isMutating} variant="secondary">
+                      {isClosingPlanning ? t('planning.closeAction') : t('planning.closeAction')}
                     </Button>
                   )}
                   {normalizedStatus === 'LOCKED' && (

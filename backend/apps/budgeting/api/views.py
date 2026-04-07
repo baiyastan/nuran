@@ -105,7 +105,7 @@ class BudgetPlanViewSet(viewsets.ModelViewSet):
                 scope=scope,
                 defaults={
                     'project': None,
-                    'status': validated_data.get('status', 'DRAFT'),
+                    'status': 'OPEN',
                 },
             )
         
@@ -574,10 +574,10 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        month_period.status = 'OPEN'
-        month_period.save()
-        
-        FinancePeriodService.sync_status_from_month_period(month_period)
+        with transaction.atomic():
+            month_period.status = 'OPEN'
+            month_period.save()
+            FinancePeriodService.sync_status_from_month_period(month_period)
         
         serializer = self.get_serializer(month_period)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -619,11 +619,35 @@ class MonthPeriodViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        month_period.status = 'LOCKED'
-        month_period.save()
+        with transaction.atomic():
+            month_period.status = 'LOCKED'
+            month_period.save()
+            FinancePeriodService.sync_status_from_month_period(month_period)
         
-        FinancePeriodService.sync_status_from_month_period(month_period)
-        
+        serializer = self.get_serializer(month_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='open-planning')
+    def open_planning(self, request, pk=None):
+        """Enable planning writes for an OPEN month."""
+        month_period = self.get_object()
+
+        month_period.planning_open = True
+        month_period.planning_opened_at = timezone.now()
+        month_period.save(update_fields=['planning_open', 'planning_opened_at', 'updated_at'])
+
+        serializer = self.get_serializer(month_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='close-planning')
+    def close_planning(self, request, pk=None):
+        """Disable planning writes for a month."""
+        month_period = self.get_object()
+
+        month_period.planning_open = False
+        month_period.planning_closed_at = timezone.now()
+        month_period.save(update_fields=['planning_open', 'planning_closed_at', 'updated_at'])
+
         serializer = self.get_serializer(month_period)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

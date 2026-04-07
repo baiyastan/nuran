@@ -44,7 +44,14 @@ describe('PlanSetupPage (real) – admin', () => {
       periodId: 1,
       isLoading: false,
       error: null,
-      monthPeriod: { id: 1, month: '2026-02', status: 'OPEN' },
+      monthPeriod: {
+        id: 1,
+        month: '2026-02',
+        status: 'OPEN',
+        planning_open: true,
+        planning_opened_at: null,
+        planning_closed_at: null,
+      },
     } as unknown as ReturnType<typeof useMonthPeriodId>)
     vi.mocked(useListBudgetPlansQuery).mockReturnValue({
       data: { results: [] },

@@ -5,7 +5,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
-from apps.budgeting.models import BudgetPlan, ExpenseCategory, MonthPeriod
+from apps.budgeting.models import BudgetPlan, BudgetLine, ExpenseCategory, MonthPeriod
 from apps.projects.models import Project
 
 User = get_user_model()
@@ -124,6 +124,7 @@ class TestBudgetPlanAPI:
         response = api_client.post('/api/v1/budgets/budgets/', data, format='json')
         assert response.status_code == 201
         assert response.data['scope'] == 'OFFICE'
+        assert response.data['status'] == 'OPEN'
 
     def test_get_or_create_budget_plan(self, api_client, month_period):
         """Test get-or-create behavior."""
@@ -238,3 +239,48 @@ class TestBudgetPlanAPI:
         response2 = api_client.post('/api/v1/budgets/budgets/', data, format='json')
         assert response2.status_code == 200
         assert response2.data['id'] == first_id
+
+    def test_budget_line_creation_works_for_open_plan(self, api_client, month_period):
+        plan = BudgetPlan.objects.create(period=month_period, scope='OFFICE', project=None, status='OPEN')
+        category = ExpenseCategory.objects.create(
+            name='Office leaf',
+            scope='office',
+            kind='EXPENSE',
+            parent=None,
+            is_active=True,
+        )
+        response = api_client.post(
+            '/api/v1/budgets/budget-lines/',
+            {
+                'plan': plan.id,
+                'category': category.id,
+                'amount_planned': '500.00',
+                'note': 'Open plan line',
+            },
+            format='json',
+        )
+        assert response.status_code == 201
+        assert BudgetLine.objects.filter(plan=plan, category=category).exists()
+
+    @pytest.mark.parametrize('status_value', ['SUBMITTED', 'APPROVED'])
+    def test_budget_line_creation_fails_for_non_open_plan(self, api_client, month_period, status_value):
+        plan = BudgetPlan.objects.create(period=month_period, scope='OFFICE', project=None, status=status_value)
+        category = ExpenseCategory.objects.create(
+            name=f'Office leaf {status_value}',
+            scope='office',
+            kind='EXPENSE',
+            parent=None,
+            is_active=True,
+        )
+        response = api_client.post(
+            '/api/v1/budgets/budget-lines/',
+            {
+                'plan': plan.id,
+                'category': category.id,
+                'amount_planned': '500.00',
+                'note': 'Should fail',
+            },
+            format='json',
+        )
+        assert response.status_code == 400
+        assert 'plan status must be open' in str(response.data).lower()

@@ -4,7 +4,14 @@ export interface UseMonthPeriodIdResult {
   periodId: number | null
   isLoading: boolean
   error: unknown
-  monthPeriod: { id: number; month: string; status: 'OPEN' | 'LOCKED' } | null
+  monthPeriod: {
+    id: number
+    month: string
+    status: 'OPEN' | 'LOCKED'
+    planning_open: boolean
+    planning_opened_at: string | null
+    planning_closed_at: string | null
+  } | null
 }
 
 export function useMonthPeriodId(month: string | null | undefined): UseMonthPeriodIdResult {
