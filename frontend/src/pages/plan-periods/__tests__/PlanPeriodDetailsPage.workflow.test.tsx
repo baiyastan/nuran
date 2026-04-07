@@ -83,7 +83,9 @@ function setup({
 }
 
 describe('PlanPeriodDetailsPage workflow visibility', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it('shows create item form only for draft + month open + allowed role', async () => {
     setup({ role: 'foreman', planStatus: 'draft', monthStatus: 'OPEN' })

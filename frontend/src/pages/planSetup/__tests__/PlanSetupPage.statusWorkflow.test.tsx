@@ -106,7 +106,9 @@ function setup(status: 'OPEN' | 'SUBMITTED' | 'APPROVED') {
 }
 
 describe('PlanSetupPage budget status workflow', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it('allows editing for OPEN', async () => {
     setup('OPEN')
