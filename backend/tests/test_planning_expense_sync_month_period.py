@@ -45,12 +45,14 @@ def test_resolve_finance_period_missing_monthperiod_raises_and_does_not_create_m
     period_value = '2099-11'
     assert MonthPeriod.objects.filter(month=period_value).count() == 0
 
+    fallback_month = MonthPeriod.objects.create(month='2099-10', status='OPEN')
     plan_period = PlanPeriod.objects.create(
         project=project,
         period=period_value,
         status='draft',
         created_by=admin_user,
         fund_kind='project',
+        month_period=fallback_month,
     )
     plan_item = PlanItem.objects.create(
         plan_period=plan_period,

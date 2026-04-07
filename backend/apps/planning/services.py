@@ -13,6 +13,7 @@ from apps.finance.services import (
     FinancePeriodService,
     assert_month_open_for_planning,
     assert_month_open_for_posted_facts,
+    assert_planning_allowed,
 )
 from apps.finance.models import FinancePeriod
 from apps.finance.constants import MONTH_REQUIRED_MSG
@@ -87,6 +88,7 @@ class PlanPeriodService:
         # Check month period lock status before updating
         month_period = data.get('month_period', plan_period.month_period)
         assert_plan_editing_allowed(month_period, user)
+        assert_planning_allowed(month_period)
         
         before_state = {}
         for field in plan_period._meta.fields:
@@ -206,6 +208,7 @@ class PlanItemService:
         # Check month period lock status before creating
         month_period = plan_period.month_period if plan_period else None
         assert_plan_editing_allowed(month_period, user)
+        assert_planning_allowed(month_period)
         assert_plan_editable(plan_period)
 
         if user.role == 'admin':
@@ -249,6 +252,7 @@ class PlanItemService:
         # Check month period lock status before updating
         month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
         assert_plan_editing_allowed(month_period, user)
+        assert_planning_allowed(month_period)
         assert_plan_editable(plan_item.plan_period)
 
         if user.role == 'admin':
@@ -289,6 +293,7 @@ class PlanItemService:
         # Check month period lock status before deleting
         month_period = plan_item.plan_period.month_period if plan_item.plan_period else None
         assert_plan_editing_allowed(month_period, user)
+        assert_planning_allowed(month_period)
         assert_plan_editable(plan_item.plan_period)
 
         if not PlanItemService.can_modify(plan_item, user):
@@ -769,7 +774,7 @@ class PlanningExpenseActualExpenseSyncService:
             user: User who created the expense
             
         Returns:
-            ActualExpense instance or None if sync fails
+            ActualExpense instance
         """
         try:
             # Refresh expense to ensure we have latest data and related objects loaded
@@ -820,7 +825,7 @@ class PlanningExpenseActualExpenseSyncService:
             
         except Exception as e:
             logger.error(f"Failed to sync Expense {expense.id} to ActualExpense: {str(e)}", exc_info=True)
-            return None
+            raise
     
     @staticmethod
     def sync_update(expense, user):
@@ -831,7 +836,7 @@ class PlanningExpenseActualExpenseSyncService:
             user: User who updated the expense
             
         Returns:
-            ActualExpense instance or None if sync fails
+            ActualExpense instance
         """
         try:
             # Refresh expense to ensure we have latest data
@@ -880,7 +885,7 @@ class PlanningExpenseActualExpenseSyncService:
             
         except Exception as e:
             logger.error(f"Failed to sync update Expense {expense.id} to ActualExpense: {str(e)}", exc_info=True)
-            return None
+            raise
     
     @staticmethod
     def sync_delete(expense, user):
@@ -891,7 +896,7 @@ class PlanningExpenseActualExpenseSyncService:
             user: User who deleted the expense
             
         Returns:
-            True if deleted successfully, False otherwise
+            True if deleted successfully
         """
         try:
             if not expense.finance_actual_expense_id:
@@ -908,5 +913,5 @@ class PlanningExpenseActualExpenseSyncService:
             
         except Exception as e:
             logger.error(f"Failed to sync delete Expense {expense.id} ActualExpense: {str(e)}", exc_info=True)
-            return False
+            raise
 

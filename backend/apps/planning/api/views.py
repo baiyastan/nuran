@@ -27,7 +27,7 @@ from ..services import (
     assert_plan_editing_allowed,
     assert_plan_editable,
 )
-from apps.finance.services import assert_month_open_for_planning
+from apps.finance.services import assert_month_open_for_planning, assert_planning_allowed
 from .serializers import (
     PlanPeriodSerializer, PlanItemSerializer,
     ProjectAssignmentSerializer, ProrabPlanPeriodSerializer,
@@ -157,13 +157,10 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         
         try:
             plan_period = service.submit(plan_period, request.user)
-            serializer = self.get_serializer(plan_period)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except DjangoValidationError as e:
+            raise DRFValidationError({'detail': str(e)})
+        serializer = self.get_serializer(plan_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -175,13 +172,10 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         
         try:
             plan_period = service.approve(plan_period, request.user, comments)
-            serializer = self.get_serializer(plan_period)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except DjangoValidationError as e:
+            raise DRFValidationError({'detail': str(e)})
+        serializer = self.get_serializer(plan_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def lock(self, request, pk=None):
@@ -192,13 +186,10 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         
         try:
             plan_period = service.lock(plan_period, request.user)
-            serializer = self.get_serializer(plan_period)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except DjangoValidationError as e:
+            raise DRFValidationError({'detail': str(e)})
+        serializer = self.get_serializer(plan_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def unlock(self, request, pk=None):
@@ -208,16 +199,26 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
         # Explicitly check object permissions to enforce RBAC
         self.check_object_permissions(request, plan_period)
         
+        assert_month_open_for_planning(plan_period.month_period)
+        plan_period.status = 'draft'
+        plan_period.save(update_fields=['status'])
+        serializer = self.get_serializer(plan_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='return-to-draft')
+    def return_to_draft(self, request, pk=None):
+        """Return a plan period back to draft."""
+        plan_period = self.get_object()
+        self.check_object_permissions(request, plan_period)
+        service = PlanPeriodService()
+        comments = request.data.get('comments', '')
+
         try:
-            plan_period.status = 'open'
-            plan_period.save(update_fields=['status'])
-            serializer = self.get_serializer(plan_period)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            plan_period = service.return_to_draft(plan_period, request.user, comments)
+        except DjangoValidationError as e:
+            raise DRFValidationError({'detail': str(e)})
+        serializer = self.get_serializer(plan_period)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class PlanItemViewSet(viewsets.ModelViewSet):
@@ -253,6 +254,7 @@ class PlanItemViewSet(viewsets.ModelViewSet):
         
         if plan_period:
             assert_plan_editing_allowed(plan_period.month_period, user)
+            assert_planning_allowed(plan_period.month_period)
 
         service = PlanItemService()
         plan_item = service.create(
@@ -268,6 +270,7 @@ class PlanItemViewSet(viewsets.ModelViewSet):
         if plan_item.plan_period:
             month_period = plan_item.plan_period.month_period
             assert_plan_editing_allowed(month_period, self.request.user)
+            assert_planning_allowed(month_period)
         
         service = PlanItemService()
         service.update(
@@ -282,6 +285,7 @@ class PlanItemViewSet(viewsets.ModelViewSet):
         if instance.plan_period:
             month_period = instance.plan_period.month_period
             assert_plan_editing_allowed(month_period, self.request.user)
+            assert_planning_allowed(month_period)
         
         service = PlanItemService()
         service.delete(plan_item=instance, user=self.request.user)

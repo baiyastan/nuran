@@ -154,6 +154,9 @@ class MonthPeriod(models.Model):
         choices=STATUS_CHOICES,
         default='OPEN'
     )
+    planning_open = models.BooleanField(default=False)
+    planning_opened_at = models.DateTimeField(null=True, blank=True)
+    planning_closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

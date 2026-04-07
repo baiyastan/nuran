@@ -1390,6 +1390,15 @@ export default {
     emptyStateNoPlanLine2: 'План түзгөндөн кийин категориялар боюнча суммаларды киргизе аласыз.',
     emptyStateNoPlanDirector: 'Планды администратор түзөт.',
     saved: 'Сакталды',
+    planning: {
+      open: 'Пландоо ачык',
+      closed: 'Пландоо жабык',
+      openAction: 'Планды ачуу',
+      closeAction: 'Планды жабуу',
+      bannerClosed: 'План жазуу жабык. Админге кайрылыңыз.',
+      bannerWindowClosed: 'Пландоо убактысы бүттү',
+      bannerNotStarted: 'Пландоо али баштала элек',
+    },
   },
   monthGate: {
     loading: 'Айдын статусу жүктөлүүдө...',
@@ -1413,6 +1422,15 @@ export default {
       notOpened: 'Ай ачыла элек.',
       open: 'Ай ачык.',
       locked: 'Ай жабык.',
+    },
+    planning: {
+      open: 'Пландоо ачык',
+      closed: 'Пландоо жабык',
+      openAction: 'Планды ачуу',
+      closeAction: 'Планды жабуу',
+      bannerClosed: 'План жазуу жабык. Админге кайрылыңыз.',
+      bannerWindowClosed: 'Пландоо убактысы бүттү',
+      bannerNotStarted: 'Пландоо али баштала элек',
     },
     actions: {
       open: 'Айды ачуу',

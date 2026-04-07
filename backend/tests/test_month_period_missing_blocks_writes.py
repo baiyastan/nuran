@@ -1,16 +1,11 @@
 """
 Tests that missing MonthPeriod blocks both plan-side and fact-side writes.
 """
-from datetime import date
-from decimal import Decimal
-
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.budgeting.models import BudgetPlan
-from apps.finance.models import FinancePeriod, IncomeSource
 from apps.finance.constants import MONTH_REQUIRED_MSG
 
 
@@ -73,4 +68,19 @@ class TestMonthPeriodMissingBlocksWrites:
       response = api_client.post("/api/v1/actual-expenses/", payload, format="json")
       assert response.status_code == 400
       assert "month period does not exist" in str(response.data).lower()
+
+  def test_missing_month_period_blocks_plan_period_create(self, api_client, admin_user):
+      """PlanPeriod create must fail when target month does not exist."""
+      self._auth(api_client, admin_user)
+      response = api_client.post(
+          "/api/v1/plan-periods/",
+          {
+              "fund_kind": "office",
+              "period": "2099-10",
+          },
+          format="json",
+      )
+      assert response.status_code == 400
+      assert "period" in response.data
+      assert MONTH_REQUIRED_MSG.lower() in str(response.data).lower()
 

@@ -101,9 +101,17 @@ class PlanPeriodPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Action POST (submit/approve/lock): admin only
-        if request.method == 'POST' and hasattr(view, 'action') and view.action in ('submit', 'approve', 'lock', 'unlock'):
-            return _is_admin(request.user)
+        # Workflow action POST permissions (reads unchanged).
+        if request.method == 'POST' and hasattr(view, 'action'):
+            action = view.action
+            if action == 'submit':
+                return request.user.role in ('foreman', 'admin')
+            if action == 'approve':
+                return request.user.role in ('director', 'admin')
+            if action in ('lock', 'unlock'):
+                return _is_admin(request.user)
+            if action == 'return_to_draft':
+                return request.user.role in ('director', 'admin')
         
         # Regular POST (create): foreman, admin (director is read-only)
         if request.method == 'POST':
@@ -118,9 +126,17 @@ class PlanPeriodPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Action POST (submit/approve/lock): admin only
-        if request.method == 'POST' and hasattr(view, 'action') and view.action in ('submit', 'approve', 'lock', 'unlock'):
-            return _is_admin(request.user)
+        # Workflow action POST object-level permissions.
+        if request.method == 'POST' and hasattr(view, 'action'):
+            action = view.action
+            if action == 'submit':
+                return request.user.role in ('foreman', 'admin')
+            if action == 'approve':
+                return request.user.role in ('director', 'admin')
+            if action in ('lock', 'unlock'):
+                return _is_admin(request.user)
+            if action == 'return_to_draft':
+                return request.user.role in ('director', 'admin')
         
         # Regular POST (create): foreman, admin (director is read-only)
         if request.method == 'POST':

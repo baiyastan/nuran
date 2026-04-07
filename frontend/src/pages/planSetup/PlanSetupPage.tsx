@@ -85,7 +85,6 @@ export default function PlanSetupPage() {
   const { role: userRole } = useAuth()
 
   const isDirectorReadOnly = userRole === 'director'
-  const canEditPlan = !isDirectorReadOnly
 
   const allowedScopes = (userRole && ALLOWED_SCOPES_BY_ROLE[userRole]) ?? ALL_SCOPES
   const defaultScope = (userRole && DEFAULT_SCOPE_BY_ROLE[userRole]) ?? 'OFFICE'
@@ -155,6 +154,14 @@ export default function PlanSetupPage() {
   const plans = plansData?.results ?? []
   // Normalize API scope to UI scope for matching (backend returns OFFICE/PROJECT/CHARITY)
   const plan = plans.find((p) => (p.scope && String(p.scope).toUpperCase()) === scope) ?? null
+  const normalizedPlanStatus = plan?.status ? String(plan.status).toUpperCase() : null
+  const isMonthOpen = monthPeriod?.status === 'OPEN'
+  const isPlanningOpen = monthPeriod?.planning_open === true
+  const canEditPlan =
+    !isDirectorReadOnly &&
+    isMonthOpen &&
+    isPlanningOpen &&
+    (!plan || normalizedPlanStatus === 'OPEN' || normalizedPlanStatus === 'DRAFT')
 
   const [createBudgetPlan, { isLoading: isCreatingPlan }] = useCreateBudgetPlanMutation()
 
@@ -310,6 +317,9 @@ export default function PlanSetupPage() {
             {t('readOnlyLocked', { defaultValue: 'Month is locked — planning is read-only.' })}
           </p>
         )}
+        {!isLocked && monthPeriod && !isPlanningOpen && (
+          <p className="plan-setup-message">{t('planning.bannerClosed')}</p>
+        )}
         <div className="plan-setup-no-plan-message">
           <p>{t('emptyStateNoPlanLine1')}</p>
           <p>
@@ -346,7 +356,7 @@ export default function PlanSetupPage() {
           {cat.name}
         </span>
       ),
-      amount: isDirectorReadOnly ? (
+      amount: !canEditPlan ? (
         <span className="plan-setup-readonly plan-setup-readonly--amount">
           {formatReadOnlyPlannedAmount(rawAmount)}
         </span>
@@ -365,7 +375,7 @@ export default function PlanSetupPage() {
           disabled={isLocked}
         />
       ),
-      comment: isDirectorReadOnly ? (
+      comment: !canEditPlan ? (
         <span className="plan-setup-readonly plan-setup-readonly--comment">
           {(cell?.comment ?? '').trim() ? (cell?.comment ?? '') : '—'}
         </span>
@@ -390,6 +400,9 @@ export default function PlanSetupPage() {
         <p className="plan-setup-message">
           {t('readOnlyLocked', { defaultValue: 'Month is locked — planning is read-only.' })}
         </p>
+      )}
+      {!isLocked && monthPeriod && !isPlanningOpen && (
+        <p className="plan-setup-message">{t('planning.bannerClosed')}</p>
       )}
       <div className="plan-setup-filters">
         <label>

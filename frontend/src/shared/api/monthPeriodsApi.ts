@@ -4,6 +4,9 @@ export interface MonthPeriod {
   id: number
   month: string // YYYY-MM format
   status: 'OPEN' | 'LOCKED'
+  planning_open: boolean
+  planning_opened_at: string | null
+  planning_closed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -75,6 +78,26 @@ export const monthPeriodsApi = baseApi.injectEndpoints({
         'MonthPeriods',
       ],
     }),
+    openPlanning: builder.mutation<MonthPeriod, number>({
+      query: (id) => ({
+        url: `/budgets/month-periods/${id}/open-planning/`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, _error, _id) => [
+        { type: 'MonthPeriods', id: result?.month },
+        'MonthPeriods',
+      ],
+    }),
+    closePlanning: builder.mutation<MonthPeriod, number>({
+      query: (id) => ({
+        url: `/budgets/month-periods/${id}/close-planning/`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, _error, _id) => [
+        { type: 'MonthPeriods', id: result?.month },
+        'MonthPeriods',
+      ],
+    }),
   }),
 })
 
@@ -85,4 +108,6 @@ export const {
   useOpenMonthPeriodMutation,
   useLockMonthPeriodMutation,
   useUnlockMonthPeriodMutation,
+  useOpenPlanningMutation,
+  useClosePlanningMutation,
 } = monthPeriodsApi

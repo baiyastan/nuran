@@ -3,9 +3,9 @@ import { baseApi } from './baseApi'
 export interface BudgetPlan {
   id: number
   period: number
-  scope: 'OFFICE' | 'PROJECT'
+  scope: 'OFFICE' | 'PROJECT' | 'CHARITY'
   project?: number
-  status: 'DRAFT' | 'APPROVED' | 'CLOSED'
+  status: 'OPEN' | 'SUBMITTED' | 'APPROVED'
   approved_by?: number
   approved_at?: string
   created_at: string

@@ -45,7 +45,14 @@ const basePeriod = {
   periodId: 1,
   isLoading: false,
   error: null,
-  monthPeriod: { id: 1, month: '2026-02', status: 'OPEN' },
+  monthPeriod: {
+    id: 1,
+    month: '2026-02',
+    status: 'OPEN',
+    planning_open: true,
+    planning_opened_at: null,
+    planning_closed_at: null,
+  },
 }
 
 describe('PlanSetupPage – director read-only', () => {
@@ -85,7 +92,7 @@ describe('PlanSetupPage – director read-only', () => {
             scope: 'OFFICE',
             project: null,
             project_name: null,
-            status: 'DRAFT',
+            status: 'OPEN',
             submitted_at: null,
             approved_by: null,
             approved_at: null,
@@ -134,7 +141,7 @@ describe('PlanSetupPage – director read-only', () => {
             category_name: 'Office cat',
             amount_planned: '1500',
             note: '',
-            plan_status: 'DRAFT',
+            plan_status: 'OPEN',
             created_at: '',
             updated_at: '',
           },

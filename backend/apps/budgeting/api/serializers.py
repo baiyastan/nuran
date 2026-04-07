@@ -39,7 +39,7 @@ class MonthPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = MonthPeriod
         fields = [
-            'id', 'month', 'status', 'created_at', 'updated_at'
+            'id', 'month', 'status', 'planning_open', 'planning_opened_at', 'planning_closed_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
     

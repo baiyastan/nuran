@@ -133,31 +133,33 @@ class TestRBACEnforcement:
         # Test director cannot lock plan period (admin only)
         api_client.force_authenticate(user=director_user)
         response = api_client.post('/api/v1/plan-periods/1/lock/')
-        # Should be 404 (object not found) or 403 (forbidden) depending on implementation
-        assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         
         # Test foreman cannot lock plan period
         api_client.force_authenticate(user=foreman_user)
         response = api_client.post('/api/v1/plan-periods/1/lock/')
-        assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
     
     def test_admin_can_access_admin_endpoints(self, api_client, admin_user, db):
         """Test admin can access admin-only endpoints."""
         from apps.planning.models import PlanPeriod, Project
+        from apps.budgeting.models import MonthPeriod
         
         # Create test data
         project = Project.objects.create(name='Test Project', status='active')
+        month_period = MonthPeriod.objects.create(month='2024-01', status='OPEN', planning_open=True)
         plan_period = PlanPeriod.objects.create(
             project=project,
             period='2024-01',
+            fund_kind='project',
             status='approved',
+            month_period=month_period,
             created_by=admin_user
         )
         
         api_client.force_authenticate(user=admin_user)
         response = api_client.post(f'/api/v1/plan-periods/{plan_period.id}/lock/')
-        # Should succeed (200 or 201) or fail gracefully (404) if endpoint doesn't exist
-        assert response.status_code in (status.HTTP_200_OK, status.HTTP_201_CREATED, status.HTTP_404_NOT_FOUND)
+        assert response.status_code == status.HTTP_200_OK
 
 
 class TestForemanAppendOnly:
@@ -167,7 +169,7 @@ class TestForemanAppendOnly:
         """Test foreman cannot update/delete plan items."""
         from apps.planning.models import PlanPeriod, PlanItem
         from apps.projects.models import Project, ProjectAssignment
-        from apps.budgeting.models import ExpenseCategory
+        from apps.budgeting.models import ExpenseCategory, MonthPeriod
 
         # Create test data
         project = Project.objects.create(
@@ -183,10 +185,13 @@ class TestForemanAppendOnly:
             parent=None,
             is_active=True,
         )
+        month_period = MonthPeriod.objects.create(month='2024-01', status='OPEN', planning_open=True)
         plan_period = PlanPeriod.objects.create(
             project=project,
             period='2024-01',
+            fund_kind='project',
             status='draft',
+            month_period=month_period,
             created_by=foreman_user
         )
         ProjectAssignment.objects.create(

@@ -49,12 +49,22 @@ def assert_month_open_for_planning(month_period):
 
     Applies to: PlanPeriod/PlanItem mutations, ProrabPlanItem writes, planning Expense,
     and workflow actions on PlanPeriod while tied to this month.
-    If month_period is None (legacy row), the check is skipped.
+    If month_period is None, writes are blocked with MONTH_REQUIRED_MSG.
     """
     if not month_period:
-        return
+        raise PermissionDenied(MONTH_REQUIRED_MSG)
     if month_period.status != 'OPEN':
         raise PermissionDenied(MONTH_LOCKED_MSG)
+
+
+def assert_planning_allowed(month_period):
+    """Planning writes require MonthPeriod OPEN and planning_open enabled by admin."""
+    if not month_period:
+        raise PermissionDenied("Month period does not exist")
+    if month_period.status != 'OPEN':
+        raise PermissionDenied("Month is locked")
+    if not month_period.planning_open:
+        raise PermissionDenied("Planning is closed. Please contact admin.")
 
 
 # Backwards-compatible alias (prefer assert_month_open_for_planning in new code).
