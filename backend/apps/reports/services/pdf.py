@@ -416,3 +416,59 @@ def build_transfer_direction_pdf(
 
     document.build(story)
     return buffer.getvalue()
+
+
+def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
+    """Build account statement PDF for cash movement in a period."""
+    _register_pdf_fonts()
+    buffer = BytesIO()
+    document = _build_pdf_document(buffer)
+    title_style, heading_style, body_style = _build_pdf_styles()
+
+    account_raw = filters.get("account")
+    if account_raw == "CASH":
+        account_label = "Касса"
+    elif account_raw == "BANK":
+        account_label = "Банк"
+    else:
+        account_label = "—"
+
+    start_date = filters.get("start_date")
+    end_date = filters.get("end_date")
+    period_label = f"{start_date.isoformat()} — {end_date.isoformat()}"
+
+    opening = format_pdf_amount(data["opening_balance"])
+    income = format_pdf_amount(data["period_income"])
+    expense = format_pdf_amount(data["period_expense"])
+    transfer_net = format_pdf_amount(data["transfer_net"])
+    closing = format_pdf_amount(data["closing_balance"])
+
+    # Optional label overrides for integrations, with exact required defaults.
+    labels = {
+        "opening_balance": "Начальный остаток",
+        "period_income": "Доход за период",
+        "period_expense": "Расход за период",
+        "transfer_net": "Transfer net",
+        "closing_balance": "Конечный остаток",
+    }
+    custom_labels = filters.get("labels")
+    if isinstance(custom_labels, dict):
+        labels.update({k: v for k, v in custom_labels.items() if isinstance(v, str) and v.strip()})
+
+    story = [
+        Paragraph("Отчёты", title_style),
+        Spacer(1, 6),
+        Paragraph("Движение средств по счёту", heading_style),
+        Spacer(1, 8),
+        Paragraph(f'<font name="{FONT_BOLD}">Период:</font> {period_label}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">Счёт:</font> {account_label}', body_style),
+        Spacer(1, 10),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["opening_balance"]}:</font> {opening}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["period_income"]}:</font> {income}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["period_expense"]}:</font> {expense}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["transfer_net"]}:</font> {transfer_net}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["closing_balance"]}:</font> {closing}', body_style),
+    ]
+
+    document.build(story)
+    return buffer.getvalue()

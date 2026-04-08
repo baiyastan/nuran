@@ -6,6 +6,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { useListIncomeEntriesQuery } from '@/shared/api/incomeEntriesApi'
 import {
   useExportExpenseCategoryDetailPdfMutation,
+  useExportCashMovementPdfMutation,
   useExportIncomeSourceDetailPdfMutation,
   useGetDashboardExpenseCategoriesQuery,
   useGetDashboardIncomeSourcesQuery,
@@ -103,6 +104,14 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(downloadUrl)
 }
 
+function getCashMovementFilename(
+  account: 'CASH' | 'BANK',
+  startDate: string,
+  endDate: string
+) {
+  return `cash_movement_${account.toLowerCase()}_${startDate}_${endDate}.pdf`
+}
+
 export function GlobalSummary({ month }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
   const { accessToken, role } = useAuth()
@@ -115,6 +124,12 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const [exportErrorSection, setExportErrorSection] = useState<ExportSectionType | null>(null)
   const [exportingDetail, setExportingDetail] = useState<ExportDetailType | null>(null)
   const [exportErrorDetail, setExportErrorDetail] = useState<ExportDetailType | null>(null)
+  const [exportCashMovementPdf] = useExportCashMovementPdfMutation()
+  const [cashMovementAccount, setCashMovementAccount] = useState<'CASH' | 'BANK'>('CASH')
+  const [cashMovementStartDate, setCashMovementStartDate] = useState('')
+  const [cashMovementEndDate, setCashMovementEndDate] = useState('')
+  const [cashMovementExporting, setCashMovementExporting] = useState(false)
+  const [cashMovementExportError, setCashMovementExportError] = useState(false)
   const [selectedIncomeSourceId, setSelectedIncomeSourceId] = useState<number | null | undefined>(undefined)
   const [selectedIncomeSourceName, setSelectedIncomeSourceName] = useState<string>('')
   const [incomeDetailPage, setIncomeDetailPage] = useState<number>(1)
@@ -264,6 +279,9 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const totalClosingBalance = cashClosing + bankClosing
   const totalOpeningBalance = previousMonthCash + previousMonthBank
   const balanceChange = totalClosingBalance - totalOpeningBalance
+  const cashMovementRangeInvalid =
+    Boolean(cashMovementStartDate && cashMovementEndDate) &&
+    cashMovementStartDate > cashMovementEndDate
 
   const incomeBySource = useMemo(() => {
     if (!incomeSourcesData) return []
@@ -439,6 +457,29 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     setExpenseDetailFilterDraft(null)
   }
 
+  const handleCashMovementExport = async () => {
+    if (!cashMovementStartDate || !cashMovementEndDate || cashMovementRangeInvalid) {
+      return
+    }
+    setCashMovementExportError(false)
+    setCashMovementExporting(true)
+    try {
+      const blob = await exportCashMovementPdf({
+        account: cashMovementAccount,
+        start_date: cashMovementStartDate,
+        end_date: cashMovementEndDate,
+      }).unwrap()
+      downloadBlob(
+        blob,
+        getCashMovementFilename(cashMovementAccount, cashMovementStartDate, cashMovementEndDate)
+      )
+    } catch {
+      setCashMovementExportError(true)
+    } finally {
+      setCashMovementExporting(false)
+    }
+  }
+
   const incomeDetailRangePairFilled = Boolean(
     incomeDetailFilterDraft?.start_date && incomeDetailFilterDraft?.end_date
   )
@@ -569,6 +610,71 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 </button>
               </div>
             </div>
+            {canExportPdf && (
+              <div className="global-summary-account-export-block">
+                <h4 className="global-summary-balance-details__heading">Отчет по счёту</h4>
+                <div className="detail-filter-toolbar">
+                  <div className="detail-filter-toolbar__controls">
+                    <label htmlFor="cash-movement-account" className="expense-categories-filter__label">
+                      {t('cashMovement.account')}
+                    </label>
+                    <select
+                      id="cash-movement-account"
+                      className="expense-categories-filter__select"
+                      value={cashMovementAccount}
+                      onChange={(e) => setCashMovementAccount(e.target.value as 'CASH' | 'BANK')}
+                    >
+                      <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                      <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                    </select>
+                    <label htmlFor="cash-movement-start" className="expense-categories-filter__label">
+                      {t('filters.startDate')}
+                    </label>
+                    <input
+                      id="cash-movement-start"
+                      className="expense-categories-filter__select"
+                      type="date"
+                      value={cashMovementStartDate}
+                      onChange={(e) => setCashMovementStartDate(e.target.value)}
+                    />
+                    <label htmlFor="cash-movement-end" className="expense-categories-filter__label">
+                      {t('filters.endDate')}
+                    </label>
+                    <input
+                      id="cash-movement-end"
+                      className="expense-categories-filter__select"
+                      type="date"
+                      value={cashMovementEndDate}
+                      onChange={(e) => setCashMovementEndDate(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      size="small"
+                      disabled={
+                        cashMovementExporting ||
+                        !cashMovementStartDate ||
+                        !cashMovementEndDate ||
+                        cashMovementRangeInvalid
+                      }
+                      onClick={() => {
+                        void handleCashMovementExport()
+                      }}
+                    >
+                      {cashMovementExporting ? t('globalSummary.actions.exportingPdf') : 'Скачать отчет по счёту'}
+                    </Button>
+                  </div>
+                  <p className="detail-range-hint">
+                    Экспортирует начальный остаток, доход, расход, transfer net и конечный остаток.
+                  </p>
+                  {cashMovementRangeInvalid && (
+                    <div className="summary-error">{t('filters.invalidRange')}</div>
+                  )}
+                  {cashMovementExportError && (
+                    <div className="summary-error">{t('globalSummary.exportError')}</div>
+                  )}
+                </div>
+              </div>
+            )}
             {/* helper text removed for compact summary */}
           </>
         )}
@@ -1047,15 +1153,15 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                         size="small"
                         className="global-summary-export-button global-summary-export-button--muted"
                         disabled={exportingSection !== null}
-                        title={t('globalSummary.actions.exportPdf')}
-                        aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                        title={t('globalSummary.actions.exportCategoryPdf')}
+                        aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportCategoryPdf')}`}
                         onClick={() => {
                           void handleSectionExport('expense_categories')
                         }}
                       >
                         {exportingSection === 'expense_categories'
                           ? t('globalSummary.actions.exportingPdf')
-                          : t('globalSummary.actions.exportPdf')}
+                          : t('globalSummary.actions.exportCategoryPdf')}
                       </Button>
                     )}
                   </div>
@@ -1256,15 +1362,15 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                             size="small"
                             className="global-summary-export-button global-summary-export-button--muted"
                             disabled={exportingDetail !== null}
-                            title={t('globalSummary.actions.exportPdf')}
-                            aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
+                            title={t('globalSummary.actions.exportCategoryPdf')}
+                            aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportCategoryPdf')}`}
                             onClick={() => {
                               void handleExpenseDetailExport()
                             }}
                           >
                             {exportingDetail === 'expense_category_detail'
                               ? t('globalSummary.actions.exportingPdf')
-                              : t('globalSummary.actions.exportPdf')}
+                              : t('globalSummary.actions.exportCategoryPdf')}
                           </Button>
                         )}
                       </div>

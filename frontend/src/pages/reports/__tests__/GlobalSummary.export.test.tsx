@@ -5,6 +5,7 @@ import i18n from '@/shared/i18n'
 import { renderWithProviders } from '@/testing/renderWithProviders'
 import { GlobalSummary } from '../components/GlobalSummary'
 import {
+  useExportCashMovementPdfMutation,
   useExportExpenseCategoryDetailPdfMutation,
   useExportIncomeSourceDetailPdfMutation,
   useExportSectionPdfMutation,
@@ -30,6 +31,7 @@ vi.mock('@/shared/api/reportsApi', async () => {
     useGetDashboardIncomeSourcesQuery: vi.fn(),
     useExportSectionPdfMutation: vi.fn(),
     useGetTransferDetailsQuery: vi.fn(),
+    useExportCashMovementPdfMutation: vi.fn(),
   }
 })
 
@@ -45,6 +47,7 @@ describe('GlobalSummary section PDF export', () => {
   const exportTrigger = vi.fn()
   const exportIncomeDetailTrigger = vi.fn()
   const exportExpenseDetailTrigger = vi.fn()
+  const exportCashMovementTrigger = vi.fn()
   const createObjectUrlMock = vi.fn(() => 'blob:mock')
   const revokeObjectUrlMock = vi.fn()
   let anchorClickSpy: ReturnType<typeof vi.fn>
@@ -53,6 +56,7 @@ describe('GlobalSummary section PDF export', () => {
     exportTrigger.mockReset()
     exportIncomeDetailTrigger.mockReset()
     exportExpenseDetailTrigger.mockReset()
+    exportCashMovementTrigger.mockReset()
     createObjectUrlMock.mockClear()
     revokeObjectUrlMock.mockClear()
     await i18n.changeLanguage('ru')
@@ -184,6 +188,10 @@ describe('GlobalSummary section PDF export', () => {
     ] as never)
     vi.mocked(useExportExpenseCategoryDetailPdfMutation).mockReturnValue([
       exportExpenseDetailTrigger,
+      { isLoading: false },
+    ] as never)
+    vi.mocked(useExportCashMovementPdfMutation).mockReturnValue([
+      exportCashMovementTrigger,
       { isLoading: false },
     ] as never)
 
@@ -480,10 +488,18 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
     )
-    fireEvent.change(screen.getByLabelText('Дата с'), { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getByLabelText('Дата по'), { target: { value: '2026-03-15' } })
-    fireEvent.click(screen.getByRole('button', { name: /Применить/i }))
-    fireEvent.change(screen.getByLabelText('Счёт'), { target: { value: 'CASH' } })
+    const incomeBreakdown = screen.getByText(/Итоги по источникам доходов/i).closest('.global-summary-breakdown')
+    expect(incomeBreakdown).toBeTruthy()
+    fireEvent.change(within(incomeBreakdown as HTMLElement).getByLabelText('Дата с'), {
+      target: { value: '2026-03-01' },
+    })
+    fireEvent.change(within(incomeBreakdown as HTMLElement).getByLabelText('Дата по'), {
+      target: { value: '2026-03-15' },
+    })
+    fireEvent.click(within(incomeBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
+    fireEvent.change(within(incomeBreakdown as HTMLElement).getByLabelText(/Сч[её]т/i), {
+      target: { value: 'CASH' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /Скачать PDF/i }))
 
     await waitFor(() => {
@@ -528,15 +544,29 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
     )
-    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    const incomeBreakdown = screen.getByText(/Итоги по источникам доходов/i).closest('.global-summary-breakdown')
+    expect(incomeBreakdown).toBeTruthy()
+    fireEvent.change(within(incomeBreakdown as HTMLElement).getByLabelText('Дата с'), {
+      target: { value: '2026-03-01' },
+    })
+    fireEvent.change(within(incomeBreakdown as HTMLElement).getByLabelText('Дата по'), {
+      target: { value: '2026-03-30' },
+    })
+    fireEvent.click(within(incomeBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Source A' }))
-    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-03-10' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-03-20' } })
-    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'CASH' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+    const incomeDetails = document.querySelector('.global-summary-expense-details')
+    expect(incomeDetails).toBeTruthy()
+    fireEvent.change(within(incomeDetails as HTMLElement).getByLabelText('Дата с'), {
+      target: { value: '2026-03-10' },
+    })
+    fireEvent.change(within(incomeDetails as HTMLElement).getByLabelText('Дата по'), {
+      target: { value: '2026-03-20' },
+    })
+    fireEvent.change(within(incomeDetails as HTMLElement).getByLabelText(/Сч[её]т/i), {
+      target: { value: 'CASH' },
+    })
+    fireEvent.click(within(incomeDetails as HTMLElement).getByRole('button', { name: /Применить/i }))
     fireEvent.click(screen.getByRole('button', { name: /Source A Скачать PDF/i }))
 
     await waitFor(() => {
@@ -581,10 +611,20 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-20' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
-    fireEvent.change(screen.getByLabelText('Счёт'), { target: { value: 'BANK' } })
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата с'), {
+      target: { value: '2026-03-01' },
+    })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата по'), {
+      target: { value: '2026-03-20' },
+    })
+    fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText(/Сч[её]т/i), {
+      target: { value: 'BANK' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
     fireEvent.click(screen.getByRole('button', { name: /Category A Скачать PDF/i }))
 
@@ -602,12 +642,17 @@ describe('GlobalSummary section PDF export', () => {
   it('shows date range inputs only in expanded income/expense panels', () => {
     renderWithProviders(<GlobalSummary month="2026-03" />)
 
-    expect(screen.queryByLabelText(/Дата с/i)).not.toBeInTheDocument()
+    // Account statement block is always visible and includes a date range.
+    expect(screen.getByLabelText(/Дата с/i)).toBeInTheDocument()
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
     )
-    expect(screen.getByLabelText(/Дата с/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Дата по/i)).toBeInTheDocument()
+    const incomeBreakdown = screen
+      .getByText(/Итоги по источникам доходов/i)
+      .closest('.global-summary-breakdown')
+    expect(incomeBreakdown).toBeTruthy()
+    expect(within(incomeBreakdown as HTMLElement).getByLabelText(/Дата с/i)).toBeInTheDocument()
+    expect(within(incomeBreakdown as HTMLElement).getByLabelText(/Дата по/i)).toBeInTheDocument()
   })
 
   it('applies and resets date range in detail queries', async () => {
@@ -616,9 +661,13 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getByLabelText(/Дата с/i), { target: { value: '2026-03-10' } })
-    fireEvent.change(screen.getByLabelText(/Дата по/i), { target: { value: '2026-03-20' } })
-    fireEvent.click(screen.getByRole('button', { name: /Применить/i }))
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText(/Дата с/i), { target: { value: '2026-03-10' } })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText(/Дата по/i), { target: { value: '2026-03-20' } })
+    fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     await waitFor(() => {
       expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith({
@@ -643,10 +692,14 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getByLabelText(/Дата с/i), { target: { value: '2026-03-20' } })
-    fireEvent.change(screen.getByLabelText(/Дата по/i), { target: { value: '2026-03-10' } })
-    expect(screen.getByText(/Дата начала не может быть позже даты окончания/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Применить/i })).toBeDisabled()
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText(/Дата с/i), { target: { value: '2026-03-20' } })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText(/Дата по/i), { target: { value: '2026-03-10' } })
+    expect(within(expenseBreakdown as HTMLElement).getByText(/Дата начала не может быть позже даты окончания/i)).toBeInTheDocument()
+    expect(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i })).toBeDisabled()
   })
 
   it('detail filter defaults from parent filter values', async () => {
@@ -654,14 +707,20 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата с'), { target: { value: '2026-03-01' } })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата по'), { target: { value: '2026-03-30' } })
+    fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    const expenseDetails = document.querySelector('.global-summary-expense-details')
+    expect(expenseDetails).toBeTruthy()
     await waitFor(() => {
-      expect(screen.getAllByLabelText('Дата с')[1]).toHaveValue('2026-03-01')
-      expect(screen.getAllByLabelText('Дата по')[1]).toHaveValue('2026-03-30')
+      expect(within(expenseDetails as HTMLElement).getByLabelText('Дата с')).toHaveValue('2026-03-01')
+      expect(within(expenseDetails as HTMLElement).getByLabelText('Дата по')).toHaveValue('2026-03-30')
     })
   })
 
@@ -670,14 +729,20 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата с'), { target: { value: '2026-03-01' } })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата по'), { target: { value: '2026-03-30' } })
+    fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    const expenseDetails = document.querySelector('.global-summary-expense-details')
+    expect(expenseDetails).toBeTruthy()
 
-    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-03-10' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-03-20' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+    fireEvent.change(within(expenseDetails as HTMLElement).getByLabelText('Дата с'), { target: { value: '2026-03-10' } })
+    fireEvent.change(within(expenseDetails as HTMLElement).getByLabelText('Дата по'), { target: { value: '2026-03-20' } })
+    fireEvent.click(within(expenseDetails as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     await waitFor(() => {
       expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenCalledWith({
@@ -703,9 +768,11 @@ describe('GlobalSummary section PDF export', () => {
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
     fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    const expenseDetails = document.querySelector('.global-summary-expense-details')
+    expect(expenseDetails).toBeTruthy()
 
-    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'BANK' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+    fireEvent.change(within(expenseDetails as HTMLElement).getByLabelText(/Сч[её]т/i), { target: { value: 'BANK' } })
+    fireEvent.click(within(expenseDetails as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     await waitFor(() => {
       expect(useListActualExpensesQuery).toHaveBeenCalledWith(
@@ -724,18 +791,24 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
-    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    const expenseBreakdown = screen
+      .getByText(/Итоги по категориям расходов/i)
+      .closest('.global-summary-breakdown')
+    expect(expenseBreakdown).toBeTruthy()
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата с'), { target: { value: '2026-03-01' } })
+    fireEvent.change(within(expenseBreakdown as HTMLElement).getByLabelText('Дата по'), { target: { value: '2026-03-30' } })
+    fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
-    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-04-01' } })
-    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-04-05' } })
+    const expenseDetails = document.querySelector('.global-summary-expense-details')
+    expect(expenseDetails).toBeTruthy()
+    fireEvent.change(within(expenseDetails as HTMLElement).getByLabelText('Дата с'), { target: { value: '2026-04-01' } })
+    fireEvent.change(within(expenseDetails as HTMLElement).getByLabelText('Дата по'), { target: { value: '2026-04-05' } })
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Диапазон детализации должен быть внутри общего диапазона/i)
+        within(expenseDetails as HTMLElement).getByText(/внутри общего диапазона/i)
       ).toBeInTheDocument()
-      expect(screen.getAllByRole('button', { name: /Применить/i })[1]).toBeDisabled()
+      expect(within(expenseDetails as HTMLElement).getByRole('button', { name: /Применить/i })).toBeDisabled()
     })
   })
 })
