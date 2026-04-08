@@ -2,6 +2,7 @@
 Reports API views — thin HTTP layer; aggregation lives in apps.reports.services.
 """
 import re
+from datetime import date
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -33,6 +34,32 @@ from apps.reports.services import pdf_exports
 from apps.reports.services import transfers as transfers_service
 
 from .serializers import BudgetPlanReportSerializer, ForemanProjectSummaryDataSerializer
+
+
+def _get_validated_optional_date_range(request):
+    start_raw = request.query_params.get('start_date')
+    end_raw = request.query_params.get('end_date')
+    if not start_raw and not end_raw:
+        return None, None, None
+    if not start_raw or not end_raw:
+        return None, None, Response(
+            {'date_range': 'start_date and end_date must be provided together.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        start_date = date.fromisoformat(start_raw)
+        end_date = date.fromisoformat(end_raw)
+    except ValueError:
+        return None, None, Response(
+            {'date_range': 'Invalid date format. Use YYYY-MM-DD.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if end_date < start_date:
+        return None, None, Response(
+            {'date_range': 'end_date must be greater than or equal to start_date.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return start_date, end_date, None
 
 
 class BudgetPlanReportView(views.APIView):
@@ -206,11 +233,23 @@ class DashboardExpenseCategoriesView(views.APIView):
         validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
 
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
-        response_data = dashboard_service.build_dashboard_expense_categories_data(month, month_period, account=account)
+        response_data = dashboard_service.build_dashboard_expense_categories_data(
+            month,
+            month_period,
+            account=account,
+            start_date=start_date,
+            end_date=end_date,
+        )
         return Response(
             {
                 'month': response_data['month'],
@@ -237,11 +276,20 @@ class DashboardIncomeSourcesView(views.APIView):
         validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
 
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
-        response_data = dashboard_service.build_dashboard_income_sources_data(month, month_period, account=account)
+        response_data = dashboard_service.build_dashboard_income_sources_data(
+            month,
+            month_period,
+            account=account,
+            start_date=start_date,
+            end_date=end_date,
+        )
         return Response(
             {
                 'month': response_data['month'],
@@ -266,6 +314,9 @@ class ExportSectionPdfView(views.APIView):
         validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
 
         section_type = request.query_params.get('section_type')
         if section_type not in ('income_sources', 'expense_categories'):
@@ -278,7 +329,12 @@ class ExportSectionPdfView(views.APIView):
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
         pdf_content, filename = pdf_exports.run_export_section_pdf(
-            month, month_period, section_type, account
+            month,
+            month_period,
+            section_type,
+            account,
+            start_date=start_date,
+            end_date=end_date,
         )
         response = HttpResponse(pdf_content, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -299,6 +355,9 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
         validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
 
         parsed_target, target_error = parse_nullable_target_id(request, 'source_id')
         if target_error:
@@ -314,6 +373,8 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
             source_id,
             is_uncategorized,
             account,
+            start_date=start_date,
+            end_date=end_date,
         )
         response = HttpResponse(pdf_content, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -334,6 +395,9 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
         validated, error_response = get_validated_month_period(request.query_params.get('month'))
         if error_response:
             return error_response
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
 
         parsed_target, target_error = parse_nullable_target_id(request, 'category_id')
         if target_error:
@@ -349,6 +413,8 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
             category_id,
             is_uncategorized,
             account,
+            start_date=start_date,
+            end_date=end_date,
         )
         response = HttpResponse(pdf_content, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

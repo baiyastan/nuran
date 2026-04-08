@@ -66,17 +66,20 @@ def run_export_section_pdf(
     month_period: MonthPeriod,
     section_type: str,
     account: str | None,
+    start_date=None,
+    end_date=None,
 ) -> tuple[bytes, str]:
     """Build dashboard section PDF (income_sources or expense_categories)."""
     if section_type == 'income_sources':
         section_data = dashboard_service.build_dashboard_income_sources_data(
-            month, month_period, account=account
+            month, month_period, account=account, start_date=start_date, end_date=end_date
         )
     else:
         section_data = dashboard_service.build_dashboard_expense_categories_data(
-            month, month_period, account=account
+            month, month_period, account=account, start_date=start_date, end_date=end_date
         )
     section_data['account_filter_label'] = _account_filter_label(account)
+    section_data['period_label'] = f'{start_date.isoformat()} — {end_date.isoformat()}' if start_date and end_date else None
     pdf_content = build_report_section_pdf(section_type, section_data)
     filename = f'{month}_{section_type}_report.pdf'
     return pdf_content, filename
@@ -88,6 +91,8 @@ def run_export_income_source_detail_pdf(
     source_id: int | None,
     is_uncategorized: bool,
     account: str | None,
+    start_date=None,
+    end_date=None,
 ) -> tuple[bytes, str]:
     detail_data = dashboard_service.build_income_source_detail_pdf_data(
         month,
@@ -95,6 +100,8 @@ def run_export_income_source_detail_pdf(
         source_id,
         is_uncategorized,
         account=account,
+        start_date=start_date,
+        end_date=end_date,
     )
     detail_data['account_filter_label'] = _account_filter_label(account)
     pdf_content = build_report_detail_pdf('income_source', detail_data)
@@ -109,6 +116,8 @@ def run_export_expense_category_detail_pdf(
     category_id: int | None,
     is_uncategorized: bool,
     account: str | None,
+    start_date=None,
+    end_date=None,
 ) -> tuple[bytes, str]:
     detail_data = dashboard_service.build_expense_category_detail_pdf_data(
         month,
@@ -116,6 +125,8 @@ def run_export_expense_category_detail_pdf(
         category_id,
         is_uncategorized,
         account=account,
+        start_date=start_date,
+        end_date=end_date,
     )
     detail_data['account_filter_label'] = _account_filter_label(account)
     pdf_content = build_report_detail_pdf('expense_category', detail_data)

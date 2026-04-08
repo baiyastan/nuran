@@ -2,6 +2,7 @@
 Expenses API views.
 """
 from decimal import Decimal
+from datetime import date
 
 from django.db import transaction
 from django.db.models import Sum
@@ -30,6 +31,28 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
     filterset_fields = ['scope', 'account']
     ordering_fields = ['spent_at', 'created_at', 'amount']
     ordering = ['-spent_at', '-created_at']
+
+    def _get_validated_date_range(self):
+        start_raw = self.request.query_params.get('start_date')
+        end_raw = self.request.query_params.get('end_date')
+
+        if not start_raw and not end_raw:
+            return None, None
+        if not start_raw or not end_raw:
+            raise DRFValidationError(
+                {'date_range': ['start_date and end_date must be provided together.']}
+            )
+
+        try:
+            start_date = date.fromisoformat(start_raw)
+            end_date = date.fromisoformat(end_raw)
+        except ValueError:
+            raise DRFValidationError({'date_range': ['Invalid date format. Use YYYY-MM-DD.']})
+
+        if end_date < start_date:
+            raise DRFValidationError({'date_range': ['end_date must be greater than or equal to start_date.']})
+
+        return start_date, end_date
 
     def get_queryset(self):
         qs = ActualExpense.objects.all().select_related(
@@ -63,6 +86,10 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
         spent_at_lte = self.request.query_params.get('spent_at__lte')
         if spent_at_lte:
             qs = qs.filter(spent_at__lte=spent_at_lte)
+
+        start_date, end_date = self._get_validated_date_range()
+        if start_date and end_date:
+            qs = qs.filter(spent_at__gte=start_date, spent_at__lte=end_date)
 
         return qs
 
