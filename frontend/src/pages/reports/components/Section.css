@@ -68,6 +68,64 @@
   color: #6b7280;
 }
 
+.expense-section--foreman .actual-summary-block {
+  background: #f8fafc;
+  border: 1px solid #dbe7f3;
+  border-radius: 10px;
+  padding: 0.9rem;
+  margin-bottom: 1.1rem;
+}
+
+.expense-section--foreman .actual-subsection-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 0.75rem 0;
+}
+
+.expense-section--foreman .actual-subsection-title--detail {
+  margin-top: 1.1rem;
+}
+
+.expense-section--foreman .actual-summary-block .table-wrapper {
+  border-color: #c9d9ea;
+  border-radius: 8px;
+}
+
+.expense-section--foreman .actual-summary-block .table th {
+  background: #eef4fb;
+  font-weight: 700;
+}
+
+.expense-section--foreman .actual-summary-block .table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.expense-section--foreman .actual-summary-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.expense-section--foreman .actual-summary-num--strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.expense-section--foreman .actual-diff.is-positive {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.expense-section--foreman .actual-diff.is-negative {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.expense-section--foreman .actual-diff.is-neutral {
+  color: #6b7280;
+}
+
 .expense-section--foreman .tables-container .table-section:nth-child(1) tbody td:nth-child(2),
 .expense-section--foreman .tables-container .table-section:nth-child(2) tbody td:nth-child(3) {
   font-variant-numeric: tabular-nums;

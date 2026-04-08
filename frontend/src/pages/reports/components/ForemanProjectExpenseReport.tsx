@@ -34,7 +34,7 @@ export function ForemanProjectExpenseReport({
     selectedMonth: month,
     selectedTab: 'project',
     selectedProjectId: null,
-    skipExpenseFacts: true,
+    skipExpenseFacts: false,
   })
 
   const loadingMain = data.loading.monthPeriod || data.loading.expensePlanned

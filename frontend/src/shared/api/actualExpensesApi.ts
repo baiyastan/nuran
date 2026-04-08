@@ -7,6 +7,8 @@ export interface ActualExpenseListParams {
   month?: string // YYYY-MM (required for list by month+scope)
   scope?: ActualExpenseScope
   category?: number | 'null'
+  start_date?: string
+  end_date?: string
   spent_at?: string
   ordering?: string
   page?: number

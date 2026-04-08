@@ -123,9 +123,45 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   const [expenseDetailPage, setExpenseDetailPage] = useState<number>(1)
   const [expenseAccountFilter, setExpenseAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
   const [incomeAccountFilter, setIncomeAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
-  const [incomeDetailAccountFilter, setIncomeDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
-  const [expenseDetailAccountFilter, setExpenseDetailAccountFilter] = useState<'ALL' | 'CASH' | 'BANK'>('ALL')
+  const [detailRangeDraft, setDetailRangeDraft] = useState<{ start_date: string; end_date: string }>({
+    start_date: '',
+    end_date: '',
+  })
+  const [detailRangeApplied, setDetailRangeApplied] = useState<{ start_date: string; end_date: string } | null>(null)
+  const [incomeDetailFilterDraft, setIncomeDetailFilterDraft] = useState<{
+    start_date: string
+    end_date: string
+    account: 'ALL' | 'CASH' | 'BANK'
+  } | null>(null)
+  const [incomeDetailFilterApplied, setIncomeDetailFilterApplied] = useState<{
+    start_date: string
+    end_date: string
+    account: 'ALL' | 'CASH' | 'BANK'
+  } | null>(null)
+  const [expenseDetailFilterDraft, setExpenseDetailFilterDraft] = useState<{
+    start_date: string
+    end_date: string
+    account: 'ALL' | 'CASH' | 'BANK'
+  } | null>(null)
+  const [expenseDetailFilterApplied, setExpenseDetailFilterApplied] = useState<{
+    start_date: string
+    end_date: string
+    account: 'ALL' | 'CASH' | 'BANK'
+  } | null>(null)
   const [openTransferDirection, setOpenTransferDirection] = useState<'BANK_TO_CASH' | 'CASH_TO_BANK' | null>(null)
+  const isRangePairFilled = Boolean(detailRangeDraft.start_date && detailRangeDraft.end_date)
+  const isRangeInvalid = isRangePairFilled && detailRangeDraft.start_date > detailRangeDraft.end_date
+
+  const incomeDetailEffectiveFilter = incomeDetailFilterApplied ?? {
+    start_date: detailRangeApplied?.start_date ?? '',
+    end_date: detailRangeApplied?.end_date ?? '',
+    account: incomeAccountFilter,
+  }
+  const expenseDetailEffectiveFilter = expenseDetailFilterApplied ?? {
+    start_date: detailRangeApplied?.start_date ?? '',
+    end_date: detailRangeApplied?.end_date ?? '',
+    account: expenseAccountFilter,
+  }
 
   const {
     data: kpiData,
@@ -140,6 +176,10 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   } = useGetDashboardExpenseCategoriesQuery({
     month,
     ...(expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
+    ...(detailRangeApplied && {
+      start_date: detailRangeApplied.start_date,
+      end_date: detailRangeApplied.end_date,
+    }),
   })
 
   const {
@@ -149,6 +189,10 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
   } = useGetDashboardIncomeSourcesQuery({
     month,
     ...(incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
+    ...(detailRangeApplied && {
+      start_date: detailRangeApplied.start_date,
+      end_date: detailRangeApplied.end_date,
+    }),
   })
 
   const {
@@ -160,9 +204,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       ? undefined
       : {
           month,
-          source: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
+          ...(selectedIncomeSourceId !== null && { source: selectedIncomeSourceId }),
           page: incomeDetailPage,
-          ...(incomeDetailAccountFilter !== 'ALL' && { account: incomeDetailAccountFilter }),
+          ...(incomeDetailEffectiveFilter.account !== 'ALL' && { account: incomeDetailEffectiveFilter.account }),
+          ...(incomeDetailEffectiveFilter.start_date && incomeDetailEffectiveFilter.end_date && {
+            start_date: incomeDetailEffectiveFilter.start_date,
+            end_date: incomeDetailEffectiveFilter.end_date,
+          }),
         },
     {
       skip: selectedIncomeSourceId === undefined,
@@ -180,7 +228,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           month,
           category: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
           page: expenseDetailPage,
-          ...(expenseDetailAccountFilter !== 'ALL' && { account: expenseDetailAccountFilter }),
+          ...(expenseDetailEffectiveFilter.account !== 'ALL' && { account: expenseDetailEffectiveFilter.account }),
+          ...(expenseDetailEffectiveFilter.start_date && expenseDetailEffectiveFilter.end_date && {
+            start_date: expenseDetailEffectiveFilter.start_date,
+            end_date: expenseDetailEffectiveFilter.end_date,
+          }),
         },
     {
       skip: selectedExpenseCategoryId === undefined,
@@ -262,6 +314,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     setExportingSection(sectionType)
 
     try {
+      const sectionRange =
+        detailRangeApplied?.start_date && detailRangeApplied?.end_date
+          ? {
+              start_date: detailRangeApplied.start_date,
+              end_date: detailRangeApplied.end_date,
+            }
+          : {}
       const blob = await exportSectionPdf({
         month,
         sectionType,
@@ -269,6 +328,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
         ...(sectionType === 'income_sources' &&
           incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
+        ...sectionRange,
       }).unwrap()
       const accountForFilename =
         sectionType === 'expense_categories' ? expenseAccountFilter : incomeAccountFilter
@@ -292,7 +352,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       const blob = await exportIncomeSourceDetailPdf({
         month,
         sourceId: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
-        ...(incomeDetailAccountFilter !== 'ALL' && { account: incomeDetailAccountFilter }),
+        ...(incomeDetailEffectiveFilter.account !== 'ALL' && { account: incomeDetailEffectiveFilter.account }),
+        ...(incomeDetailEffectiveFilter.start_date && incomeDetailEffectiveFilter.end_date && {
+          start_date: incomeDetailEffectiveFilter.start_date,
+          end_date: incomeDetailEffectiveFilter.end_date,
+        }),
       }).unwrap()
       downloadBlob(
         blob,
@@ -300,7 +364,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           month,
           'income_source_detail',
           selectedIncomeSourceId,
-          incomeDetailAccountFilter
+          incomeDetailEffectiveFilter.account
         )
       )
     } catch {
@@ -322,7 +386,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       const blob = await exportExpenseCategoryDetailPdf({
         month,
         categoryId: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
-        ...(expenseDetailAccountFilter !== 'ALL' && { account: expenseDetailAccountFilter }),
+        ...(expenseDetailEffectiveFilter.account !== 'ALL' && { account: expenseDetailEffectiveFilter.account }),
+        ...(expenseDetailEffectiveFilter.start_date && expenseDetailEffectiveFilter.end_date && {
+          start_date: expenseDetailEffectiveFilter.start_date,
+          end_date: expenseDetailEffectiveFilter.end_date,
+        }),
       }).unwrap()
       downloadBlob(
         blob,
@@ -330,7 +398,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
           month,
           'expense_category_detail',
           selectedExpenseCategoryId,
-          expenseDetailAccountFilter
+          expenseDetailEffectiveFilter.account
         )
       )
     } catch {
@@ -339,6 +407,76 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       setExportingDetail(null)
     }
   }
+
+  const applyDetailRange = () => {
+    if (!isRangePairFilled || isRangeInvalid) {
+      return
+    }
+    setDetailRangeApplied({
+      start_date: detailRangeDraft.start_date,
+      end_date: detailRangeDraft.end_date,
+    })
+    setIncomeDetailPage(1)
+    setExpenseDetailPage(1)
+    setSelectedIncomeSourceId(undefined)
+    setSelectedExpenseCategoryId(undefined)
+    setIncomeDetailFilterApplied(null)
+    setIncomeDetailFilterDraft(null)
+    setExpenseDetailFilterApplied(null)
+    setExpenseDetailFilterDraft(null)
+  }
+
+  const resetDetailRange = () => {
+    setDetailRangeDraft({ start_date: '', end_date: '' })
+    setDetailRangeApplied(null)
+    setIncomeDetailPage(1)
+    setExpenseDetailPage(1)
+    setSelectedIncomeSourceId(undefined)
+    setSelectedExpenseCategoryId(undefined)
+    setIncomeDetailFilterApplied(null)
+    setIncomeDetailFilterDraft(null)
+    setExpenseDetailFilterApplied(null)
+    setExpenseDetailFilterDraft(null)
+  }
+
+  const incomeDetailRangePairFilled = Boolean(
+    incomeDetailFilterDraft?.start_date && incomeDetailFilterDraft?.end_date
+  )
+  const incomeDetailHasAnyDate = Boolean(
+    incomeDetailFilterDraft?.start_date || incomeDetailFilterDraft?.end_date
+  )
+  const incomeDetailRangePairIncomplete = incomeDetailHasAnyDate && !incomeDetailRangePairFilled
+  const incomeDetailRangeOrderInvalid = Boolean(
+    incomeDetailRangePairFilled &&
+      incomeDetailFilterDraft &&
+      incomeDetailFilterDraft.start_date > incomeDetailFilterDraft.end_date
+  )
+  const incomeDetailOutOfParentRange = Boolean(
+    incomeDetailRangePairFilled &&
+      detailRangeApplied &&
+      incomeDetailFilterDraft &&
+      (incomeDetailFilterDraft.start_date < detailRangeApplied.start_date ||
+        incomeDetailFilterDraft.end_date > detailRangeApplied.end_date)
+  )
+  const expenseDetailRangePairFilled = Boolean(
+    expenseDetailFilterDraft?.start_date && expenseDetailFilterDraft?.end_date
+  )
+  const expenseDetailHasAnyDate = Boolean(
+    expenseDetailFilterDraft?.start_date || expenseDetailFilterDraft?.end_date
+  )
+  const expenseDetailRangePairIncomplete = expenseDetailHasAnyDate && !expenseDetailRangePairFilled
+  const expenseDetailRangeOrderInvalid = Boolean(
+    expenseDetailRangePairFilled &&
+      expenseDetailFilterDraft &&
+      expenseDetailFilterDraft.start_date > expenseDetailFilterDraft.end_date
+  )
+  const expenseDetailOutOfParentRange = Boolean(
+    expenseDetailRangePairFilled &&
+      detailRangeApplied &&
+      expenseDetailFilterDraft &&
+      (expenseDetailFilterDraft.start_date < detailRangeApplied.start_date ||
+        expenseDetailFilterDraft.end_date > detailRangeApplied.end_date)
+  )
 
   return (
     <div className="report-section global-summary-section">
@@ -441,46 +579,102 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 {t('globalSummary.incomeSourcesSummaryTitle')}
               </h4>
               <div className="global-summary-section-header__actions">
-                <div className="expense-categories-filter expense-categories-filter--inline">
-                  <label htmlFor="income-account-filter" className="expense-categories-filter__label">
-                    {t('globalSummary.incomeAccountFilterLabel')}:
-                  </label>
-                  <select
-                    id="income-account-filter"
-                    className="expense-categories-filter__select"
-                    value={incomeAccountFilter}
-                    onChange={(e) => setIncomeAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')}
-                    aria-label={t('globalSummary.incomeAccountFilterLabel')}
-                  >
-                    <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
-                    <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
-                    <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
-                  </select>
+                <div className="parent-filter-toolbar">
+                  <div className="parent-filter-toolbar__label-row">
+                    <span className="filter-level-badge filter-level-badge--parent">{t('filters.generalFilter')}</span>
+                    {detailRangeApplied && (
+                      <span className="detail-range-badge">
+                        {t('filters.period')}: {detailRangeApplied.start_date} — {detailRangeApplied.end_date}
+                      </span>
+                    )}
+                  </div>
+                  <div className="parent-filter-toolbar__controls">
+                    <div className="detail-range-filter">
+                      <label className="expense-categories-filter__label" htmlFor="detail-range-start-income">
+                        {t('filters.startDate')}
+                      </label>
+                      <input
+                        id="detail-range-start-income"
+                        className="expense-categories-filter__select"
+                        type="date"
+                        value={detailRangeDraft.start_date}
+                        onChange={(e) =>
+                          setDetailRangeDraft((current) => ({ ...current, start_date: e.target.value }))
+                        }
+                      />
+                      <label className="expense-categories-filter__label" htmlFor="detail-range-end-income">
+                        {t('filters.endDate')}
+                      </label>
+                      <input
+                        id="detail-range-end-income"
+                        className="expense-categories-filter__select"
+                        type="date"
+                        value={detailRangeDraft.end_date}
+                        onChange={(e) =>
+                          setDetailRangeDraft((current) => ({ ...current, end_date: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="expense-categories-filter expense-categories-filter--inline">
+                      <label htmlFor="income-account-filter" className="expense-categories-filter__label">
+                        {t('globalSummary.incomeAccountFilterLabel')}:
+                      </label>
+                      <select
+                        id="income-account-filter"
+                        className="expense-categories-filter__select"
+                        value={incomeAccountFilter}
+                        onChange={(e) => {
+                          setIncomeAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
+                          setSelectedIncomeSourceId(undefined)
+                          setIncomeDetailFilterApplied(null)
+                          setIncomeDetailFilterDraft(null)
+                          setIncomeDetailPage(1)
+                        }}
+                        aria-label={t('globalSummary.incomeAccountFilterLabel')}
+                      >
+                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                      </select>
+                    </div>
+                    <Button type="button" size="small" onClick={applyDetailRange} disabled={!isRangePairFilled || isRangeInvalid}>
+                      {t('filters.apply')}
+                    </Button>
+                    <Button type="button" variant="secondary" size="small" onClick={resetDetailRange}>
+                      {t('filters.reset')}
+                    </Button>
+                    {canExportPdf && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        className="global-summary-export-button global-summary-export-button--muted"
+                        disabled={exportingSection !== null}
+                        title={t('globalSummary.actions.exportPdf')}
+                        aria-label={`${t('globalSummary.incomeSourcesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                        onClick={() => {
+                          void handleSectionExport('income_sources')
+                        }}
+                      >
+                        {exportingSection === 'income_sources'
+                          ? t('globalSummary.actions.exportingPdf')
+                          : t('globalSummary.actions.exportPdf')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {canExportPdf && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    className="global-summary-export-button"
-                    disabled={exportingSection !== null}
-                    title={t('globalSummary.actions.exportPdf')}
-                    aria-label={`${t('globalSummary.incomeSourcesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
-                    onClick={() => {
-                      void handleSectionExport('income_sources')
-                    }}
-                  >
-                    {exportingSection === 'income_sources'
-                      ? t('globalSummary.actions.exportingPdf')
-                      : t('globalSummary.actions.exportPdf')}
-                  </Button>
-                )}
               </div>
             </div>
             {canExportPdf && exportErrorSection === 'income_sources' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
               </div>
+            )}
+            {isRangeInvalid && (
+              <div className="summary-error">{t('filters.invalidRange')}</div>
+            )}
+            {detailRangeApplied && (
+              <div className="detail-range-hint">{t('filters.monthPlanHint')}</div>
             )}
             <Table
               columns={[
@@ -507,6 +701,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                           row.source_name || t('expense.tables.actual.uncategorized')
                         )
                         setIncomeDetailPage(1)
+                        const initial = {
+                          start_date: detailRangeApplied?.start_date ?? '',
+                          end_date: detailRangeApplied?.end_date ?? '',
+                          account: incomeAccountFilter,
+                        } as const
+                        setIncomeDetailFilterDraft(initial)
+                        setIncomeDetailFilterApplied(null)
                       }}
                     >
                       {row.source_name}
@@ -528,55 +729,161 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             {selectedIncomeSourceId !== undefined && (
               <div className="global-summary-expense-details">
                 <div className="global-summary-section-header global-summary-section-header--detail">
-                  <h4 className="expense-details-title">
-                    {selectedIncomeSourceName} – {t('globalSummary.details')}
-                  </h4>
+                  <div className="expense-details-title-block">
+                    <h4 className="expense-details-title">
+                      {selectedIncomeSourceName} – {t('globalSummary.details')}
+                    </h4>
+                    <p className="expense-details-meta">
+                      {(incomeDetailsData?.total_count ?? incomeDetailsData?.count ?? 0)} {t('globalSummary.times')} ·{' '}
+                      {t('globalSummary.total')} {formatKGS(incomeDetailsData?.total_amount ?? '0')}
+                    </p>
+                  </div>
                   <div className="global-summary-section-header__actions">
-                    <div className="expense-categories-filter expense-categories-filter--inline">
-                      <label
-                        htmlFor="income-detail-account-filter"
-                        className="expense-categories-filter__label"
-                      >
-                        {t('globalSummary.incomeAccountFilterLabel')}:
-                      </label>
-                      <select
-                        id="income-detail-account-filter"
-                        className="expense-categories-filter__select"
-                        value={incomeDetailAccountFilter}
-                        onChange={(e) =>
-                          setIncomeDetailAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
-                        }
-                        aria-label={t('globalSummary.incomeAccountFilterLabel')}
-                      >
-                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
-                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
-                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
-                      </select>
+                    <div className="detail-filter-toolbar">
+                      <div className="detail-filter-toolbar__label-row">
+                        <span className="detail-filter-toolbar__title">{t('filters.detailFilter')}</span>
+                        <span
+                          className={
+                            incomeDetailFilterApplied
+                              ? 'filter-level-badge filter-level-badge--local'
+                              : 'filter-level-badge filter-level-badge--parent'
+                          }
+                        >
+                          {incomeDetailFilterApplied ? t('filters.localFilter') : t('filters.generalFilter')}
+                        </span>
+                      </div>
+                      <div className="detail-filter-toolbar__controls">
+                        <div className="detail-range-filter detail-range-filter--compact">
+                          <label htmlFor="income-detail-start" className="expense-categories-filter__label">
+                            {t('filters.startDate')}
+                          </label>
+                          <input
+                            id="income-detail-start"
+                            className="expense-categories-filter__select"
+                            type="date"
+                            value={incomeDetailFilterDraft?.start_date ?? ''}
+                            onChange={(e) =>
+                              setIncomeDetailFilterDraft((current) => ({
+                                start_date: e.target.value,
+                                end_date: current?.end_date ?? '',
+                                account: current?.account ?? incomeAccountFilter,
+                              }))
+                            }
+                          />
+                          <label htmlFor="income-detail-end" className="expense-categories-filter__label">
+                            {t('filters.endDate')}
+                          </label>
+                          <input
+                            id="income-detail-end"
+                            className="expense-categories-filter__select"
+                            type="date"
+                            value={incomeDetailFilterDraft?.end_date ?? ''}
+                            onChange={(e) =>
+                              setIncomeDetailFilterDraft((current) => ({
+                                start_date: current?.start_date ?? '',
+                                end_date: e.target.value,
+                                account: current?.account ?? incomeAccountFilter,
+                              }))
+                            }
+                          />
+                          <label htmlFor="income-detail-account" className="expense-categories-filter__label">
+                            {t('globalSummary.incomeAccountFilterLabel')}:
+                          </label>
+                          <select
+                            id="income-detail-account"
+                            className="expense-categories-filter__select"
+                            value={incomeDetailFilterDraft?.account ?? incomeAccountFilter}
+                            onChange={(e) =>
+                              setIncomeDetailFilterDraft((current) => ({
+                                start_date: current?.start_date ?? '',
+                                end_date: current?.end_date ?? '',
+                                account: e.target.value as 'ALL' | 'CASH' | 'BANK',
+                              }))
+                            }
+                          >
+                            <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                            <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                            <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                          </select>
+                        </div>
+                        <Button
+                          type="button"
+                          size="small"
+                          onClick={() => {
+                            if (
+                              !incomeDetailFilterDraft ||
+                              incomeDetailRangePairIncomplete ||
+                              incomeDetailRangeOrderInvalid ||
+                              incomeDetailOutOfParentRange
+                            ) {
+                              return
+                            }
+                            setIncomeDetailFilterApplied(incomeDetailFilterDraft)
+                            setIncomeDetailPage(1)
+                          }}
+                          disabled={
+                            incomeDetailRangePairIncomplete ||
+                            incomeDetailRangeOrderInvalid ||
+                            incomeDetailOutOfParentRange
+                          }
+                        >
+                          {t('filters.apply')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="small"
+                          onClick={() => {
+                            const resetToParent = {
+                              start_date: detailRangeApplied?.start_date ?? '',
+                              end_date: detailRangeApplied?.end_date ?? '',
+                              account: incomeAccountFilter,
+                            } as const
+                            setIncomeDetailFilterDraft(resetToParent)
+                            setIncomeDetailFilterApplied(null)
+                            setIncomeDetailPage(1)
+                          }}
+                        >
+                          {t('filters.reset')}
+                        </Button>
+                        {incomeDetailFilterApplied && (
+                          <span className="detail-range-badge">
+                            {t('filters.detailPeriod')}: {incomeDetailFilterApplied.start_date} —{' '}
+                            {incomeDetailFilterApplied.end_date}
+                          </span>
+                        )}
+                        {canExportPdf && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="small"
+                            className="global-summary-export-button global-summary-export-button--muted"
+                            disabled={exportingDetail !== null}
+                            title={t('globalSummary.actions.exportPdf')}
+                            aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
+                            onClick={() => {
+                              void handleIncomeDetailExport()
+                            }}
+                          >
+                            {exportingDetail === 'income_source_detail'
+                              ? t('globalSummary.actions.exportingPdf')
+                              : t('globalSummary.actions.exportPdf')}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {canExportPdf && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="small"
-                        className="global-summary-export-button"
-                        disabled={exportingDetail !== null}
-                        title={t('globalSummary.actions.exportPdf')}
-                        aria-label={`${selectedIncomeSourceName} ${t('globalSummary.actions.exportPdf')}`}
-                        onClick={() => {
-                          void handleIncomeDetailExport()
-                        }}
-                      >
-                        {exportingDetail === 'income_source_detail'
-                          ? t('globalSummary.actions.exportingPdf')
-                          : t('globalSummary.actions.exportPdf')}
-                      </Button>
-                    )}
                   </div>
                 </div>
                 {canExportPdf && exportErrorDetail === 'income_source_detail' && (
                   <div className="summary-error">
                     {t('globalSummary.exportError')}
                   </div>
+                )}
+                {incomeDetailRangeOrderInvalid && (
+                  <div className="summary-error">{t('filters.invalidRange')}</div>
+                )}
+                {incomeDetailOutOfParentRange && (
+                  <div className="summary-error">{t('filters.outOfParentRange')}</div>
                 )}
 
                 {loadingIncomeDetails && (
@@ -669,46 +976,102 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 {t('globalSummary.expenseCategoriesSummaryTitle')}
               </h4>
               <div className="global-summary-section-header__actions">
-                <div className="expense-categories-filter expense-categories-filter--inline">
-                  <label htmlFor="expense-account-filter" className="expense-categories-filter__label">
-                    {t('globalSummary.expenseAccountFilterLabel')}:
-                  </label>
-                  <select
-                    id="expense-account-filter"
-                    className="expense-categories-filter__select"
-                    value={expenseAccountFilter}
-                    onChange={(e) => setExpenseAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')}
-                    aria-label={t('globalSummary.expenseAccountFilterLabel')}
-                  >
-                    <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
-                    <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
-                    <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
-                  </select>
+                <div className="parent-filter-toolbar">
+                  <div className="parent-filter-toolbar__label-row">
+                    <span className="filter-level-badge filter-level-badge--parent">{t('filters.generalFilter')}</span>
+                    {detailRangeApplied && (
+                      <span className="detail-range-badge">
+                        {t('filters.period')}: {detailRangeApplied.start_date} — {detailRangeApplied.end_date}
+                      </span>
+                    )}
+                  </div>
+                  <div className="parent-filter-toolbar__controls">
+                    <div className="detail-range-filter">
+                      <label className="expense-categories-filter__label" htmlFor="detail-range-start-expense">
+                        {t('filters.startDate')}
+                      </label>
+                      <input
+                        id="detail-range-start-expense"
+                        className="expense-categories-filter__select"
+                        type="date"
+                        value={detailRangeDraft.start_date}
+                        onChange={(e) =>
+                          setDetailRangeDraft((current) => ({ ...current, start_date: e.target.value }))
+                        }
+                      />
+                      <label className="expense-categories-filter__label" htmlFor="detail-range-end-expense">
+                        {t('filters.endDate')}
+                      </label>
+                      <input
+                        id="detail-range-end-expense"
+                        className="expense-categories-filter__select"
+                        type="date"
+                        value={detailRangeDraft.end_date}
+                        onChange={(e) =>
+                          setDetailRangeDraft((current) => ({ ...current, end_date: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="expense-categories-filter expense-categories-filter--inline">
+                      <label htmlFor="expense-account-filter" className="expense-categories-filter__label">
+                        {t('globalSummary.expenseAccountFilterLabel')}:
+                      </label>
+                      <select
+                        id="expense-account-filter"
+                        className="expense-categories-filter__select"
+                        value={expenseAccountFilter}
+                        onChange={(e) => {
+                          setExpenseAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
+                          setSelectedExpenseCategoryId(undefined)
+                          setExpenseDetailFilterApplied(null)
+                          setExpenseDetailFilterDraft(null)
+                          setExpenseDetailPage(1)
+                        }}
+                        aria-label={t('globalSummary.expenseAccountFilterLabel')}
+                      >
+                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                      </select>
+                    </div>
+                    <Button type="button" size="small" onClick={applyDetailRange} disabled={!isRangePairFilled || isRangeInvalid}>
+                      {t('filters.apply')}
+                    </Button>
+                    <Button type="button" variant="secondary" size="small" onClick={resetDetailRange}>
+                      {t('filters.reset')}
+                    </Button>
+                    {canExportPdf && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        className="global-summary-export-button global-summary-export-button--muted"
+                        disabled={exportingSection !== null}
+                        title={t('globalSummary.actions.exportPdf')}
+                        aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
+                        onClick={() => {
+                          void handleSectionExport('expense_categories')
+                        }}
+                      >
+                        {exportingSection === 'expense_categories'
+                          ? t('globalSummary.actions.exportingPdf')
+                          : t('globalSummary.actions.exportPdf')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {canExportPdf && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    className="global-summary-export-button"
-                    disabled={exportingSection !== null}
-                    title={t('globalSummary.actions.exportPdf')}
-                    aria-label={`${t('globalSummary.expenseCategoriesSummaryTitle')} ${t('globalSummary.actions.exportPdf')}`}
-                    onClick={() => {
-                      void handleSectionExport('expense_categories')
-                    }}
-                  >
-                    {exportingSection === 'expense_categories'
-                      ? t('globalSummary.actions.exportingPdf')
-                      : t('globalSummary.actions.exportPdf')}
-                  </Button>
-                )}
               </div>
             </div>
             {canExportPdf && exportErrorSection === 'expense_categories' && (
               <div className="summary-error">
                 {t('globalSummary.exportError')}
               </div>
+            )}
+            {isRangeInvalid && (
+              <div className="summary-error">{t('filters.invalidRange')}</div>
+            )}
+            {detailRangeApplied && (
+              <div className="detail-range-hint">{t('filters.monthPlanHint')}</div>
             )}
             <Table
               columns={[
@@ -735,6 +1098,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                           row.category_name || t('expense.tables.actual.uncategorized')
                         )
                         setExpenseDetailPage(1)
+                        const initial = {
+                          start_date: detailRangeApplied?.start_date ?? '',
+                          end_date: detailRangeApplied?.end_date ?? '',
+                          account: expenseAccountFilter,
+                        } as const
+                        setExpenseDetailFilterDraft(initial)
+                        setExpenseDetailFilterApplied(null)
                       }}
                     >
                       {row.category_name}
@@ -756,55 +1126,161 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             {selectedExpenseCategoryId !== undefined && (
               <div className="global-summary-expense-details">
                 <div className="global-summary-section-header global-summary-section-header--detail">
-                  <h4 className="expense-details-title">
-                    {selectedExpenseCategoryName} – {t('globalSummary.details')}
-                  </h4>
+                  <div className="expense-details-title-block">
+                    <h4 className="expense-details-title">
+                      {selectedExpenseCategoryName} – {t('globalSummary.details')}
+                    </h4>
+                    <p className="expense-details-meta">
+                      {(expenseDetailsData?.total_count ?? expenseDetailsData?.count ?? 0)} {t('globalSummary.times')} ·{' '}
+                      {t('globalSummary.total')} {formatKGS(expenseDetailsData?.total_amount ?? '0')}
+                    </p>
+                  </div>
                   <div className="global-summary-section-header__actions">
-                    <div className="expense-categories-filter expense-categories-filter--inline">
-                      <label
-                        htmlFor="expense-detail-account-filter"
-                        className="expense-categories-filter__label"
-                      >
-                        {t('globalSummary.expenseAccountFilterLabel')}:
-                      </label>
-                      <select
-                        id="expense-detail-account-filter"
-                        className="expense-categories-filter__select"
-                        value={expenseDetailAccountFilter}
-                        onChange={(e) =>
-                          setExpenseDetailAccountFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')
-                        }
-                        aria-label={t('globalSummary.expenseAccountFilterLabel')}
-                      >
-                        <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
-                        <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
-                        <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
-                      </select>
+                    <div className="detail-filter-toolbar">
+                      <div className="detail-filter-toolbar__label-row">
+                        <span className="detail-filter-toolbar__title">{t('filters.detailFilter')}</span>
+                        <span
+                          className={
+                            expenseDetailFilterApplied
+                              ? 'filter-level-badge filter-level-badge--local'
+                              : 'filter-level-badge filter-level-badge--parent'
+                          }
+                        >
+                          {expenseDetailFilterApplied ? t('filters.localFilter') : t('filters.generalFilter')}
+                        </span>
+                      </div>
+                      <div className="detail-filter-toolbar__controls">
+                        <div className="detail-range-filter detail-range-filter--compact">
+                          <label htmlFor="expense-detail-start" className="expense-categories-filter__label">
+                            {t('filters.startDate')}
+                          </label>
+                          <input
+                            id="expense-detail-start"
+                            className="expense-categories-filter__select"
+                            type="date"
+                            value={expenseDetailFilterDraft?.start_date ?? ''}
+                            onChange={(e) =>
+                              setExpenseDetailFilterDraft((current) => ({
+                                start_date: e.target.value,
+                                end_date: current?.end_date ?? '',
+                                account: current?.account ?? expenseAccountFilter,
+                              }))
+                            }
+                          />
+                          <label htmlFor="expense-detail-end" className="expense-categories-filter__label">
+                            {t('filters.endDate')}
+                          </label>
+                          <input
+                            id="expense-detail-end"
+                            className="expense-categories-filter__select"
+                            type="date"
+                            value={expenseDetailFilterDraft?.end_date ?? ''}
+                            onChange={(e) =>
+                              setExpenseDetailFilterDraft((current) => ({
+                                start_date: current?.start_date ?? '',
+                                end_date: e.target.value,
+                                account: current?.account ?? expenseAccountFilter,
+                              }))
+                            }
+                          />
+                          <label htmlFor="expense-detail-account" className="expense-categories-filter__label">
+                            {t('globalSummary.expenseAccountFilterLabel')}:
+                          </label>
+                          <select
+                            id="expense-detail-account"
+                            className="expense-categories-filter__select"
+                            value={expenseDetailFilterDraft?.account ?? expenseAccountFilter}
+                            onChange={(e) =>
+                              setExpenseDetailFilterDraft((current) => ({
+                                start_date: current?.start_date ?? '',
+                                end_date: current?.end_date ?? '',
+                                account: e.target.value as 'ALL' | 'CASH' | 'BANK',
+                              }))
+                            }
+                          >
+                            <option value="ALL">{t('globalSummary.expenseAccountAll')}</option>
+                            <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                            <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+                          </select>
+                        </div>
+                        <Button
+                          type="button"
+                          size="small"
+                          onClick={() => {
+                            if (
+                              !expenseDetailFilterDraft ||
+                              expenseDetailRangePairIncomplete ||
+                              expenseDetailRangeOrderInvalid ||
+                              expenseDetailOutOfParentRange
+                            ) {
+                              return
+                            }
+                            setExpenseDetailFilterApplied(expenseDetailFilterDraft)
+                            setExpenseDetailPage(1)
+                          }}
+                          disabled={
+                            expenseDetailRangePairIncomplete ||
+                            expenseDetailRangeOrderInvalid ||
+                            expenseDetailOutOfParentRange
+                          }
+                        >
+                          {t('filters.apply')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="small"
+                          onClick={() => {
+                            const resetToParent = {
+                              start_date: detailRangeApplied?.start_date ?? '',
+                              end_date: detailRangeApplied?.end_date ?? '',
+                              account: expenseAccountFilter,
+                            } as const
+                            setExpenseDetailFilterDraft(resetToParent)
+                            setExpenseDetailFilterApplied(null)
+                            setExpenseDetailPage(1)
+                          }}
+                        >
+                          {t('filters.reset')}
+                        </Button>
+                        {expenseDetailFilterApplied && (
+                          <span className="detail-range-badge">
+                            {t('filters.detailPeriod')}: {expenseDetailFilterApplied.start_date} —{' '}
+                            {expenseDetailFilterApplied.end_date}
+                          </span>
+                        )}
+                        {canExportPdf && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="small"
+                            className="global-summary-export-button global-summary-export-button--muted"
+                            disabled={exportingDetail !== null}
+                            title={t('globalSummary.actions.exportPdf')}
+                            aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
+                            onClick={() => {
+                              void handleExpenseDetailExport()
+                            }}
+                          >
+                            {exportingDetail === 'expense_category_detail'
+                              ? t('globalSummary.actions.exportingPdf')
+                              : t('globalSummary.actions.exportPdf')}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {canExportPdf && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="small"
-                        className="global-summary-export-button"
-                        disabled={exportingDetail !== null}
-                        title={t('globalSummary.actions.exportPdf')}
-                        aria-label={`${selectedExpenseCategoryName} ${t('globalSummary.actions.exportPdf')}`}
-                        onClick={() => {
-                          void handleExpenseDetailExport()
-                        }}
-                      >
-                        {exportingDetail === 'expense_category_detail'
-                          ? t('globalSummary.actions.exportingPdf')
-                          : t('globalSummary.actions.exportPdf')}
-                      </Button>
-                    )}
                   </div>
                 </div>
                 {canExportPdf && exportErrorDetail === 'expense_category_detail' && (
                   <div className="summary-error">
                     {t('globalSummary.exportError')}
                   </div>
+                )}
+                {expenseDetailRangeOrderInvalid && (
+                  <div className="summary-error">{t('filters.invalidRange')}</div>
+                )}
+                {expenseDetailOutOfParentRange && (
+                  <div className="summary-error">{t('filters.outOfParentRange')}</div>
                 )}
 
                 {loadingExpenseDetails && (

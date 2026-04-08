@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ExpenseSummaryCard } from './ExpenseSummaryCard'
 import { ExpensePlannedTable } from './ExpensePlannedTable'
@@ -6,6 +7,8 @@ import { ExpensePlannedVsActualChart } from './charts/ExpensePlannedVsActualChar
 import { ExpenseDailyChart } from './charts/ExpenseDailyChart'
 import { CreateBudgetLineForm } from '@/features/budget-line-create/CreateBudgetLineForm'
 import { ActualExpense } from '@/entities/actual-expense/model'
+import { Table } from '@/shared/ui/Table/Table'
+import { formatKGS } from '@/shared/lib/utils'
 import './Section.css'
 
 interface ExpenseSectionProps {
@@ -96,6 +99,51 @@ export function ExpenseSection({
   foremanExpenseUi = false,
 }: ExpenseSectionProps) {
   const { t } = useTranslation('reports')
+  const plannedByCategory = useMemo(
+    () => Object.fromEntries(expenseByCategory.map((row) => [String(row.category_id ?? 'null'), row.planned])),
+    [expenseByCategory]
+  )
+  const plannedByCategoryName = useMemo(
+    () => Object.fromEntries(expenseByCategory.map((row) => [String(row.category_name).trim().toLowerCase(), row.planned])),
+    [expenseByCategory]
+  )
+  const actualByCategoryColumns = [
+    { key: 'category_name', label: t('expense.tables.actual.columns.categoryName') },
+    { key: 'planned_amount', label: t('expense.tables.actual.columns.plannedAmount') },
+    { key: 'actual_amount', label: t('expense.tables.actual.columns.amount') },
+    { key: 'difference', label: t('expense.tables.actual.columns.difference') },
+  ]
+  const actualByCategoryRows = useMemo(() => {
+    const items = expenseFacts.items ?? []
+    const grouped = new Map<string, { category_name: string; actual: number; planned: number }>()
+
+    items.forEach((item) => {
+      const categoryName = String(item.category_name ?? 'Uncategorized').trim() || 'Uncategorized'
+      const categoryId = item.category_id ?? (typeof item.category === 'number' ? item.category : null)
+      const normalizedName = categoryName.toLowerCase()
+      const planned =
+        plannedByCategory[String(categoryId ?? 'null')] ??
+        plannedByCategoryName[normalizedName] ??
+        0
+      const amount = Number.parseFloat(item.amount) || 0
+
+      const current = grouped.get(normalizedName)
+      if (current) {
+        current.actual += amount
+      } else {
+        grouped.set(normalizedName, { category_name: categoryName, actual: amount, planned })
+      }
+    })
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.actual - a.actual)
+      .map((row) => ({
+        category_name: row.category_name,
+        planned_amount: row.planned,
+        actual_amount: row.actual,
+        difference: row.actual - row.planned,
+      }))
+  }, [expenseFacts.items, plannedByCategory, plannedByCategoryName])
   return (
     <div
       className={`report-section expense-section${foremanExpenseUi ? ' expense-section--foreman' : ''}`}
@@ -135,11 +183,40 @@ export function ExpenseSection({
         {showActual && (
           <div className="table-section">
             <h3>{t('expense.actual')}</h3>
+            {actualByCategoryRows.length > 0 && (
+              <div className="actual-summary-block">
+                <h4 className="actual-subsection-title">{t('expense.tables.actual.summaryTitle')}</h4>
+                <Table
+                  columns={actualByCategoryColumns}
+                  data={actualByCategoryRows}
+                  renderCell={(column, value) => {
+                    if (column === 'planned_amount') {
+                      return <span className="actual-summary-num">{formatKGS(Number(value) || 0)}</span>
+                    }
+                    if (column === 'actual_amount') {
+                      return <span className="actual-summary-num actual-summary-num--strong">{formatKGS(Number(value) || 0)}</span>
+                    }
+                    if (column === 'difference') {
+                      const n = Number(value) || 0
+                      const tone = n > 0 ? 'is-positive' : n < 0 ? 'is-negative' : 'is-neutral'
+                      return <span className={`actual-summary-num actual-diff ${tone}`}>{formatKGS(n)}</span>
+                    }
+                    return value as React.ReactNode
+                  }}
+                />
+              </div>
+            )}
+            <h4 className="actual-subsection-title actual-subsection-title--detail">
+              {t('expense.tables.actual.detailsTitle')}
+            </h4>
             <ExpenseFactsTable
               items={expenseFacts.items}
               loading={expenseFacts.loading}
               error={expenseFacts.error}
               commentColumn={foremanExpenseUi ? 'when-nonempty' : 'always'}
+              plannedByCategory={plannedByCategory}
+              plannedByCategoryName={plannedByCategoryName}
+              showPlanComparison={foremanExpenseUi}
             />
           </div>
         )}

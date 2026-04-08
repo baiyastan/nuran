@@ -470,6 +470,33 @@ describe('GlobalSummary section PDF export', () => {
     })
   })
 
+  it('uses parent filter params for section PDF export', async () => {
+    exportTrigger.mockReturnValue({
+      unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
+    })
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
+    )
+    fireEvent.change(screen.getByLabelText('Дата с'), { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getByLabelText('Дата по'), { target: { value: '2026-03-15' } })
+    fireEvent.click(screen.getByRole('button', { name: /Применить/i }))
+    fireEvent.change(screen.getByLabelText('Счёт'), { target: { value: 'CASH' } })
+    fireEvent.click(screen.getByRole('button', { name: /Скачать PDF/i }))
+
+    await waitFor(() => {
+      expect(exportTrigger).toHaveBeenCalledWith({
+        month: '2026-03',
+        sectionType: 'income_sources',
+        account: 'CASH',
+        start_date: '2026-03-01',
+        end_date: '2026-03-15',
+      })
+    })
+  })
+
   it('exports the selected income-source detail PDF', async () => {
     exportIncomeDetailTrigger.mockReturnValue({
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
@@ -487,6 +514,38 @@ describe('GlobalSummary section PDF export', () => {
       expect(exportIncomeDetailTrigger).toHaveBeenCalledWith({
         month: '2026-03',
         sourceId: 1,
+      })
+    })
+  })
+
+  it('uses local detail filter params for income detail PDF export', async () => {
+    exportIncomeDetailTrigger.mockReturnValue({
+      unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
+    })
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
+    )
+    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Source A' }))
+    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-03-10' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-03-20' } })
+    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'CASH' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+    fireEvent.click(screen.getByRole('button', { name: /Source A Скачать PDF/i }))
+
+    await waitFor(() => {
+      expect(exportIncomeDetailTrigger).toHaveBeenCalledWith({
+        month: '2026-03',
+        sourceId: 1,
+        account: 'CASH',
+        start_date: '2026-03-10',
+        end_date: '2026-03-20',
       })
     })
   })
@@ -509,6 +568,174 @@ describe('GlobalSummary section PDF export', () => {
         month: '2026-03',
         categoryId: 10,
       })
+    })
+  })
+
+  it('falls back to parent params for expense detail PDF export', async () => {
+    exportExpenseDetailTrigger.mockReturnValue({
+      unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
+    })
+
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-20' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    fireEvent.change(screen.getByLabelText('Счёт'), { target: { value: 'BANK' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    fireEvent.click(screen.getByRole('button', { name: /Category A Скачать PDF/i }))
+
+    await waitFor(() => {
+      expect(exportExpenseDetailTrigger).toHaveBeenCalledWith({
+        month: '2026-03',
+        categoryId: 10,
+        account: 'BANK',
+        start_date: '2026-03-01',
+        end_date: '2026-03-20',
+      })
+    })
+  })
+
+  it('shows date range inputs only in expanded income/expense panels', () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    expect(screen.queryByLabelText(/Дата с/i)).not.toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
+    )
+    expect(screen.getByLabelText(/Дата с/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Дата по/i)).toBeInTheDocument()
+  })
+
+  it('applies and resets date range in detail queries', async () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getByLabelText(/Дата с/i), { target: { value: '2026-03-10' } })
+    fireEvent.change(screen.getByLabelText(/Дата по/i), { target: { value: '2026-03-20' } })
+    fireEvent.click(screen.getByRole('button', { name: /Применить/i }))
+
+    await waitFor(() => {
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith({
+        month: '2026-03',
+        start_date: '2026-03-10',
+        end_date: '2026-03-20',
+      })
+      expect(screen.getByText(/Период: 2026-03-10/i)).toBeInTheDocument()
+      expect(screen.getByText(/План и разница рассчитаны относительно месячного плана/i)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Сбросить/i }))
+    await waitFor(() => {
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith({
+        month: '2026-03',
+      })
+    })
+  })
+
+  it('shows invalid range message and disables apply button', () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getByLabelText(/Дата с/i), { target: { value: '2026-03-20' } })
+    fireEvent.change(screen.getByLabelText(/Дата по/i), { target: { value: '2026-03-10' } })
+    expect(screen.getByText(/Дата начала не может быть позже даты окончания/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Применить/i })).toBeDisabled()
+  })
+
+  it('detail filter defaults from parent filter values', async () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Дата с')[1]).toHaveValue('2026-03-01')
+      expect(screen.getAllByLabelText('Дата по')[1]).toHaveValue('2026-03-30')
+    })
+  })
+
+  it('detail apply overrides only detail rows query', async () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+
+    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-03-10' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-03-20' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+
+    await waitFor(() => {
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenCalledWith({
+        month: '2026-03',
+        start_date: '2026-03-01',
+        end_date: '2026-03-30',
+      })
+      expect(useListActualExpensesQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 10,
+          month: '2026-03',
+          start_date: '2026-03-10',
+          end_date: '2026-03-20',
+        }),
+        { skip: false }
+      )
+    })
+  })
+
+  it('passes local detail account filter to expense detail query args', async () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+
+    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'BANK' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[1])
+
+    await waitFor(() => {
+      expect(useListActualExpensesQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 10,
+          month: '2026-03',
+          account: 'BANK',
+        }),
+        { skip: false }
+      )
+    })
+  })
+
+  it('detail range outside parent range shows validation error', async () => {
+    renderWithProviders(<GlobalSummary month="2026-03" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
+    )
+    fireEvent.change(screen.getAllByLabelText('Дата с')[0], { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[0], { target: { value: '2026-03-30' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Применить/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Category A' }))
+    fireEvent.change(screen.getAllByLabelText('Дата с')[1], { target: { value: '2026-04-01' } })
+    fireEvent.change(screen.getAllByLabelText('Дата по')[1], { target: { value: '2026-04-05' } })
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Диапазон детализации должен быть внутри общего диапазона/i)
+      ).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /Применить/i })[1]).toBeDisabled()
     })
   })
 })
