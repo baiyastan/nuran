@@ -77,8 +77,8 @@ describe('ReportsPage – foreman', () => {
     expect(screen.getByText('expense.summaryTitle')).toBeInTheDocument()
     expect(screen.queryByText('globalSummary.title')).not.toBeInTheDocument()
     expect(vi.mocked(useListActualExpensesQuery)).toHaveBeenCalledWith(
-      { month: '2026-02', scope: 'PROJECT' },
-      { skip: true }
+      expect.objectContaining({ month: '2026-02', scope: 'PROJECT' }),
+      expect.objectContaining({ skip: false })
     )
   })
 

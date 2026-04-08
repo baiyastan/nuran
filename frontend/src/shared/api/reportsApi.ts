@@ -87,6 +87,8 @@ export interface DashboardExpenseCategoriesResponse {
 export interface DashboardExpenseCategoriesParams {
   month: string // YYYY-MM
   account?: 'CASH' | 'BANK' // optional; omit or don't send for "all"
+  start_date?: string
+  end_date?: string
 }
 
 export interface DashboardIncomeSourceRow {
@@ -111,6 +113,8 @@ export interface DashboardIncomeSourcesResponse {
 export interface DashboardIncomeSourcesParams {
   month: string // YYYY-MM
   account?: 'CASH' | 'BANK' // optional; omit for "all"
+  start_date?: string
+  end_date?: string
 }
 
 export type ReportSectionType = 'income_sources' | 'expense_categories'
@@ -121,18 +125,24 @@ export interface ExportSectionPdfParams {
   sectionType: ReportSectionType
   /** When sectionType is expense_categories, pass to export filtered data; omit for "Все" */
   account?: 'CASH' | 'BANK'
+  start_date?: string
+  end_date?: string
 }
 
 export interface ExportIncomeSourceDetailPdfParams {
   month: string
   sourceId: ReportDetailTarget
   account?: 'CASH' | 'BANK'
+  start_date?: string
+  end_date?: string
 }
 
 export interface ExportExpenseCategoryDetailPdfParams {
   month: string
   categoryId: ReportDetailTarget
   account?: 'CASH' | 'BANK'
+  start_date?: string
+  end_date?: string
 }
 
 export interface TransferDetailItem {
@@ -175,9 +185,13 @@ export const reportsApi = baseApi.injectEndpoints({
       DashboardExpenseCategoriesResponse,
       DashboardExpenseCategoriesParams
     >({
-      query: ({ month, account }) => ({
+      query: ({ month, account, start_date, end_date }) => ({
         url: '/reports/dashboard-expense-categories/',
-        params: account ? { month, account } : { month },
+        params: {
+          month,
+          ...(account ? { account } : {}),
+          ...(start_date && end_date ? { start_date, end_date } : {}),
+        },
       }),
       providesTags: ['Report'],
     }),
@@ -185,42 +199,49 @@ export const reportsApi = baseApi.injectEndpoints({
       DashboardIncomeSourcesResponse,
       DashboardIncomeSourcesParams
     >({
-      query: ({ month, account }) => ({
+      query: ({ month, account, start_date, end_date }) => ({
         url: '/reports/dashboard-income-sources/',
-        params: account ? { month, account } : { month },
+        params: {
+          month,
+          ...(account ? { account } : {}),
+          ...(start_date && end_date ? { start_date, end_date } : {}),
+        },
       }),
       providesTags: ['Report'],
     }),
     exportSectionPdf: builder.mutation<Blob, ExportSectionPdfParams>({
-      query: ({ month, sectionType, account }) => ({
+      query: ({ month, sectionType, account, start_date, end_date }) => ({
         url: '/reports/export-section-pdf/',
         params: {
           month,
           section_type: sectionType,
           ...(sectionType === 'expense_categories' && account && { account }),
           ...(sectionType === 'income_sources' && account && { account }),
+          ...(start_date && end_date && { start_date, end_date }),
         },
         responseType: 'blob',
       }),
     }),
     exportIncomeSourceDetailPdf: builder.mutation<Blob, ExportIncomeSourceDetailPdfParams>({
-      query: ({ month, sourceId, account }) => ({
+      query: ({ month, sourceId, account, start_date, end_date }) => ({
         url: '/reports/export-income-source-detail-pdf/',
         params: {
           month,
           source_id: sourceId,
           ...(account && { account }),
+          ...(start_date && end_date && { start_date, end_date }),
         },
         responseType: 'blob',
       }),
     }),
     exportExpenseCategoryDetailPdf: builder.mutation<Blob, ExportExpenseCategoryDetailPdfParams>({
-      query: ({ month, categoryId, account }) => ({
+      query: ({ month, categoryId, account, start_date, end_date }) => ({
         url: '/reports/export-expense-category-detail-pdf/',
         params: {
           month,
           category_id: categoryId,
           ...(account && { account }),
+          ...(start_date && end_date && { start_date, end_date }),
         },
         responseType: 'blob',
       }),

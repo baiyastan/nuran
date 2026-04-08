@@ -4,12 +4,14 @@ import { IncomeEntry } from '@/entities/income-entry/model'
 export interface IncomeEntryListParams {
   finance_period?: number
   month?: string // YYYY-MM format
+  start_date?: string
+  end_date?: string
   fund_kind?: 'project' | 'office' | 'charity'
   project?: number
   search?: string
   ordering?: string
   page?: number
-  source?: number | 'null'
+  source?: number
   account?: 'CASH' | 'BANK'
 }
 

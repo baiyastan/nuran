@@ -15,6 +15,10 @@ interface ExpenseFactsTableProps {
   error?: unknown | null
   /** `when-nonempty`: hide comment column unless at least one row has a comment. */
   commentColumn?: 'always' | 'when-nonempty'
+  /** Optional monthly planned totals by category id for plan-vs-fact comparison. */
+  plannedByCategory?: Record<string, number>
+  plannedByCategoryName?: Record<string, number>
+  showPlanComparison?: boolean
 }
 
 export function ExpenseFactsTable({
@@ -22,6 +26,9 @@ export function ExpenseFactsTable({
   loading,
   error,
   commentColumn = 'always',
+  plannedByCategory,
+  plannedByCategoryName,
+  showPlanComparison = false,
 }: ExpenseFactsTableProps) {
   const { t } = useTranslation('reports')
 
@@ -32,11 +39,22 @@ export function ExpenseFactsTable({
   const columns = [
     { key: 'date', label: t('expense.tables.actual.columns.date') },
     { key: 'category_name', label: t('expense.tables.actual.columns.categoryName') },
+    ...(showPlanComparison
+      ? [
+          { key: 'planned_amount', label: t('expense.tables.actual.columns.plannedAmount') },
+        ]
+      : []),
     { key: 'amount', label: t('expense.tables.actual.columns.amount') },
+    ...(showPlanComparison
+      ? [
+          { key: 'difference', label: t('expense.tables.actual.columns.difference') },
+        ]
+      : []),
     ...(showCommentCol ? [{ key: 'comment', label: t('expense.tables.actual.columns.comment') }] : []),
   ]
 
-  const skeletonCols = commentColumn === 'when-nonempty' ? 3 : 4
+  const skeletonCols =
+    (showPlanComparison ? 2 : 0) + (commentColumn === 'when-nonempty' ? 3 : 4)
 
   if (loading || items === undefined) {
     return <TableSkeleton columnCount={skeletonCols} />
@@ -61,6 +79,19 @@ export function ExpenseFactsTable({
       date: formatDate(item.spent_at),
       category_name: item.category_name ?? categoryFromObject ?? fallbackCategoryName,
       amount: formatKGS(parseFloat(item.amount)),
+    }
+    if (showPlanComparison) {
+      const categoryId =
+        item.category_id ??
+        (typeof item.category === 'number' ? item.category : null)
+      const normalizedName = String(row.category_name).trim().toLowerCase()
+      const planned =
+        plannedByCategory?.[String(categoryId ?? 'null')] ??
+        plannedByCategoryName?.[normalizedName] ??
+        0
+      const actual = parseFloat(item.amount)
+      row.planned_amount = formatKGS(planned)
+      row.difference = formatKGS(actual - planned)
     }
     if (showCommentCol) {
       row.comment = item.comment?.trim() ? item.comment : '—'
