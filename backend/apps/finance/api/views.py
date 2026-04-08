@@ -2,6 +2,7 @@
 Finance API views.
 """
 from decimal import Decimal
+from datetime import date
 
 from django.db.models import Sum, Count, DecimalField, Value, OuterRef, Subquery
 from django.db.models.functions import Coalesce
@@ -157,6 +158,24 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
     search_fields = ['comment']
     ordering_fields = ['received_at', 'created_at', 'amount']
     ordering = ['-received_at', '-created_at']
+
+    def _get_validated_date_range(self):
+        start_raw = self.request.query_params.get('start_date')
+        end_raw = self.request.query_params.get('end_date')
+        if not start_raw and not end_raw:
+            return None, None
+        if not start_raw or not end_raw:
+            raise ValidationError(
+                {'date_range': ['start_date and end_date must be provided together.']}
+            )
+        try:
+            start_date = date.fromisoformat(start_raw)
+            end_date = date.fromisoformat(end_raw)
+        except ValueError:
+            raise ValidationError({'date_range': ['Invalid date format. Use YYYY-MM-DD.']})
+        if end_date < start_date:
+            raise ValidationError({'date_range': ['end_date must be greater than or equal to start_date.']})
+        return start_date, end_date
     
     def get_queryset(self):
         """Return income entries; foreman sees all project fund_kind rows (no assignment filter)."""
@@ -174,6 +193,9 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
             return qs.none()
         if getattr(user, 'role', None) == 'foreman':
             qs = qs.filter(finance_period__fund_kind='project')
+        start_date, end_date = self._get_validated_date_range()
+        if start_date and end_date:
+            qs = qs.filter(received_at__gte=start_date, received_at__lte=end_date)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -186,10 +208,11 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
         total_count and total_amount metadata.
         """
         month = request.query_params.get('month')
-        source_param = request.query_params.get('source')
+        source_raw = request.query_params.get('source')
+        source_param = (source_raw or '').strip()
 
         # Fallback to default behavior when not using month+source drill-down.
-        if not (month and source_param is not None):
+        if not month:
             return super().list(request, *args, **kwargs)
 
         month = month.strip()
@@ -202,9 +225,8 @@ class IncomeEntryViewSet(viewsets.ModelViewSet):
             finance_period__month_period=month_period,
         )
 
-        if source_param == 'null':
-            queryset = queryset.filter(source__isnull=True)
-        else:
+        # Treat sentinel/empty values as "no source filter" for production safety.
+        if source_param and source_param.lower() not in ('null', 'undefined'):
             try:
                 source_id = int(source_param)
             except (TypeError, ValueError):

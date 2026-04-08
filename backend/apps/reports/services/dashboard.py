@@ -22,7 +22,11 @@ from .helpers import to_decimal_str
 
 
 def build_dashboard_expense_categories_data(
-    month: str, month_period: MonthPeriod, account: str | None = None
+    month: str,
+    month_period: MonthPeriod,
+    account: str | None = None,
+    start_date=None,
+    end_date=None,
 ) -> dict[str, Any]:
     plan_qs = BudgetLine.objects.filter(
         plan__period=month_period,
@@ -42,6 +46,8 @@ def build_dashboard_expense_categories_data(
     fact_qs = ExpenseActualExpense.objects.filter(
         month_period=month_period,
     )
+    if start_date and end_date:
+        fact_qs = fact_qs.filter(spent_at__gte=start_date, spent_at__lte=end_date)
     if account in ('CASH', 'BANK'):
         fact_qs = fact_qs.filter(account=account)
     fact_qs = fact_qs.values('category_id', 'category__name').annotate(
@@ -130,7 +136,11 @@ def build_dashboard_expense_categories_data(
 
 
 def build_dashboard_income_sources_data(
-    month: str, month_period: MonthPeriod, account: str | None = None
+    month: str,
+    month_period: MonthPeriod,
+    account: str | None = None,
+    start_date=None,
+    end_date=None,
 ) -> dict[str, Any]:
     plan_qs = IncomePlan.objects.filter(
         period__month_period=month_period,
@@ -150,6 +160,8 @@ def build_dashboard_income_sources_data(
     fact_qs = IncomeEntry.objects.filter(
         finance_period__month_period=month_period,
     )
+    if start_date and end_date:
+        fact_qs = fact_qs.filter(received_at__gte=start_date, received_at__lte=end_date)
     if account in ('CASH', 'BANK'):
         fact_qs = fact_qs.filter(account=account)
     fact_qs = fact_qs.values('source_id', 'source__name').annotate(
@@ -245,6 +257,8 @@ def build_income_source_detail_pdf_data(
     source_id: int | None,
     is_uncategorized: bool,
     account: str | None = None,
+    start_date=None,
+    end_date=None,
 ) -> dict[str, Any]:
     queryset = (
         IncomeEntry.objects.select_related('source')
@@ -254,6 +268,8 @@ def build_income_source_detail_pdf_data(
 
     if account in ('CASH', 'BANK'):
         queryset = queryset.filter(account=account)
+    if start_date and end_date:
+        queryset = queryset.filter(received_at__gte=start_date, received_at__lte=end_date)
 
     if is_uncategorized:
         queryset = queryset.filter(source__isnull=True)
@@ -269,6 +285,7 @@ def build_income_source_detail_pdf_data(
 
     return {
         'month': month,
+        'period_label': f'{start_date.isoformat()} — {end_date.isoformat()}' if start_date and end_date else None,
         'month_status': month_period.status,
         'item_name': item_name,
         'total_count': total_count,
@@ -292,6 +309,8 @@ def build_expense_category_detail_pdf_data(
     category_id: int | None,
     is_uncategorized: bool,
     account: str | None = None,
+    start_date=None,
+    end_date=None,
 ) -> dict[str, Any]:
     queryset = (
         ExpenseActualExpense.objects.select_related('category')
@@ -301,6 +320,8 @@ def build_expense_category_detail_pdf_data(
 
     if account in ('CASH', 'BANK'):
         queryset = queryset.filter(account=account)
+    if start_date and end_date:
+        queryset = queryset.filter(spent_at__gte=start_date, spent_at__lte=end_date)
 
     if is_uncategorized:
         queryset = queryset.filter(category__isnull=True)
@@ -316,6 +337,7 @@ def build_expense_category_detail_pdf_data(
 
     return {
         'month': month,
+        'period_label': f'{start_date.isoformat()} — {end_date.isoformat()}' if start_date and end_date else None,
         'month_status': month_period.status,
         'item_name': item_name,
         'total_count': total_count,

@@ -133,6 +133,20 @@ def build_report_section_pdf(section_type: str, section_data: dict) -> bytes:
             body_style,
         ),
     ]
+    if section_data.get("period_label"):
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Период:</font> {section_data["period_label"]}',
+                body_style,
+            )
+        )
+    else:
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Период:</font> весь месяц',
+                body_style,
+            )
+        )
     if section_data.get("account_filter_label"):
         story.append(
             Paragraph(
@@ -214,6 +228,20 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
             body_style,
         ),
     ]
+    if detail_data.get("period_label"):
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Период:</font> {detail_data["period_label"]}',
+                body_style,
+            )
+        )
+    else:
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Период:</font> весь месяц',
+                body_style,
+            )
+        )
     if detail_data.get("account_filter_label"):
         story.append(
             Paragraph(
