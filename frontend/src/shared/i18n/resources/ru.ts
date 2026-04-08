@@ -1345,6 +1345,7 @@ export default {
         viewExpenseBreakdown: 'Показать детализацию расходов по категориям',
         viewNetBreakdown: 'Показать расшифровку разницы',
         exportPdf: 'Скачать PDF',
+        exportCategoryPdf: 'Скачать PDF по категории',
         exportingPdf: 'Подготовка PDF...',
       },
       netExplanation: 'Разница = доходы {{income}} − расходы {{expense}} = {{net}}',
@@ -1366,6 +1367,12 @@ export default {
       expenseAccountCash: 'Касса',
       expenseAccountBank: 'Банк',
       incomeAccountFilterLabel: 'Счёт',
+    },
+    cashMovement: {
+      title: 'Отчёт по движению средств',
+      download: 'Скачать отчет по счёту',
+      account: 'Счёт',
+      period: 'Период',
     },
   },
   planSetup: {

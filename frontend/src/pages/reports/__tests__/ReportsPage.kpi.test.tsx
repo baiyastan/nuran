@@ -27,6 +27,7 @@ vi.mock('@/shared/api/reportsApi', () => ({
   useGetDashboardIncomeSourcesQuery: vi.fn(),
   useGetDashboardExpenseCategoriesQuery: vi.fn(),
   useGetTransferDetailsQuery: vi.fn(),
+  useExportCashMovementPdfMutation: () => [vi.fn(), {}],
   // Export mutations as no-op tuples to satisfy GlobalSummary
   useExportSectionPdfMutation: () => [vi.fn(), {}],
   useExportIncomeSourceDetailPdfMutation: () => [vi.fn(), {}],

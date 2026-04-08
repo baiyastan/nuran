@@ -4,6 +4,7 @@ Reports API URLs.
 from django.urls import path
 from .views import (
     BudgetPlanReportView,
+    CashMovementPdfView,
     MonthlyReportView,
     DashboardKpiView,
     DashboardExpenseCategoriesView,
@@ -53,6 +54,11 @@ urlpatterns = [
         'transfers-direction-pdf/',
         ExportTransfersDirectionPdfView.as_view(),
         name='transfers-direction-pdf',
+    ),
+    path(
+        'cash-movement-pdf/',
+        CashMovementPdfView.as_view(),
+        name='cash-movement-pdf',
     ),
 ]
 

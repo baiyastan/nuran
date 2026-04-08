@@ -165,6 +165,12 @@ export interface TransferDetailsParams {
   month: string
 }
 
+export interface ExportCashMovementPdfParams {
+  account: 'CASH' | 'BANK'
+  start_date: string
+  end_date: string
+}
+
 export const reportsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getMonthlyReport: builder.query<MonthlyReportResponse, MonthlyReportParams>({
@@ -253,6 +259,13 @@ export const reportsApi = baseApi.injectEndpoints({
       }),
       providesTags: ['Report'],
     }),
+    exportCashMovementPdf: builder.mutation<Blob, ExportCashMovementPdfParams>({
+      query: ({ account, start_date, end_date }) => ({
+        url: '/reports/cash-movement-pdf/',
+        params: { account, start_date, end_date },
+        responseType: 'blob',
+      }),
+    }),
   }),
 })
 
@@ -265,4 +278,5 @@ export const {
   useExportIncomeSourceDetailPdfMutation,
   useExportExpenseCategoryDetailPdfMutation,
   useGetTransferDetailsQuery,
+  useExportCashMovementPdfMutation,
 } = reportsApi

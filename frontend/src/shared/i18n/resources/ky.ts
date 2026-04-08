@@ -1348,6 +1348,7 @@ export default {
         viewExpenseBreakdown: 'Категориялар боюнча деталдуу көрүү',
         viewNetBreakdown: 'Айырманы түшүндүрүү',
         exportPdf: 'PDF жүктөө',
+        exportCategoryPdf: 'Категория боюнча PDF жүктөө',
         exportingPdf: 'PDF даярдалууда...',
       },
       netExplanation: 'Айырма = киреше {{income}} − чыгым {{expense}} = {{net}}',
@@ -1369,6 +1370,12 @@ export default {
       expenseAccountCash: 'Касса',
       expenseAccountBank: 'Банк',
       incomeAccountFilterLabel: 'Счет',
+    },
+    cashMovement: {
+      title: 'Эсеп боюнча акча кыймылы отчету',
+      download: 'Эсеп боюнча отчетту жүктөө',
+      account: 'Эсеп',
+      period: 'Мезгил',
     },
   },
   planSetup: {

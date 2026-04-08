@@ -49,8 +49,10 @@ from __future__ import annotations
 
 from apps.budgeting.models import MonthPeriod
 from apps.reports.services import dashboard as dashboard_service
+from apps.reports.services import cash_movement as cash_movement_service
 from apps.reports.services import transfers as transfers_service
 from apps.reports.services.pdf import (
+    build_cash_movement_pdf,
     build_report_detail_pdf,
     build_report_section_pdf,
     build_transfer_direction_pdf,
@@ -167,4 +169,26 @@ def run_export_transfer_direction_pdf(
         detail_rows=detail_rows,
     )
     filename = f'transfers_{filename_direction}_{month}.pdf'
+    return pdf_bytes, filename
+
+
+def run_export_cash_movement_pdf(
+    account: str,
+    start_date,
+    end_date,
+) -> tuple[bytes, str]:
+    data = cash_movement_service.build_cash_movement_data(
+        account=account,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    pdf_bytes = build_cash_movement_pdf(
+        data=data,
+        filters={
+            "account": account,
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+    )
+    filename = f"cash_movement_{account.lower()}_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
     return pdf_bytes, filename

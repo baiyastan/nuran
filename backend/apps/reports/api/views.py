@@ -531,6 +531,43 @@ class ExportTransfersDirectionPdfView(views.APIView):
         return response
 
 
+class CashMovementPdfView(views.APIView):
+    """
+    Export account statement PDF for a selected date range.
+
+    GET /api/v1/reports/cash-movement-pdf/?account=CASH|BANK&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ensure_owner_dashboard_access(request)
+        account = (request.query_params.get('account') or '').strip().upper()
+        if account not in ('CASH', 'BANK'):
+            return Response(
+                {'account': 'account must be one of: CASH, BANK'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        start_date, end_date, range_error = _get_validated_optional_date_range(request)
+        if range_error:
+            return range_error
+        if not start_date or not end_date:
+            return Response(
+                {'date_range': 'start_date and end_date are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pdf_bytes, filename = pdf_exports.run_export_cash_movement_pdf(
+            account=account,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class ForemanProjectSummaryView(views.APIView):
     """
     Foreman summary for the single PROJECT-scope budget for a month.
