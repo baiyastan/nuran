@@ -41,6 +41,16 @@ set -a
 source .env
 set +a
 
+# Export AWS auth context immediately after sourcing so every subprocess inherits it.
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
+  echo "Error: AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY must be set in .env." >&2
+  exit 1
+fi
+
 send_telegram() {
   local message="$1"
 
@@ -142,19 +152,45 @@ SHA256_HEX="$(cut -d' ' -f1 "${CHECKSUM_FILE}")"
 FILE_SIZE_BYTES="$(stat -c%s "${ENCRYPTED_FILE}")"
 FILE_SIZE_MB="$(awk -v size="${FILE_SIZE_BYTES}" 'BEGIN { printf "%.2f", size/1024/1024 }')"
 
+AWS_METADATA_BACKUP="sha256=${SHA256_HEX},backup_id=${BACKUP_ID},gfs_tier=${GFS_TIER}"
+AWS_METADATA_CHECKSUM="sha256=${SHA256_HEX},backup_id=${BACKUP_ID},related_object=${S3_KEY_BACKUP}"
+
+# Temporary debug signal for env-specific AWS CLI parsing errors.
+env \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+  aws --version
+
 echo "Uploading encrypted backup to s3://${S3_BUCKET}/${S3_KEY_BACKUP}"
-aws s3 cp "${ENCRYPTED_FILE}" "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" \
+env \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+  aws s3 cp "${ENCRYPTED_FILE}" "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" \
   --endpoint-url "${S3_ENDPOINT}" \
-  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},gfs_tier=${GFS_TIER}"
+  --metadata "${AWS_METADATA_BACKUP}"
 
 echo "Uploading checksum to s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}"
-aws s3 cp "${CHECKSUM_FILE}" "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" \
+env \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+  aws s3 cp "${CHECKSUM_FILE}" "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" \
   --endpoint-url "${S3_ENDPOINT}" \
-  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},related_object=${S3_KEY_BACKUP}"
+  --metadata "${AWS_METADATA_CHECKSUM}"
 
 # Verification step for remote object presence after upload.
-aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" --endpoint-url "${S3_ENDPOINT}" >/dev/null
-aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" --endpoint-url "${S3_ENDPOINT}" >/dev/null
+env \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+  aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" --endpoint-url "${S3_ENDPOINT}" >/dev/null
+env \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+  aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" --endpoint-url "${S3_ENDPOINT}" >/dev/null
 
 # Success-based retention model:
 # This script intentionally does not delete backups.
