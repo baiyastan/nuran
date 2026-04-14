@@ -425,7 +425,7 @@ def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
     document = _build_pdf_document(buffer)
     title_style, heading_style, body_style = _build_pdf_styles()
 
-    account_raw = filters.get("account")
+    account_raw = filters.get("account") or data.get("account")
     if account_raw == "CASH":
         account_label = "Касса"
     elif account_raw == "BANK":
@@ -440,15 +440,28 @@ def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
     opening = format_pdf_amount(data["opening_balance"])
     income = format_pdf_amount(data["period_income"])
     expense = format_pdf_amount(data["period_expense"])
-    transfer_net = format_pdf_amount(data["transfer_net"])
+    transfer_in = format_pdf_amount(data["transfer_in"])
+    transfer_out = format_pdf_amount(data["transfer_out"])
     closing = format_pdf_amount(data["closing_balance"])
+
+    # Transfer labels are account-aware for instant direction clarity in audits.
+    if account_raw == "CASH":
+        transfer_in_label = "Пополнение из банка"
+        transfer_out_label = "Перевод в банк"
+    elif account_raw == "BANK":
+        transfer_in_label = "Пополнение из кассы"
+        transfer_out_label = "Перевод в кассу"
+    else:
+        transfer_in_label = "Перевод извне"
+        transfer_out_label = "Перевод вовне"
 
     # Optional label overrides for integrations, with exact required defaults.
     labels = {
         "opening_balance": "Начальный остаток",
         "period_income": "Доход за период",
         "period_expense": "Расход за период",
-        "transfer_net": "Transfer net",
+        "transfer_in": transfer_in_label,
+        "transfer_out": transfer_out_label,
         "closing_balance": "Конечный остаток",
     }
     custom_labels = filters.get("labels")
@@ -466,7 +479,8 @@ def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
         Paragraph(f'<font name="{FONT_BOLD}">{labels["opening_balance"]}:</font> {opening}', body_style),
         Paragraph(f'<font name="{FONT_BOLD}">{labels["period_income"]}:</font> {income}', body_style),
         Paragraph(f'<font name="{FONT_BOLD}">{labels["period_expense"]}:</font> {expense}', body_style),
-        Paragraph(f'<font name="{FONT_BOLD}">{labels["transfer_net"]}:</font> {transfer_net}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["transfer_in"]}:</font> {transfer_in}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">{labels["transfer_out"]}:</font> {transfer_out}', body_style),
         Paragraph(f'<font name="{FONT_BOLD}">{labels["closing_balance"]}:</font> {closing}', body_style),
     ]
 

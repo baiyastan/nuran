@@ -53,12 +53,13 @@ def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, De
         ).aggregate(total=Sum("amount"))["total"]
         or Decimal("0.00")
     )
-    transfer_net = transfer_in - transfer_out
-
     return {
+        "account": account,
         "opening_balance": opening_balance,
         "period_income": period_income,
         "period_expense": period_expense,
-        "transfer_net": transfer_net,
+        # Internal transfers are tracked separately from income/expense.
+        "transfer_in": transfer_in,
+        "transfer_out": transfer_out,
         "closing_balance": closing_balance,
     }

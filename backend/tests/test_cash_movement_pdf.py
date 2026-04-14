@@ -74,7 +74,8 @@ class TestCashMovementPdf:
             "opening_balance": Decimal("100.00"),
             "period_income": Decimal("50.00"),
             "period_expense": Decimal("20.00"),
-            "transfer_net": Decimal("5.00"),
+            "transfer_in": Decimal("10.00"),
+            "transfer_out": Decimal("5.00"),
             "closing_balance": Decimal("135.00"),
         }
         filters = {
@@ -184,7 +185,8 @@ class TestCashMovementPdf:
             data["opening_balance"]
             + data["period_income"]
             - data["period_expense"]
-            + data["transfer_net"]
+            + data["transfer_in"]
+            - data["transfer_out"]
         )
         assert computed == data["closing_balance"]
 
@@ -197,7 +199,8 @@ class TestCashMovementPdf:
         )
         assert data["period_income"] == Decimal("0.00")
         assert data["period_expense"] == Decimal("0.00")
-        assert data["transfer_net"] == Decimal("0.00")
+        assert data["transfer_in"] == Decimal("0.00")
+        assert data["transfer_out"] == Decimal("0.00")
         assert data["opening_balance"] == Decimal("0.00")
         assert data["closing_balance"] == Decimal("0.00")
 
@@ -218,7 +221,8 @@ class TestCashMovementPdf:
         )
         assert data["period_income"] == Decimal("77.00")
         assert data["period_expense"] == Decimal("0.00")
-        assert data["transfer_net"] == Decimal("0.00")
+        assert data["transfer_in"] == Decimal("0.00")
+        assert data["transfer_out"] == Decimal("0.00")
 
     def test_only_expense(self, month_period_feb, admin_user):
         ActualExpense.objects.create(
@@ -238,7 +242,8 @@ class TestCashMovementPdf:
         )
         assert data["period_income"] == Decimal("0.00")
         assert data["period_expense"] == Decimal("12.00")
-        assert data["transfer_net"] == Decimal("0.00")
+        assert data["transfer_in"] == Decimal("0.00")
+        assert data["transfer_out"] == Decimal("0.00")
 
     def test_only_transfers(self, admin_user):
         Transfer.objects.create(
@@ -264,4 +269,5 @@ class TestCashMovementPdf:
         )
         assert data["period_income"] == Decimal("0.00")
         assert data["period_expense"] == Decimal("0.00")
-        assert data["transfer_net"] == Decimal("25.00")
+        assert data["transfer_in"] == Decimal("30.00")
+        assert data["transfer_out"] == Decimal("5.00")
