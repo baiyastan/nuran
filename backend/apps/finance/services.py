@@ -19,6 +19,7 @@ from .models import (
     IncomePlan,
     IncomeSource,
     Transfer,
+    CurrencyExchange,
     AccountLedgerLock,
     ACCOUNT_CHOICES,
 )
@@ -637,6 +638,7 @@ class TransferService:
         assert_month_open_for_transfer_on_date(transferred_at)
         src = validated_data.get('source_account')
         amount = validated_data.get('amount')
+        currency = validated_data.get('currency') or 'KGS'
         validated_data = dict(validated_data)
         validated_data['created_by'] = user
 
@@ -646,13 +648,14 @@ class TransferService:
                 balance = get_balance_for_account(
                     src,
                     transferred_at,
+                    currency=currency,
                     exclude_expense_id=None,
                     exclude_transfer_id=None,
                 )
                 if balance < amount:
                     label = _ACCOUNT_CHOICES_DICT.get(src, src)
                     raise ValidationError(
-                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                        {'amount': f'Insufficient balance on {label} ({currency}). Available: {balance:.2f}.'}
                     )
                 transfer = Transfer.objects.create(**validated_data)
                 AuditLogService.log_create(user, transfer, reason=audit_reason)
@@ -669,6 +672,7 @@ class TransferService:
         assert_month_open_for_transfer_on_date(transferred_at)
         src = data.get('source_account', transfer.source_account)
         amount = data.get('amount', transfer.amount)
+        currency = data.get('currency', transfer.currency) or 'KGS'
         before_state = AuditLogService.model_field_snapshot(transfer)
 
         if src in _ACCOUNT_CHOICES_DICT and amount is not None and transferred_at is not None:
@@ -677,13 +681,14 @@ class TransferService:
                 balance = get_balance_for_account(
                     src,
                     transferred_at,
+                    currency=currency,
                     exclude_expense_id=None,
                     exclude_transfer_id=transfer.pk,
                 )
                 if balance < amount:
                     label = _ACCOUNT_CHOICES_DICT.get(src, src)
                     raise ValidationError(
-                        {'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'}
+                        {'amount': f'Insufficient balance on {label} ({currency}). Available: {balance:.2f}.'}
                     )
                 for key, value in data.items():
                     setattr(transfer, key, value)
@@ -708,5 +713,98 @@ class TransferService:
             transfer.delete()
             AuditLogService.log_delete(
                 user, transfer, before_state, object_id_override=object_id, reason=audit_reason
+            )
+        invalidate_all_dashboard_kpi_caches()
+
+
+class CurrencyExchangeService:
+    """
+    Cross-currency exchange (posted fact). Atomic balance-check on source account+currency,
+    mirroring TransferService semantics.
+    """
+
+    @staticmethod
+    def create(user, audit_reason=None, **validated_data):
+        exchanged_at = validated_data.get('exchanged_at')
+        assert_month_open_for_transfer_on_date(exchanged_at)
+        src = validated_data.get('source_account')
+        src_cur = validated_data.get('source_currency') or 'KGS'
+        src_amount = validated_data.get('source_amount')
+        validated_data = dict(validated_data)
+        validated_data['created_by'] = user
+
+        if src in _ACCOUNT_CHOICES_DICT and src_amount is not None and exchanged_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                balance = get_balance_for_account(
+                    src,
+                    exchanged_at,
+                    currency=src_cur,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=None,
+                    exclude_exchange_id=None,
+                )
+                if balance < src_amount:
+                    label = _ACCOUNT_CHOICES_DICT.get(src, src)
+                    raise ValidationError(
+                        {'source_amount': f'Insufficient balance on {label} ({src_cur}). Available: {balance:.2f}.'}
+                    )
+                exchange = CurrencyExchange.objects.create(**validated_data)
+                AuditLogService.log_create(user, exchange, reason=audit_reason)
+        else:
+            with transaction.atomic():
+                exchange = CurrencyExchange.objects.create(**validated_data)
+                AuditLogService.log_create(user, exchange, reason=audit_reason)
+        invalidate_all_dashboard_kpi_caches()
+        return exchange
+
+    @staticmethod
+    def update(exchange, user, audit_reason=None, **data):
+        exchanged_at = data.get('exchanged_at', exchange.exchanged_at)
+        assert_month_open_for_transfer_on_date(exchanged_at)
+        src = data.get('source_account', exchange.source_account)
+        src_cur = data.get('source_currency', exchange.source_currency) or 'KGS'
+        src_amount = data.get('source_amount', exchange.source_amount)
+        before_state = AuditLogService.model_field_snapshot(exchange)
+
+        if src in _ACCOUNT_CHOICES_DICT and src_amount is not None and exchanged_at is not None:
+            with transaction.atomic():
+                AccountLedgerLock.objects.select_for_update().get_or_create(account=src)
+                balance = get_balance_for_account(
+                    src,
+                    exchanged_at,
+                    currency=src_cur,
+                    exclude_expense_id=None,
+                    exclude_transfer_id=None,
+                    exclude_exchange_id=exchange.pk,
+                )
+                if balance < src_amount:
+                    label = _ACCOUNT_CHOICES_DICT.get(src, src)
+                    raise ValidationError(
+                        {'source_amount': f'Insufficient balance on {label} ({src_cur}). Available: {balance:.2f}.'}
+                    )
+                for key, value in data.items():
+                    setattr(exchange, key, value)
+                exchange.save()
+                AuditLogService.log_update(user, exchange, before_state, reason=audit_reason)
+        else:
+            with transaction.atomic():
+                for key, value in data.items():
+                    setattr(exchange, key, value)
+                exchange.save()
+                AuditLogService.log_update(user, exchange, before_state, reason=audit_reason)
+        invalidate_all_dashboard_kpi_caches()
+        return exchange
+
+    @staticmethod
+    def delete(exchange, user, audit_reason=None):
+        assert_month_open_for_transfer_on_date(exchange.exchanged_at)
+        object_id = exchange.pk
+        before_state = AuditLogService.model_field_snapshot(exchange)
+        before_state['id'] = exchange.id
+        with transaction.atomic():
+            exchange.delete()
+            AuditLogService.log_delete(
+                user, exchange, before_state, object_id_override=object_id, reason=audit_reason
             )
         invalidate_all_dashboard_kpi_caches()

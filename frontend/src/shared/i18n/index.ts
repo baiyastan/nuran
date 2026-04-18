@@ -44,6 +44,9 @@ const ruPlanSetup = ruTranslations.planSetup || {}
 const kyMonthManagement = kyTranslations.monthManagement || {}
 const ruMonthManagement = ruTranslations.monthManagement || {}
 
+const kyCurrencyExchange = kyTranslations.currencyExchange || {}
+const ruCurrencyExchange = ruTranslations.currencyExchange || {}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -59,6 +62,7 @@ i18n
         reports: kyReports,
         planSetup: kyPlanSetup,
         monthManagement: kyMonthManagement,
+        currencyExchange: kyCurrencyExchange,
       },
       ru: {
         translation: ruTranslations,
@@ -70,6 +74,7 @@ i18n
         reports: ruReports,
         planSetup: ruPlanSetup,
         monthManagement: ruMonthManagement,
+        currencyExchange: ruCurrencyExchange,
       },
     },
     defaultNS: 'translation',

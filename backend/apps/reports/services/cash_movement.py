@@ -11,18 +11,27 @@ from apps.expenses.services import get_balance_for_account
 from apps.finance.models import IncomeEntry, Transfer
 
 
-def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, Decimal]:
+def build_cash_movement_data(
+    account: str,
+    start_date,
+    end_date,
+    currency: str | None = None,
+) -> dict[str, Decimal]:
     """
     Build account statement totals for a period.
 
     Uses shared balance helper to avoid duplicating ledger logic.
     """
-    opening_balance = get_balance_for_account(account, start_date - timedelta(days=1))
-    closing_balance = get_balance_for_account(account, end_date)
+    currency_filter = currency if currency in ("KGS", "USD") else "KGS"
+    opening_balance = get_balance_for_account(
+        account, start_date - timedelta(days=1), currency=currency_filter
+    )
+    closing_balance = get_balance_for_account(account, end_date, currency=currency_filter)
 
     period_income = (
         IncomeEntry.objects.filter(
             account=account,
+            currency=currency_filter,
             received_at__gte=start_date,
             received_at__lte=end_date,
         ).aggregate(total=Sum("amount"))["total"]
@@ -31,6 +40,7 @@ def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, De
     period_expense = (
         ActualExpense.objects.filter(
             account=account,
+            currency=currency_filter,
             spent_at__gte=start_date,
             spent_at__lte=end_date,
         ).aggregate(total=Sum("amount"))["total"]
@@ -40,6 +50,7 @@ def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, De
     transfer_in = (
         Transfer.objects.filter(
             destination_account=account,
+            currency=currency_filter,
             transferred_at__gte=start_date,
             transferred_at__lte=end_date,
         ).aggregate(total=Sum("amount"))["total"]
@@ -48,6 +59,7 @@ def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, De
     transfer_out = (
         Transfer.objects.filter(
             source_account=account,
+            currency=currency_filter,
             transferred_at__gte=start_date,
             transferred_at__lte=end_date,
         ).aggregate(total=Sum("amount"))["total"]
@@ -55,6 +67,7 @@ def build_cash_movement_data(account: str, start_date, end_date) -> dict[str, De
     )
     return {
         "account": account,
+        "currency": currency_filter,
         "opening_balance": opening_balance,
         "period_income": period_income,
         "period_expense": period_expense,

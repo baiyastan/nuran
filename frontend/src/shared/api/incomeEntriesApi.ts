@@ -13,6 +13,7 @@ export interface IncomeEntryListParams {
   page?: number
   source?: number
   account?: 'CASH' | 'BANK'
+  currency?: 'KGS' | 'USD'
 }
 
 export interface IncomeEntryListResponse {
@@ -32,6 +33,7 @@ export interface IncomeEntryListResponse {
 export interface CreateIncomeEntryRequest {
   finance_period: number
   account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   source_id?: number | null
   amount: number
   received_at: string
@@ -40,6 +42,7 @@ export interface CreateIncomeEntryRequest {
 
 export interface UpdateIncomeEntryRequest {
   account?: 'CASH' | 'BANK'
+  currency?: 'KGS' | 'USD'
   source_id?: number
   amount?: number
   received_at?: string

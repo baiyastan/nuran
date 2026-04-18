@@ -13,14 +13,19 @@ import {
   useGetDashboardKpiQuery,
   useExportSectionPdfMutation,
   useGetTransferDetailsQuery,
+  useGetCurrencyExchangeDetailsQuery,
+  type ReportCurrency,
 } from '@/shared/api/reportsApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
 import { useAuth } from '@/shared/hooks/useAuth'
-import { formatDate, formatKGS } from '@/shared/lib/utils'
+import { formatDate } from '@/shared/lib/utils'
+import { formatMoneyWithCurrency } from '@/shared/utils/formatMoney'
+import { Pager } from '@/shared/ui/Pager/Pager'
 import './SummaryCard.css'
 
 interface GlobalSummaryProps {
   month: string
+  currency: ReportCurrency
 }
 
 type OpenPanel = 'income' | 'expense' | 'balance' | null
@@ -28,23 +33,23 @@ type ExportSectionType = 'income_sources' | 'expense_categories'
 type ExportDetailType = 'income_source_detail' | 'expense_category_detail'
 
 function getDifferenceColor(type: 'income' | 'expense', diff: number): string {
-  if (diff === 0) return 'diff-value diff-value--neutral'
+  if (diff === 0) return 'diff-pill diff-pill--neutral'
 
   if (type === 'expense') {
-    return diff > 0 ? 'diff-value diff-value--bad' : 'diff-value diff-value--good'
+    return diff > 0 ? 'diff-pill diff-pill--bad' : 'diff-pill diff-pill--good'
   }
 
-  return diff > 0 ? 'diff-value diff-value--good' : 'diff-value diff-value--bad'
+  return diff > 0 ? 'diff-pill diff-pill--good' : 'diff-pill diff-pill--bad'
 }
 
-function formatSignedKGS(diff: number): string {
+function formatSignedMoney(diff: number, currency: ReportCurrency): string {
   if (diff === 0) {
-    return formatKGS(0)
+    return formatMoneyWithCurrency(0, currency)
   }
 
   const abs = Math.abs(diff)
   const sign = diff > 0 ? '+' : '-'
-  const formatted = formatKGS(abs)
+  const formatted = formatMoneyWithCurrency(abs, currency)
 
   return `${sign}${formatted}`
 }
@@ -112,10 +117,12 @@ function getCashMovementFilename(
   return `cash_movement_${account.toLowerCase()}_${startDate}_${endDate}.pdf`
 }
 
-export function GlobalSummary({ month }: GlobalSummaryProps) {
+export function GlobalSummary({ month, currency }: GlobalSummaryProps) {
   const { t } = useTranslation('reports')
   const { accessToken, role } = useAuth()
   const canExportPdf = role !== 'director'
+  const fmt = (value: number | string | null | undefined) =>
+    formatMoneyWithCurrency(value, currency)
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [exportSectionPdf] = useExportSectionPdfMutation()
   const [exportIncomeSourceDetailPdf] = useExportIncomeSourceDetailPdfMutation()
@@ -188,27 +195,35 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     data: expenseCategoriesData,
     isLoading: loadingExpenseCategories,
     error: expenseCategoriesError,
-  } = useGetDashboardExpenseCategoriesQuery({
-    month,
-    ...(expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
-    ...(detailRangeApplied && {
-      start_date: detailRangeApplied.start_date,
-      end_date: detailRangeApplied.end_date,
-    }),
-  })
+  } = useGetDashboardExpenseCategoriesQuery(
+    {
+      month,
+      currency,
+      ...(expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
+      ...(detailRangeApplied && {
+        start_date: detailRangeApplied.start_date,
+        end_date: detailRangeApplied.end_date,
+      }),
+    },
+    { skip: openPanel !== 'expense' },
+  )
 
   const {
     data: incomeSourcesData,
     isLoading: loadingIncomeSources,
     error: incomeSourcesError,
-  } = useGetDashboardIncomeSourcesQuery({
-    month,
-    ...(incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
-    ...(detailRangeApplied && {
-      start_date: detailRangeApplied.start_date,
-      end_date: detailRangeApplied.end_date,
-    }),
-  })
+  } = useGetDashboardIncomeSourcesQuery(
+    {
+      month,
+      currency,
+      ...(incomeAccountFilter !== 'ALL' && { account: incomeAccountFilter }),
+      ...(detailRangeApplied && {
+        start_date: detailRangeApplied.start_date,
+        end_date: detailRangeApplied.end_date,
+      }),
+    },
+    { skip: openPanel !== 'income' },
+  )
 
   const {
     data: incomeDetailsData,
@@ -219,6 +234,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       ? undefined
       : {
           month,
+          currency,
           ...(selectedIncomeSourceId !== null && { source: selectedIncomeSourceId }),
           page: incomeDetailPage,
           ...(incomeDetailEffectiveFilter.account !== 'ALL' && { account: incomeDetailEffectiveFilter.account }),
@@ -241,6 +257,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       ? undefined
       : {
           month,
+          currency,
           category: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
           page: expenseDetailPage,
           ...(expenseDetailEffectiveFilter.account !== 'ALL' && { account: expenseDetailEffectiveFilter.account }),
@@ -258,23 +275,31 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     data: transferDetails,
     isLoading: loadingTransfers,
     error: transferError,
-  } = useGetTransferDetailsQuery({ month })
+  } = useGetTransferDetailsQuery({ month, currency })
 
-  const incomeActualTotal = kpiData ? parseFloat(kpiData.income_fact) : 0
-  const expenseActualTotal = kpiData ? parseFloat(kpiData.expense_fact) : 0
-  const net = kpiData ? parseFloat(kpiData.net) : 0
-  const cashBalance = kpiData ? parseFloat(kpiData.cash_balance ?? '0') : 0
-  const bankBalance = kpiData ? parseFloat(kpiData.bank_balance ?? '0') : 0
-  const cashClosing = kpiData
-    ? parseFloat(kpiData.cash_closing_balance ?? kpiData.cash_balance ?? '0')
-    : 0
-  const bankClosing = kpiData
-    ? parseFloat(kpiData.bank_closing_balance ?? kpiData.bank_balance ?? '0')
-    : 0
-  const previousMonthCash = kpiData ? parseFloat(kpiData.cash_opening_balance ?? '0') : 0
-  const previousMonthBank = kpiData ? parseFloat(kpiData.bank_opening_balance ?? '0') : 0
-  const bankToCashMonth = kpiData ? parseFloat(kpiData.bank_to_cash_month ?? '0') : 0
-  const cashToBankMonth = kpiData ? parseFloat(kpiData.cash_to_bank_month ?? '0') : 0
+  const {
+    data: exchangeDetails,
+    isLoading: loadingExchanges,
+    error: exchangeError,
+  } = useGetCurrencyExchangeDetailsQuery({ month })
+
+  const pickKpi = (kgsKey: keyof NonNullable<typeof kpiData>, usdKey: keyof NonNullable<typeof kpiData>) => {
+    if (!kpiData) return 0
+    const raw = (currency === 'USD' ? kpiData[usdKey] : kpiData[kgsKey]) as string | undefined
+    return raw == null ? 0 : parseFloat(raw)
+  }
+
+  const incomeActualTotal = pickKpi('income_fact_kgs', 'income_fact_usd')
+  const expenseActualTotal = pickKpi('expense_fact_kgs', 'expense_fact_usd')
+  const net = incomeActualTotal - expenseActualTotal
+  const cashBalance = pickKpi('cash_balance', 'cash_balance_usd')
+  const bankBalance = pickKpi('bank_balance', 'bank_balance_usd')
+  const cashClosing = pickKpi('cash_closing_balance', 'cash_closing_balance_usd')
+  const bankClosing = pickKpi('bank_closing_balance', 'bank_closing_balance_usd')
+  const previousMonthCash = pickKpi('cash_opening_balance', 'cash_opening_balance_usd')
+  const previousMonthBank = pickKpi('bank_opening_balance', 'bank_opening_balance_usd')
+  const bankToCashMonth = pickKpi('bank_to_cash_month', 'bank_to_cash_month_usd')
+  const cashToBankMonth = pickKpi('cash_to_bank_month', 'cash_to_bank_month_usd')
 
   const totalClosingBalance = cashClosing + bankClosing
   const totalOpeningBalance = previousMonthCash + previousMonthBank
@@ -342,6 +367,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
       const blob = await exportSectionPdf({
         month,
         sectionType,
+        currency,
         ...(sectionType === 'expense_categories' &&
           expenseAccountFilter !== 'ALL' && { account: expenseAccountFilter }),
         ...(sectionType === 'income_sources' &&
@@ -369,6 +395,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     try {
       const blob = await exportIncomeSourceDetailPdf({
         month,
+        currency,
         sourceId: selectedIncomeSourceId === null ? 'null' : selectedIncomeSourceId,
         ...(incomeDetailEffectiveFilter.account !== 'ALL' && { account: incomeDetailEffectiveFilter.account }),
         ...(incomeDetailEffectiveFilter.start_date && incomeDetailEffectiveFilter.end_date && {
@@ -403,6 +430,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     try {
       const blob = await exportExpenseCategoryDetailPdf({
         month,
+        currency,
         categoryId: selectedExpenseCategoryId === null ? 'null' : selectedExpenseCategoryId,
         ...(expenseDetailEffectiveFilter.account !== 'ALL' && { account: expenseDetailEffectiveFilter.account }),
         ...(expenseDetailEffectiveFilter.start_date && expenseDetailEffectiveFilter.end_date && {
@@ -466,6 +494,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
     try {
       const blob = await exportCashMovementPdf({
         account: cashMovementAccount,
+        currency,
         start_date: cashMovementStartDate,
         end_date: cashMovementEndDate,
       }).unwrap()
@@ -539,7 +568,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 <span className="summary-label">
                   {t('globalSummary.labels.incomeActual')}:
                 </span>
-                <span className="summary-value">{formatKGS(incomeActualTotal)}</span>
+                <span className="summary-value">{fmt(incomeActualTotal)}</span>
                 <button
                   type="button"
                   className={`summary-kpi-chevron-button${
@@ -561,7 +590,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   className="summary-value"
                   title="Факт расходов за месяц может включать плановые корректировки и расходы из разных модулей"
                 >
-                  {formatKGS(expenseActualTotal)}
+                  {fmt(expenseActualTotal)}
                 </span>
                 <button
                   type="button"
@@ -580,11 +609,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
               </div>
               <div className="summary-item">
                 <span className="summary-label">{t('globalSummary.labels.cashBalance')}:</span>
-                <span className="summary-value">{formatKGS(cashBalance)}</span>
+                <span className="summary-value">{fmt(cashBalance)}</span>
               </div>
               <div className="summary-item">
                 <span className="summary-label">{t('globalSummary.labels.bankBalance')}:</span>
-                <span className="summary-value">{formatKGS(bankBalance)}</span>
+                <span className="summary-value">{fmt(bankBalance)}</span>
               </div>
               <div className="summary-item">
                 <span
@@ -593,7 +622,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 >
                   Остаток на счетах:
                 </span>
-                <span className="summary-value">{formatKGS(totalClosingBalance)}</span>
+                <span className="summary-value">{fmt(totalClosingBalance)}</span>
                 <button
                   type="button"
                   className={`summary-kpi-chevron-button${
@@ -610,71 +639,6 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                 </button>
               </div>
             </div>
-            {canExportPdf && (
-              <div className="global-summary-account-export-block">
-                <h4 className="global-summary-balance-details__heading">Отчет по счёту</h4>
-                <div className="detail-filter-toolbar">
-                  <div className="detail-filter-toolbar__controls">
-                    <label htmlFor="cash-movement-account" className="expense-categories-filter__label">
-                      {t('cashMovement.account')}
-                    </label>
-                    <select
-                      id="cash-movement-account"
-                      className="expense-categories-filter__select"
-                      value={cashMovementAccount}
-                      onChange={(e) => setCashMovementAccount(e.target.value as 'CASH' | 'BANK')}
-                    >
-                      <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
-                      <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
-                    </select>
-                    <label htmlFor="cash-movement-start" className="expense-categories-filter__label">
-                      {t('filters.startDate')}
-                    </label>
-                    <input
-                      id="cash-movement-start"
-                      className="expense-categories-filter__select"
-                      type="date"
-                      value={cashMovementStartDate}
-                      onChange={(e) => setCashMovementStartDate(e.target.value)}
-                    />
-                    <label htmlFor="cash-movement-end" className="expense-categories-filter__label">
-                      {t('filters.endDate')}
-                    </label>
-                    <input
-                      id="cash-movement-end"
-                      className="expense-categories-filter__select"
-                      type="date"
-                      value={cashMovementEndDate}
-                      onChange={(e) => setCashMovementEndDate(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      size="small"
-                      disabled={
-                        cashMovementExporting ||
-                        !cashMovementStartDate ||
-                        !cashMovementEndDate ||
-                        cashMovementRangeInvalid
-                      }
-                      onClick={() => {
-                        void handleCashMovementExport()
-                      }}
-                    >
-                      {cashMovementExporting ? t('globalSummary.actions.exportingPdf') : 'Скачать отчет по счёту'}
-                    </Button>
-                  </div>
-                  <p className="detail-range-hint">
-                    Экспортирует начальный остаток, доход, расход, transfer net и конечный остаток.
-                  </p>
-                  {cashMovementRangeInvalid && (
-                    <div className="summary-error">{t('filters.invalidRange')}</div>
-                  )}
-                  {cashMovementExportError && (
-                    <div className="summary-error">{t('globalSummary.exportError')}</div>
-                  )}
-                </div>
-              </div>
-            )}
             {/* helper text removed for compact summary */}
           </>
         )}
@@ -779,17 +743,51 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             {isRangeInvalid && (
               <div className="summary-error">{t('filters.invalidRange')}</div>
             )}
-            {detailRangeApplied && (
+            {detailRangeApplied && currency !== 'USD' && (
               <div className="detail-range-hint">{t('filters.monthPlanHint')}</div>
+            )}
+            {currency === 'USD' && (
+              <div className="detail-range-hint">{t('usdPlanNote')}</div>
             )}
             <Table
               columns={[
                 { key: 'source_name', label: t('income.tables.actual.columns.sourceName') },
-                { key: 'plan', label: t('income.labels.plan') },
-                { key: 'fact', label: t('income.labels.actual') },
-                { key: 'diff', label: t('income.labels.diff') },
-                { key: 'count', label: t('count', { ns: 'common' }) },
-                { key: 'sharePercent', label: t('income.labels.sharePercent') },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'plan',
+                      label: t('income.labels.plan'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
+                {
+                  key: 'fact',
+                  label: t('income.labels.actual'),
+                  align: 'right' as const,
+                  numeric: true,
+                },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'diff',
+                      label: t('income.labels.diff'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
+                {
+                  key: 'count',
+                  label: t('count', { ns: 'common' }),
+                  align: 'right' as const,
+                  numeric: true,
+                },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'sharePercent',
+                      label: t('income.labels.sharePercent'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
               ]}
               data={incomeBySource.map((row) => {
                 const planNumber = parseFloat(row.plan)
@@ -819,11 +817,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                       {row.source_name}
                     </button>
                   ),
-                  plan: formatKGS(planNumber),
-                  fact: formatKGS(factNumber),
+                  plan: fmt(planNumber),
+                  fact: fmt(factNumber),
                   diff: (
                     <span className={getDifferenceColor('income', diff)}>
-                      {formatSignedKGS(diff)}
+                      {formatSignedMoney(diff, currency)}
                     </span>
                   ),
                   count: row.count,
@@ -841,7 +839,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                     </h4>
                     <p className="expense-details-meta">
                       {(incomeDetailsData?.total_count ?? incomeDetailsData?.count ?? 0)} {t('globalSummary.times')} ·{' '}
-                      {t('globalSummary.total')} {formatKGS(incomeDetailsData?.total_amount ?? '0')}
+                      {t('globalSummary.total')} {fmt(incomeDetailsData?.total_amount ?? '0')}
                     </p>
                   </div>
                   <div className="global-summary-section-header__actions">
@@ -1012,18 +1010,24 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                       </span>
                       <span>
                         {t('globalSummary.total')}{' '}
-                        {formatKGS(incomeDetailsData?.total_amount ?? '0')}
+                        {fmt(incomeDetailsData?.total_amount ?? '0')}
                       </span>
                     </div>
 
                     {incomeDetailsData && incomeDetailsData.results.length > 0 ? (
                       <>
                         <Table
+                          zebra
                           columns={[
                             { key: 'date', label: t('globalSummary.date') },
                             { key: 'vendor', label: t('globalSummary.vendor') },
                             { key: 'account', label: t('globalSummary.incomeAccountFilterLabel') },
-                            { key: 'amount', label: t('globalSummary.amount') },
+                            {
+                              key: 'amount',
+                              label: t('globalSummary.amount'),
+                              align: 'right' as const,
+                              numeric: true,
+                            },
                             { key: 'comment', label: t('globalSummary.comment') },
                           ]}
                           data={incomeDetailsData.results.map((entry) => ({
@@ -1038,31 +1042,17 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                                 : entry.account === 'BANK'
                                 ? 'Банк'
                                 : '—',
-                            amount: formatKGS(entry.amount),
+                            amount: fmt(entry.amount),
                             comment: entry.comment || '—',
                           }))}
                         />
-                        <div className="expense-details-pagination">
-                          <button
-                            type="button"
-                            className="summary-kpi-link"
-                            disabled={!incomeDetailsData.previous || incomeDetailPage <= 1}
-                            onClick={() => setIncomeDetailPage((page) => Math.max(1, page - 1))}
-                          >
-                            {'<'}
-                          </button>
-                          <span className="expense-details-page-indicator">
-                            {incomeDetailPage}
-                          </span>
-                          <button
-                            type="button"
-                            className="summary-kpi-link"
-                            disabled={!incomeDetailsData.next}
-                            onClick={() => setIncomeDetailPage((page) => page + 1)}
-                          >
-                            {'>'}
-                          </button>
-                        </div>
+                        <Pager
+                          page={incomeDetailPage}
+                          hasPrev={Boolean(incomeDetailsData.previous) && incomeDetailPage > 1}
+                          hasNext={Boolean(incomeDetailsData.next)}
+                          onPrev={() => setIncomeDetailPage((page) => Math.max(1, page - 1))}
+                          onNext={() => setIncomeDetailPage((page) => page + 1)}
+                        />
                       </>
                     ) : (
                       <div className="summary-no-data">
@@ -1176,17 +1166,51 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             {isRangeInvalid && (
               <div className="summary-error">{t('filters.invalidRange')}</div>
             )}
-            {detailRangeApplied && (
+            {detailRangeApplied && currency !== 'USD' && (
               <div className="detail-range-hint">{t('filters.monthPlanHint')}</div>
+            )}
+            {currency === 'USD' && (
+              <div className="detail-range-hint">{t('usdPlanNote')}</div>
             )}
             <Table
               columns={[
                 { key: 'category_name', label: t('expense.tables.actual.columns.categoryName') },
-                { key: 'plan', label: t('expense.labels.plan') },
-                { key: 'fact', label: t('expense.labels.actual') },
-                { key: 'diff', label: t('expense.labels.diff') },
-                { key: 'count', label: t('count', { ns: 'common' }) },
-                { key: 'sharePercent', label: t('expense.labels.sharePercent') },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'plan',
+                      label: t('expense.labels.plan'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
+                {
+                  key: 'fact',
+                  label: t('expense.labels.actual'),
+                  align: 'right' as const,
+                  numeric: true,
+                },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'diff',
+                      label: t('expense.labels.diff'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
+                {
+                  key: 'count',
+                  label: t('count', { ns: 'common' }),
+                  align: 'right' as const,
+                  numeric: true,
+                },
+                ...(currency === 'USD'
+                  ? []
+                  : [{
+                      key: 'sharePercent',
+                      label: t('expense.labels.sharePercent'),
+                      align: 'right' as const,
+                      numeric: true,
+                    }]),
               ]}
               data={expenseByCategory.map((row) => {
                 const planNumber = parseFloat(row.plan)
@@ -1216,11 +1240,11 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                       {row.category_name}
                     </button>
                   ),
-                  plan: formatKGS(planNumber),
-                  fact: formatKGS(factNumber),
+                  plan: fmt(planNumber),
+                  fact: fmt(factNumber),
                   diff: (
                     <span className={getDifferenceColor('expense', diff)}>
-                      {formatSignedKGS(diff)}
+                      {formatSignedMoney(diff, currency)}
                     </span>
                   ),
                   count: row.count,
@@ -1238,7 +1262,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                     </h4>
                     <p className="expense-details-meta">
                       {(expenseDetailsData?.total_count ?? expenseDetailsData?.count ?? 0)} {t('globalSummary.times')} ·{' '}
-                      {t('globalSummary.total')} {formatKGS(expenseDetailsData?.total_amount ?? '0')}
+                      {t('globalSummary.total')} {fmt(expenseDetailsData?.total_amount ?? '0')}
                     </p>
                   </div>
                   <div className="global-summary-section-header__actions">
@@ -1409,18 +1433,24 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                       </span>
                       <span>
                         {t('globalSummary.total')}:{' '}
-                        {formatKGS(expenseDetailsData?.total_amount ?? '0')}
+                        {fmt(expenseDetailsData?.total_amount ?? '0')}
                       </span>
                     </div>
 
                     {expenseDetailsData && expenseDetailsData.results.length > 0 ? (
                       <>
                         <Table
+                          zebra
                           columns={[
                             { key: 'date', label: t('globalSummary.date') },
                             { key: 'vendor', label: t('globalSummary.vendor') },
                             { key: 'account', label: t('globalSummary.expenseAccountFilterLabel') },
-                            { key: 'amount', label: t('globalSummary.amount') },
+                            {
+                              key: 'amount',
+                              label: t('globalSummary.amount'),
+                              align: 'right' as const,
+                              numeric: true,
+                            },
                             { key: 'comment', label: t('globalSummary.comment') },
                           ]}
                           data={expenseDetailsData.results.map((expense) => ({
@@ -1432,31 +1462,17 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                                 : expense.account === 'BANK'
                                 ? 'Банк'
                                 : '—',
-                            amount: formatKGS(expense.amount),
+                            amount: fmt(expense.amount),
                             comment: expense.comment || '—',
                           }))}
                         />
-                        <div className="expense-details-pagination">
-                          <button
-                            type="button"
-                            className="summary-kpi-link"
-                            disabled={!expenseDetailsData.previous || expenseDetailPage <= 1}
-                            onClick={() => setExpenseDetailPage((page) => Math.max(1, page - 1))}
-                          >
-                            {'<'}
-                          </button>
-                          <span className="expense-details-page-indicator">
-                            {expenseDetailPage}
-                          </span>
-                          <button
-                            type="button"
-                            className="summary-kpi-link"
-                            disabled={!expenseDetailsData.next}
-                            onClick={() => setExpenseDetailPage((page) => page + 1)}
-                          >
-                            {'>'}
-                          </button>
-                        </div>
+                        <Pager
+                          page={expenseDetailPage}
+                          hasPrev={Boolean(expenseDetailsData.previous) && expenseDetailPage > 1}
+                          hasNext={Boolean(expenseDetailsData.next)}
+                          onPrev={() => setExpenseDetailPage((page) => Math.max(1, page - 1))}
+                          onNext={() => setExpenseDetailPage((page) => page + 1)}
+                        />
                       </>
                     ) : (
                       <div className="summary-no-data">
@@ -1475,13 +1491,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             <p>
               Касса:{' '}
               <span className="global-summary-balance-details__value">
-                {formatKGS(previousMonthCash)}
+                {fmt(previousMonthCash)}
               </span>
             </p>
             <p>
               Банк:{' '}
               <span className="global-summary-balance-details__value">
-                {formatKGS(previousMonthBank)}
+                {fmt(previousMonthBank)}
               </span>
             </p>
             <p>
@@ -1491,13 +1507,13 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                   net >= 0 ? 'global-summary-balance-details__value positive' : 'global-summary-balance-details__value negative'
                 }
               >
-                {formatKGS(net)}
+                {fmt(net)}
               </span>
             </p>
             <p>
               Изменение остатка за месяц:{' '}
               <span className="global-summary-balance-details__value">
-                {formatKGS(balanceChange)}
+                {fmt(balanceChange)}
               </span>
             </p>
           </div>
@@ -1543,7 +1559,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                         <tr className={isOpen ? 'transfer-summary-row transfer-summary-row--open' : 'transfer-summary-row'}>
                           <td>{directionLabel}</td>
                           <td className="transfer-summary-amount">
-                            {formatKGS(total)}
+                            {fmt(total)}
                           </td>
                           <td title="Внутренний перевод между счетами. Не влияет на доходы и расходы.">
                             {shortComment}
@@ -1577,7 +1593,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
 
                                   void (async () => {
                                     const resp = await fetch(
-                                      `/api/v1/reports/transfers-direction-pdf/?month=${month}&direction=${mappedDirection}`,
+                                      `/api/v1/reports/transfers-direction-pdf/?month=${month}&direction=${mappedDirection}&currency=${currency}`,
                                       {
                                         method: 'GET',
                                         headers: {
@@ -1656,7 +1672,7 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
                                                   : 'Банк'}
                                               </td>
                                               <td className="transfer-details-amount">
-                                                {formatKGS(parseFloat(item.amount))}
+                                                {fmt(parseFloat(item.amount))}
                                               </td>
                                               <td>{item.comment || '—'}</td>
                                             </tr>
@@ -1680,7 +1696,135 @@ export function GlobalSummary({ month }: GlobalSummaryProps) {
             </div>
           </div>
         )}
+        {!isLoading && !hasError && (
+          <div className="global-summary-transfers">
+            <div className="global-summary-section-header">
+              <div className="global-summary-section-header__info">
+                <h4 className="global-summary-section-title">
+                  {t('exchangeDetails.title', { defaultValue: 'Обмен валют' })}
+                </h4>
+                <p className="global-summary-transfers__hint">
+                  {t('exchangeDetails.hint', {
+                    defaultValue: 'Обмены между KGS и USD. Не влияют на доходы и расходы (P&L), но меняют остатки.',
+                  })}
+                </p>
+              </div>
+            </div>
+            {loadingExchanges && !exchangeError && (
+              <div className="summary-loading">{t('loading')}</div>
+            )}
+            {exchangeError && !loadingExchanges && (
+              <div className="summary-error">{t('errors.loadDetails')}</div>
+            )}
+            {!loadingExchanges && !exchangeError && (
+              exchangeDetails && exchangeDetails.results.length > 0 ? (
+                <Table
+                  zebra
+                  columns={[
+                    { key: 'date', label: t('exchangeDetails.date', { defaultValue: 'Дата' }) },
+                    { key: 'gave', label: t('exchangeDetails.gave', { defaultValue: 'Отдали' }) },
+                    { key: 'got', label: t('exchangeDetails.got', { defaultValue: 'Получили' }) },
+                    {
+                      key: 'rate',
+                      label: t('exchangeDetails.rate', { defaultValue: 'Курс' }),
+                      align: 'right' as const,
+                      numeric: true,
+                    },
+                    { key: 'comment', label: t('exchangeDetails.comment', { defaultValue: 'Комментарий' }) },
+                  ]}
+                  data={exchangeDetails.results.map((ex) => {
+                    const src = parseFloat(ex.source_amount)
+                    const dst = parseFloat(ex.destination_amount)
+                    const rateStr =
+                      src > 0 ? `1 ${ex.source_currency} = ${(dst / src).toFixed(4)} ${ex.destination_currency}` : '—'
+                    const acctLabel = (a: 'CASH' | 'BANK') => (a === 'CASH' ? 'Касса' : 'Банк')
+                    return {
+                      date: formatDate(ex.exchanged_at),
+                      gave: `${formatMoneyWithCurrency(ex.source_amount, ex.source_currency)} · ${acctLabel(ex.source_account)}`,
+                      got: `${formatMoneyWithCurrency(ex.destination_amount, ex.destination_currency)} · ${acctLabel(ex.destination_account)}`,
+                      rate: rateStr,
+                      comment: ex.comment || '—',
+                    }
+                  })}
+                />
+              ) : (
+                <div className="summary-no-data">
+                  {t('exchangeDetails.empty', { defaultValue: 'Обменов валют за месяц не было' })}
+                </div>
+              )
+            )}
+          </div>
+        )}
       </div>
+      {canExportPdf && (
+        <div className="summary-card account-statement-card">
+          <h3>Отчет по счёту</h3>
+          <div className="account-statement-card__controls">
+            <div className="account-statement-card__field">
+              <label htmlFor="cash-movement-account" className="account-statement-card__label">
+                {t('cashMovement.account')}
+              </label>
+              <select
+                id="cash-movement-account"
+                className="account-statement-card__select"
+                value={cashMovementAccount}
+                onChange={(e) => setCashMovementAccount(e.target.value as 'CASH' | 'BANK')}
+              >
+                <option value="CASH">{t('globalSummary.expenseAccountCash')}</option>
+                <option value="BANK">{t('globalSummary.expenseAccountBank')}</option>
+              </select>
+            </div>
+            <div className="account-statement-card__field">
+              <label htmlFor="cash-movement-start" className="account-statement-card__label">
+                {t('filters.startDate')}
+              </label>
+              <input
+                id="cash-movement-start"
+                className="account-statement-card__select"
+                type="date"
+                value={cashMovementStartDate}
+                onChange={(e) => setCashMovementStartDate(e.target.value)}
+              />
+            </div>
+            <div className="account-statement-card__field">
+              <label htmlFor="cash-movement-end" className="account-statement-card__label">
+                {t('filters.endDate')}
+              </label>
+              <input
+                id="cash-movement-end"
+                className="account-statement-card__select"
+                type="date"
+                value={cashMovementEndDate}
+                onChange={(e) => setCashMovementEndDate(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              size="small"
+              disabled={
+                cashMovementExporting ||
+                !cashMovementStartDate ||
+                !cashMovementEndDate ||
+                cashMovementRangeInvalid
+              }
+              onClick={() => {
+                void handleCashMovementExport()
+              }}
+            >
+              {cashMovementExporting ? t('globalSummary.actions.exportingPdf') : 'Скачать отчет по счёту'}
+            </Button>
+          </div>
+          <p className="account-statement-card__hint">
+            Экспортирует начальный остаток, доход, расход, transfer net и конечный остаток.
+          </p>
+          {cashMovementRangeInvalid && (
+            <div className="summary-error">{t('filters.invalidRange')}</div>
+          )}
+          {cashMovementExportError && (
+            <div className="summary-error">{t('globalSummary.exportError')}</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

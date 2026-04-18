@@ -4,7 +4,7 @@ Expenses API serializers.
 import re
 from rest_framework import serializers
 from apps.expenses.models import ActualExpense
-from apps.finance.models import ACCOUNT_CHOICES
+from apps.finance.models import ACCOUNT_CHOICES, CURRENCY_CHOICES
 from apps.budgeting.models import ExpenseCategory, MonthPeriod
 from apps.finance.services import assert_month_open_for_posted_facts
 from apps.expenses.services import assert_sufficient_balance
@@ -22,7 +22,7 @@ class ActualExpenseSerializer(serializers.ModelSerializer):
         model = ActualExpense
         fields = [
             'id', 'month_period', 'month_period_month', 'scope', 'month',
-            'category', 'category_name', 'account',
+            'category', 'category_name', 'account', 'currency',
             'amount', 'spent_at', 'comment',
             'created_by', 'created_by_username',
             'created_at', 'updated_at',
@@ -62,6 +62,11 @@ class ActualExpenseSerializer(serializers.ModelSerializer):
     def validate_account(self, value):
         if value not in dict(ACCOUNT_CHOICES):
             raise serializers.ValidationError('Account must be CASH or BANK.')
+        return value
+
+    def validate_currency(self, value):
+        if value not in dict(CURRENCY_CHOICES):
+            raise serializers.ValidationError('Currency must be KGS or USD.')
         return value
 
     def validate_category(self, value):
@@ -112,14 +117,17 @@ class ActualExpenseSerializer(serializers.ModelSerializer):
         account = attrs.get('account')
         amount = attrs.get('amount')
         spent_at = attrs.get('spent_at')
+        currency = attrs.get('currency')
         if self.instance:
             account = account if account is not None else self.instance.account
             spent_at = spent_at if spent_at is not None else self.instance.spent_at
             amount = amount if amount is not None else self.instance.amount
+            currency = currency if currency is not None else self.instance.currency
+        currency = currency or 'KGS'
         if account is not None and amount is not None and spent_at is not None:
             exclude_expense_id = self.instance.pk if self.instance else None
             try:
-                assert_sufficient_balance(account, amount, spent_at, exclude_expense_id=exclude_expense_id)
+                assert_sufficient_balance(account, amount, spent_at, currency=currency, exclude_expense_id=exclude_expense_id)
             except ValueError as e:
                 raise serializers.ValidationError({'amount': [str(e)]})
 

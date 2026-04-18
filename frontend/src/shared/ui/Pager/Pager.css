@@ -1,0 +1,69 @@
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.5rem 0;
+}
+
+.pager__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.pager__button:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.pager__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pager__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.pager__indicator {
+  font-size: 0.9rem;
+  color: #4b5563;
+  min-width: 3rem;
+  text-align: center;
+}
+
+.pager__indicator strong {
+  color: #111827;
+  margin-left: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .pager {
+    gap: 0.5rem;
+  }
+
+  .pager__button {
+    flex: 1 1 0;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    justify-content: center;
+  }
+
+  .pager__indicator {
+    font-size: 0.85rem;
+    min-width: 2.5rem;
+  }
+}

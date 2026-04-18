@@ -7,6 +7,7 @@ export interface ActualExpense {
   category_id?: number | null
   category_name?: string | null
   account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   amount: string
   spent_at: string
   comment: string

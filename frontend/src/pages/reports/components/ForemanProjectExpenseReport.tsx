@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { ExpenseSection } from './ExpenseSection'
 import { useReportsData, getQueryErrorStatus } from '../hooks/useReportsData'
+import type { ReportCurrency } from '@/shared/api/reportsApi'
 
 function monthValidationFromError(error: unknown): string | null {
   const status = getQueryErrorStatus(error)
@@ -19,6 +20,7 @@ function monthValidationFromError(error: unknown): string | null {
 interface ForemanProjectExpenseReportProps {
   month: string
   monthStatus: 'OPEN' | 'LOCKED' | null
+  currency: ReportCurrency
 }
 
 /**
@@ -28,6 +30,7 @@ interface ForemanProjectExpenseReportProps {
 export function ForemanProjectExpenseReport({
   month,
   monthStatus,
+  currency,
 }: ForemanProjectExpenseReportProps) {
   const { t } = useTranslation('reports')
   const data = useReportsData({
@@ -35,6 +38,7 @@ export function ForemanProjectExpenseReport({
     selectedTab: 'project',
     selectedProjectId: null,
     skipExpenseFacts: false,
+    currency,
   })
 
   const loadingMain = data.loading.monthPeriod || data.loading.expensePlanned

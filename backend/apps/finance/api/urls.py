@@ -5,13 +5,15 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     FinancePeriodViewSet, IncomeEntryViewSet,
-    IncomeSourceViewSet, IncomePlanViewSet, TransferViewSet
+    IncomeSourceViewSet, IncomePlanViewSet, TransferViewSet,
+    CurrencyExchangeViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'finance-periods', FinancePeriodViewSet, basename='finance-period')
 router.register(r'income-entries', IncomeEntryViewSet, basename='income-entry')
 router.register(r'transfers', TransferViewSet, basename='transfer')
+router.register(r'currency-exchanges', CurrencyExchangeViewSet, basename='currency-exchange')
 
 # Income planning endpoints
 income_router = DefaultRouter()

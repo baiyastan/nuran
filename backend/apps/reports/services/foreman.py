@@ -12,6 +12,7 @@ def build_foreman_project_summary_data_payload(
     month: str,
     month_period: MonthPeriod,
     user,
+    currency: str | None = None,
 ) -> dict:
     """
     Raw dict for ForemanProjectSummaryDataSerializer (Decimals on summary fields).
@@ -23,19 +24,26 @@ def build_foreman_project_summary_data_payload(
         .order_by('project__name', 'project_id')
     )
 
-    planned_total = (
-        BudgetLine.objects.filter(
-            plan__period=month_period,
-            plan__scope='PROJECT',
-        ).aggregate(total=Sum('amount_planned'))['total']
-        or Decimal('0.00')
+    if currency == 'USD':
+        planned_total = Decimal('0.00')
+    else:
+        planned_total = (
+            BudgetLine.objects.filter(
+                plan__period=month_period,
+                plan__scope='PROJECT',
+            ).aggregate(total=Sum('amount_planned'))['total']
+            or Decimal('0.00')
+        )
+
+    actual_qs = ExpenseActualExpense.objects.filter(
+        month_period=month_period,
+        scope='PROJECT',
     )
+    if currency in ('KGS', 'USD'):
+        actual_qs = actual_qs.filter(currency=currency)
 
     actual_total = (
-        ExpenseActualExpense.objects.filter(
-            month_period=month_period,
-            scope='PROJECT',
-        ).aggregate(total=Sum('amount'))['total']
+        actual_qs.aggregate(total=Sum('amount'))['total']
         or Decimal('0.00')
     )
 

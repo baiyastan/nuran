@@ -19,6 +19,7 @@ export interface TransferListResponse {
 export interface CreateTransferRequest {
   source_account: 'CASH' | 'BANK'
   destination_account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   amount: number
   transferred_at: string
   comment?: string
@@ -27,6 +28,7 @@ export interface CreateTransferRequest {
 export interface UpdateTransferRequest {
   source_account?: 'CASH' | 'BANK'
   destination_account?: 'CASH' | 'BANK'
+  currency?: 'KGS' | 'USD'
   amount?: number
   transferred_at?: string
   comment?: string

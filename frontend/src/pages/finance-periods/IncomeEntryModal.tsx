@@ -30,6 +30,7 @@ export function IncomeEntryModal({
   const [formData, setFormData] = useState({
     source_id: '',
     account: 'CASH' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
     amount: '',
     received_at: '',
     comment: '',
@@ -50,6 +51,7 @@ export function IncomeEntryModal({
       setFormData({
         source_id: sourceId ? String(sourceId) : '',
         account: entry.account ?? 'CASH',
+        currency: entry.currency ?? 'KGS',
         amount: entry.amount,
         received_at: dateStr,
         comment: entry.comment || '',
@@ -58,6 +60,7 @@ export function IncomeEntryModal({
       setFormData({
         source_id: '',
         account: 'CASH',
+        currency: 'KGS',
         amount: '',
         received_at: '',
         comment: '',
@@ -101,12 +104,14 @@ export function IncomeEntryModal({
           received_at: string
           comment: string
           account: 'CASH' | 'BANK'
+          currency: 'KGS' | 'USD'
           source_id?: number
         } = {
           amount: amountNum,
           received_at: formData.received_at,
           comment: formData.comment.trim(),
           account: formData.account,
+          currency: formData.currency,
         }
         if (sourceIdNum !== null) {
           updateData.source_id = sourceIdNum
@@ -122,6 +127,7 @@ export function IncomeEntryModal({
           received_at: string
           comment: string
           account: 'CASH' | 'BANK'
+          currency: 'KGS' | 'USD'
           source_id?: number
         } = {
           finance_period: financePeriodId,
@@ -129,6 +135,7 @@ export function IncomeEntryModal({
           received_at: formData.received_at,
           comment: formData.comment.trim(),
           account: formData.account,
+          currency: formData.currency,
         }
         if (sourceIdNum !== null) {
           createData.source_id = sourceIdNum
@@ -143,7 +150,7 @@ export function IncomeEntryModal({
   }
 
   const handleClose = () => {
-    setFormData({ source_id: '', account: 'CASH', amount: '', received_at: '', comment: '' })
+    setFormData({ source_id: '', account: 'CASH', currency: 'KGS', amount: '', received_at: '', comment: '' })
     setError('')
     onClose()
   }
@@ -164,6 +171,11 @@ export function IncomeEntryModal({
     { value: 'BANK', label: t('income.common.accountBank', { ns: 'financePeriods' }) },
   ]
 
+  const currencyOptions = [
+    { value: 'KGS', label: t('incomeEntries.form.currencyKgs', { defaultValue: 'Кыргызский сом (KGS)' }) },
+    { value: 'USD', label: t('incomeEntries.form.currencyUsd', { defaultValue: 'Доллар США (USD)' }) },
+  ]
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={isEditMode ? t('modal.title.edit', { defaultValue: 'Edit Income Entry' }) : t('modal.title.add', { defaultValue: 'Add Income Entry' })}>
       <form onSubmit={handleSubmit} className="income-entry-modal-form">
@@ -180,6 +192,13 @@ export function IncomeEntryModal({
           options={accountOptions}
           value={formData.account}
           onChange={(e) => setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })}
+        />
+
+        <Select
+          label={t('incomeEntries.form.currency', { defaultValue: 'Валюта' })}
+          options={currencyOptions}
+          value={formData.currency}
+          onChange={(e) => setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })}
         />
 
         <Input
@@ -232,4 +251,6 @@ export function IncomeEntryModal({
     </Modal>
   )
 }
+
+export default IncomeEntryModal
 

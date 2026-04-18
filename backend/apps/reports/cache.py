@@ -23,8 +23,11 @@ def dashboard_kpi_cache_key(month: str, month_period_id: int) -> str:
     return f"{KEY_PREFIX}:dashboard_kpi:{month}:{month_period_id}"
 
 
-def monthly_report_cache_key(month: str, scope: str, month_period_id: int) -> str:
-    return f"{KEY_PREFIX}:monthly:{month}:{scope}:{month_period_id}"
+def monthly_report_cache_key(
+    month: str, scope: str, month_period_id: int, currency: str | None = None
+) -> str:
+    currency_suffix = currency if currency in ('KGS', 'USD') else 'all'
+    return f"{KEY_PREFIX}:monthly:{month}:{scope}:{month_period_id}:{currency_suffix}"
 
 
 def get_cached_report(key: str):

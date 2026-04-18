@@ -28,7 +28,7 @@ class ActualExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [ActualExpensePermission]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     # Scope is handled via filterset; category (including null) is handled explicitly in get_queryset.
-    filterset_fields = ['scope', 'account']
+    filterset_fields = ['scope', 'account', 'currency']
     ordering_fields = ['spent_at', 'created_at', 'amount']
     ordering = ['-spent_at', '-created_at']
 

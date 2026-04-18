@@ -14,6 +14,7 @@ from .views import (
     ExportSectionPdfView,
     TransferDetailsView,
     ExportTransfersDirectionPdfView,
+    CurrencyExchangeDetailsView,
 )
 
 urlpatterns = [
@@ -49,6 +50,11 @@ urlpatterns = [
         'transfer-details/',
         TransferDetailsView.as_view(),
         name='transfer-details',
+    ),
+    path(
+        'currency-exchange-details/',
+        CurrencyExchangeDetailsView.as_view(),
+        name='currency-exchange-details',
     ),
     path(
         'transfers-direction-pdf/',

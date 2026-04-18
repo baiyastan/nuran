@@ -7,7 +7,12 @@ from apps.budgeting.models import BudgetLine, BudgetPlan, MonthPeriod
 from apps.expenses.models import ActualExpense as ExpenseActualExpense
 
 
-def build_monthly_report_payload(month: str, scope: str, month_period: MonthPeriod) -> dict:
+def build_monthly_report_payload(
+    month: str,
+    scope: str,
+    month_period: MonthPeriod,
+    currency: str | None = None,
+) -> dict:
     """
     Build response dict for MonthlyReportView.
 
@@ -19,7 +24,7 @@ def build_monthly_report_payload(month: str, scope: str, month_period: MonthPeri
     plan_id = plan_ids[0] if plan_ids else None
 
     planned_by_category = {}
-    if plan_ids:
+    if plan_ids and currency != 'USD':
         lines = (
             BudgetLine.objects.filter(plan_id__in=plan_ids)
             .values('category_id', 'category__name')
@@ -34,6 +39,8 @@ def build_monthly_report_payload(month: str, scope: str, month_period: MonthPeri
             }
 
     actual_qs = ExpenseActualExpense.objects.filter(month_period=month_period, scope=scope)
+    if currency in ('KGS', 'USD'):
+        actual_qs = actual_qs.filter(currency=currency)
 
     stats = actual_qs.aggregate(
         s=Sum('amount'),

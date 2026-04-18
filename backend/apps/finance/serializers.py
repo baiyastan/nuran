@@ -6,7 +6,10 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from decimal import Decimal
 from datetime import date
 from django.shortcuts import get_object_or_404
-from .models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer, ACCOUNT_CHOICES
+from .models import (
+    FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer,
+    CurrencyExchange, ACCOUNT_CHOICES, CURRENCY_CHOICES,
+)
 from .services import IncomePlanService
 
 
@@ -88,7 +91,7 @@ class IncomeEntrySerializer(serializers.ModelSerializer):
         model = IncomeEntry
         fields = [
             'id', 'finance_period', 'finance_period_fund_kind', 'finance_period_month',
-            'project_name', 'source', 'source_id', 'account', 'amount', 'received_at', 'comment',
+            'project_name', 'source', 'source_id', 'account', 'currency', 'amount', 'received_at', 'comment',
             'created_by', 'created_by_username',
             'created_at', 'updated_at'
         ]
@@ -110,6 +113,12 @@ class IncomeEntrySerializer(serializers.ModelSerializer):
         """Validate account is CASH or BANK (destination for income)."""
         if value not in dict(ACCOUNT_CHOICES):
             raise serializers.ValidationError("Account must be CASH or BANK.")
+        return value
+
+    def validate_currency(self, value):
+        """Validate currency is KGS or USD."""
+        if value not in dict(CURRENCY_CHOICES):
+            raise serializers.ValidationError("Currency must be KGS or USD.")
         return value
 
     def validate(self, data):
@@ -247,7 +256,7 @@ class TransferSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transfer
         fields = [
-            'id', 'source_account', 'destination_account', 'amount',
+            'id', 'source_account', 'destination_account', 'currency', 'amount',
             'transferred_at', 'comment',
             'created_by', 'created_by_username',
             'created_at', 'updated_at',
@@ -259,9 +268,15 @@ class TransferSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Amount must be greater than zero.")
         return value
 
+    def validate_currency(self, value):
+        if value not in dict(CURRENCY_CHOICES):
+            raise serializers.ValidationError("Currency must be KGS or USD.")
+        return value
+
     def validate(self, data):
         src = data.get('source_account') or (self.instance.source_account if self.instance else None)
         dst = data.get('destination_account') or (self.instance.destination_account if self.instance else None)
+        currency = data.get('currency') or (self.instance.currency if self.instance else 'KGS')
         if src and dst and src == dst:
             raise serializers.ValidationError(
                 {"destination_account": "Source and destination accounts must be different."}
@@ -282,14 +297,85 @@ class TransferSerializer(serializers.ModelSerializer):
             exclude_transfer_id = self.instance.pk if self.instance else None
             balance = get_balance_for_account(
                 src, transferred_at,
+                currency=currency,
                 exclude_expense_id=None,
                 exclude_transfer_id=exclude_transfer_id,
             )
             if balance < amount:
                 label = dict(ACCOUNT_CHOICES).get(src, src)
                 raise serializers.ValidationError({
-                    'amount': f'Insufficient balance on {label}. Available: {balance:.2f}.'
+                    'amount': f'Insufficient balance on {label} ({currency}). Available: {balance:.2f}.'
                 })
         return data
 
 
+class CurrencyExchangeSerializer(serializers.ModelSerializer):
+    """Serializer for CurrencyExchange (cross-currency movement). Not income, not expense."""
+
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = CurrencyExchange
+        fields = [
+            'id',
+            'source_account', 'source_currency', 'source_amount',
+            'destination_account', 'destination_currency', 'destination_amount',
+            'exchanged_at', 'comment',
+            'created_by', 'created_by_username',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def _validate_positive(self, value, label):
+        if value is None or value <= 0:
+            raise serializers.ValidationError(f"{label} must be greater than zero.")
+        return value
+
+    def validate_source_amount(self, value):
+        return self._validate_positive(value, 'Source amount')
+
+    def validate_destination_amount(self, value):
+        return self._validate_positive(value, 'Destination amount')
+
+    def validate_source_currency(self, value):
+        if value not in dict(CURRENCY_CHOICES):
+            raise serializers.ValidationError("Currency must be KGS or USD.")
+        return value
+
+    def validate_destination_currency(self, value):
+        if value not in dict(CURRENCY_CHOICES):
+            raise serializers.ValidationError("Currency must be KGS or USD.")
+        return value
+
+    def validate(self, data):
+        instance = self.instance
+        src_acct = data.get('source_account', getattr(instance, 'source_account', None))
+        dst_acct = data.get('destination_account', getattr(instance, 'destination_account', None))
+        src_cur = data.get('source_currency', getattr(instance, 'source_currency', None))
+        dst_cur = data.get('destination_currency', getattr(instance, 'destination_currency', None))
+        src_amount = data.get('source_amount', getattr(instance, 'source_amount', None))
+        exchanged_at = data.get('exchanged_at', getattr(instance, 'exchanged_at', None))
+
+        if src_cur and dst_cur and src_cur == dst_cur:
+            raise serializers.ValidationError(
+                {"destination_currency": "Source and destination currencies must differ."}
+            )
+        if src_acct and src_acct not in dict(ACCOUNT_CHOICES):
+            raise serializers.ValidationError({"source_account": "Account must be CASH or BANK."})
+        if dst_acct and dst_acct not in dict(ACCOUNT_CHOICES):
+            raise serializers.ValidationError({"destination_account": "Account must be CASH or BANK."})
+
+        if src_acct and src_cur and src_amount is not None and exchanged_at is not None:
+            from apps.expenses.services import get_balance_for_account
+            exclude_exchange_id = instance.pk if instance else None
+            balance = get_balance_for_account(
+                src_acct, exchanged_at,
+                currency=src_cur,
+                exclude_exchange_id=exclude_exchange_id,
+            )
+            if balance < src_amount:
+                label = dict(ACCOUNT_CHOICES).get(src_acct, src_acct)
+                raise serializers.ValidationError({
+                    'source_amount': f'Insufficient balance on {label} ({src_cur}). Available: {balance:.2f}.'
+                })
+        return data

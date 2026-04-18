@@ -24,6 +24,7 @@ export function CreateIncomeEntryModal({
     received_at: new Date().toISOString().split('T')[0],
     comment: '',
     account: 'CASH' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
@@ -37,6 +38,7 @@ export function CreateIncomeEntryModal({
         received_at: new Date().toISOString().split('T')[0],
         comment: '',
         account: 'CASH',
+        currency: 'KGS',
       })
       setErrors({})
       setApiError('')
@@ -82,12 +84,14 @@ export function CreateIncomeEntryModal({
         received_at: string
         comment: string
         account: 'CASH' | 'BANK'
+        currency: 'KGS' | 'USD'
       } = {
         finance_period: financePeriodId,
         amount: parseFloat(formData.amount),
         received_at: formData.received_at,
         comment: formData.comment.trim(),
         account: formData.account,
+        currency: formData.currency,
       }
 
       await createIncomeEntry(payload).unwrap()
@@ -131,6 +135,22 @@ export function CreateIncomeEntryModal({
           >
             <option value="CASH">{t('incomeEntries.form.accountCash')}</option>
             <option value="BANK">{t('incomeEntries.form.accountBank')}</option>
+          </select>
+        </div>
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('incomeEntries.form.currency')}
+          </label>
+          <select
+            className="input"
+            value={formData.currency}
+            onChange={(e) =>
+              setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })
+            }
+          >
+            <option value="KGS">{t('incomeEntries.form.currencyKgs')}</option>
+            <option value="USD">{t('incomeEntries.form.currencyUsd')}</option>
           </select>
         </div>
 

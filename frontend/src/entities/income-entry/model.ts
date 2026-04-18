@@ -10,6 +10,7 @@ export interface IncomeEntry {
   } | null
   source_id?: number | null
   account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   amount: string
   received_at: string
   comment: string

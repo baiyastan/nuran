@@ -196,3 +196,22 @@ class TransferPermission(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return self.has_permission(request, view)
+
+
+class CurrencyExchangePermission(permissions.BasePermission):
+    """Currency exchange (posted fact): admin may write; director read-only; others denied."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        u = request.user
+        if getattr(u, 'is_superuser', False):
+            return True
+        if _is_admin(u):
+            return True
+        if _is_director(u):
+            return _is_safe(request)
+        _deny()
+
+    def has_object_permission(self, request, view, obj):
+        return self.has_permission(request, view)

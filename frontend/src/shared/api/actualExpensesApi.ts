@@ -13,6 +13,7 @@ export interface ActualExpenseListParams {
   ordering?: string
   page?: number
   account?: 'CASH' | 'BANK'
+  currency?: 'KGS' | 'USD'
 }
 
 export interface ActualExpenseVendorBreakdown {
@@ -37,6 +38,7 @@ export interface CreateActualExpensePayload {
   month: string // YYYY-MM
   scope: ActualExpenseScope
   account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   category?: number | null
   amount: number
   spent_at: string
@@ -64,7 +66,7 @@ export const actualExpensesApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['ActualExpenses', 'Report'],
     }),
-    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<Pick<ActualExpense, 'amount' | 'spent_at' | 'comment' | 'category' | 'account'>> }>({
+    updateActualExpense: builder.mutation<ActualExpense, { id: number; data: Partial<Pick<ActualExpense, 'amount' | 'spent_at' | 'comment' | 'category' | 'account' | 'currency'>> }>({
       query: ({ id, data }) => ({
         url: `/actual-expenses/${id}/`,
         method: 'PATCH',
