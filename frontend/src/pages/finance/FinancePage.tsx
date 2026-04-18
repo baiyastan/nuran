@@ -20,16 +20,22 @@ import {
   useDeleteTransferMutation,
   type Transfer,
 } from '@/shared/api/transfersApi'
+import {
+  useListCurrencyExchangesQuery,
+  useDeleteCurrencyExchangeMutation,
+  type CurrencyExchange,
+} from '@/shared/api/currencyExchangesApi'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { useToastContext } from '@/shared/ui/Toast/ToastProvider'
 import { Button } from '@/shared/ui/Button/Button'
 import { Table } from '@/shared/ui/Table/Table'
 import { TableSkeleton } from '@/components/ui/TableSkeleton'
-import { formatMoneyKGS } from '@/shared/utils/formatMoney'
+import { formatMoneyKGS, formatMoneyWithCurrency } from '@/shared/utils/formatMoney'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { IncomePlanModal } from '@/pages/finance-periods/IncomePlanModal'
-import { IncomeEntryModal } from '@/pages/finance-periods/IncomeEntryModal'
+import IncomeEntryModal from '@/pages/finance-periods/IncomeEntryModal'
 import { TransferModal } from '@/features/transfer-modal/TransferModal'
+import { CurrencyExchangeModal } from '@/features/currency-exchange-modal/CurrencyExchangeModal'
 import './FinancePage.css'
 
 function FinancePage() {
@@ -92,9 +98,13 @@ function FinancePage() {
   const { data: transfersData, isLoading: isLoadingTransfers, error: transfersError } =
     useListTransfersQuery({ month: selectedMonth })
 
+  const { data: exchangesData, isLoading: isLoadingExchanges, error: exchangesError } =
+    useListCurrencyExchangesQuery({ month: selectedMonth })
+
   const [deleteIncomePlan, { isLoading: isDeletingPlan }] = useDeleteIncomePlanMutation()
   const [deleteIncomeEntry, { isLoading: isDeletingEntry }] = useDeleteIncomeEntryMutation()
   const [deleteTransfer, { isLoading: isDeletingTransfer }] = useDeleteTransferMutation()
+  const [deleteCurrencyExchange, { isLoading: isDeletingExchange }] = useDeleteCurrencyExchangeMutation()
 
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [editingPlan, setEditingPlan] = useState<IncomePlan | null>(null)
@@ -105,6 +115,9 @@ function FinancePage() {
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
   const [deletingTransferId, setDeletingTransferId] = useState<number | null>(null)
+  const [showExchangeModal, setShowExchangeModal] = useState(false)
+  const [editingExchange, setEditingExchange] = useState<CurrencyExchange | null>(null)
+  const [deletingExchangeId, setDeletingExchangeId] = useState<number | null>(null)
 
   const isPeriodOpen = displayStatus === 'open'
   const isPeriodLocked = displayStatus === 'locked'
@@ -264,6 +277,40 @@ function FinancePage() {
     setEditingTransfer(null)
   }
 
+  const handleAddExchange = () => {
+    setEditingExchange(null)
+    setShowExchangeModal(true)
+  }
+  const handleEditExchange = (ex: CurrencyExchange) => {
+    setEditingExchange(ex)
+    setShowExchangeModal(true)
+  }
+  const handleDeleteExchange = async (exchangeId: number) => {
+    if (!window.confirm(t('financePeriodDetails.confirm.deleteExchange', { defaultValue: 'Обмен валют өчүрүлсүнбү?' }))) return
+    setDeletingExchangeId(exchangeId)
+    try {
+      await deleteCurrencyExchange(exchangeId).unwrap()
+      showSuccess(t('financePeriodDetails.toast.exchangeDeleted', { defaultValue: 'Обмен удалён' }))
+    } catch (err: unknown) {
+      showError(getErrorMessage(err) || t('financePeriodDetails.toast.exchangeDeleteError', { defaultValue: 'Не удалось удалить обмен' }))
+    } finally {
+      setDeletingExchangeId(null)
+    }
+  }
+  const handleExchangeModalSuccess = () => {
+    setShowExchangeModal(false)
+    setEditingExchange(null)
+    showSuccess(
+      editingExchange
+        ? t('financePeriodDetails.toast.exchangeUpdated', { defaultValue: 'Обмен обновлён' })
+        : t('financePeriodDetails.toast.exchangeCreated', { defaultValue: 'Обмен создан' })
+    )
+  }
+  const handleExchangeModalClose = () => {
+    setShowExchangeModal(false)
+    setEditingExchange(null)
+  }
+
   const planColumns = [
     { key: 'source', label: t('income.common.source', { ns: 'financePeriods' }) },
     { key: 'amount', label: t('financePeriodDetails.plans.amountColumn') },
@@ -318,7 +365,7 @@ function FinancePage() {
       id: entry.id,
       date: formatDate(entry.received_at),
       source: entry.source?.name || '-',
-      amount: formatMoneyKGS(entry.amount),
+      amount: formatMoneyWithCurrency(entry.amount, entry.currency),
       comment: entry.comment || '-',
       ...(canManageEntries && {
         actions: (
@@ -365,7 +412,7 @@ function FinancePage() {
       date: formatDate(tr.transferred_at),
       from: tr.source_account === 'CASH' ? t('income.common.accountCash', { ns: 'financePeriods' }) : t('income.common.accountBank', { ns: 'financePeriods' }),
       to: tr.destination_account === 'CASH' ? t('income.common.accountCash', { ns: 'financePeriods' }) : t('income.common.accountBank', { ns: 'financePeriods' }),
-      amount: formatMoneyKGS(tr.amount),
+      amount: formatMoneyWithCurrency(tr.amount, tr.currency),
       comment: tr.comment || '-',
       ...(canManageEntries && {
         actions: (
@@ -392,6 +439,58 @@ function FinancePage() {
         ),
       }),
     })) || []
+
+  const accountLabel = (a: 'CASH' | 'BANK') =>
+    a === 'CASH'
+      ? t('income.common.accountCash', { ns: 'financePeriods' })
+      : t('income.common.accountBank', { ns: 'financePeriods' })
+
+  const exchangeColumns = [
+    { key: 'date', label: t('income.common.date', { ns: 'financePeriods' }) },
+    { key: 'source', label: t('financePeriodDetails.exchanges.source', { defaultValue: 'Из' }) },
+    { key: 'destination', label: t('financePeriodDetails.exchanges.destination', { defaultValue: 'В' }) },
+    { key: 'rate', label: t('financePeriodDetails.exchanges.rate', { defaultValue: 'Курс' }) },
+    { key: 'comment', label: t('income.common.comment', { ns: 'financePeriods' }) },
+    ...(canManageEntries ? [{ key: 'actions', label: t('actions', { ns: 'common' }) }] : []),
+  ]
+  const exchangeTableData =
+    exchangesData?.results.map((ex) => {
+      const src = parseFloat(ex.source_amount)
+      const dst = parseFloat(ex.destination_amount)
+      const rate = src > 0 ? (dst / src).toFixed(4) : '—'
+      return {
+        id: ex.id,
+        date: formatDate(ex.exchanged_at),
+        source: `${formatMoneyWithCurrency(ex.source_amount, ex.source_currency)} · ${accountLabel(ex.source_account)}`,
+        destination: `${formatMoneyWithCurrency(ex.destination_amount, ex.destination_currency)} · ${accountLabel(ex.destination_account)}`,
+        rate: `1 ${ex.source_currency} = ${rate} ${ex.destination_currency}`,
+        comment: ex.comment || '-',
+        ...(canManageEntries && {
+          actions: (
+            <div className="table-actions">
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => handleEditExchange(ex)}
+                disabled={isDeletingExchange}
+              >
+                {t('financePeriodDetails.actions.edit')}
+              </Button>
+              <Button
+                size="small"
+                variant="danger"
+                onClick={() => handleDeleteExchange(ex.id)}
+                disabled={isDeletingExchange || deletingExchangeId === ex.id}
+              >
+                {deletingExchangeId === ex.id
+                  ? t('financePeriodDetails.actions.deleting')
+                  : t('financePeriodDetails.actions.delete')}
+              </Button>
+            </div>
+          ),
+        }),
+      }
+    }) || []
 
   return (
     <div className="finance-page">
@@ -537,6 +636,35 @@ function FinancePage() {
         )}
       </div>
 
+      {/* Section 4: Currency Exchanges */}
+      <div className="details-table transfers-section">
+        <div className="table-header">
+          <h3>{t('financePeriodDetails.exchanges.title', { defaultValue: 'Обмен валют' })}</h3>
+          {canManageEntries && (
+            <Button onClick={handleAddExchange}>
+              {t('financePeriodDetails.exchanges.addButton', { defaultValue: 'Добавить обмен' })}
+            </Button>
+          )}
+        </div>
+        {isLoadingExchanges ? (
+          <TableSkeleton columnCount={exchangeColumns.length} />
+        ) : exchangesError ? (
+          <div className="finance-page-error">
+            {t('financePeriodDetails.error.exchanges', { defaultValue: 'Не удалось загрузить обмены валют' })}
+          </div>
+        ) : !exchangesData?.results.length ? (
+          <div className="finance-page-empty">
+            {t('financePeriodDetails.exchanges.empty', { defaultValue: 'Обменов валют пока нет' })}
+          </div>
+        ) : (
+          <Table
+            columns={exchangeColumns}
+            data={exchangeTableData}
+            renderCell={renderCell}
+          />
+        )}
+      </div>
+
       {showPlanModal && (
         <IncomePlanModal
           isOpen={showPlanModal}
@@ -566,6 +694,15 @@ function FinancePage() {
           onClose={handleTransferModalClose}
           onSuccess={handleTransferModalSuccess}
           transfer={editingTransfer}
+        />
+      )}
+
+      {showExchangeModal && (
+        <CurrencyExchangeModal
+          isOpen={showExchangeModal}
+          onClose={handleExchangeModalClose}
+          onSuccess={handleExchangeModalSuccess}
+          exchange={editingExchange}
         />
       )}
     </div>

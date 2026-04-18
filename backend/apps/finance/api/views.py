@@ -16,17 +16,25 @@ from rest_framework.response import Response
 from apps.audit.services import optional_audit_reason
 from apps.budgeting.models import MonthPeriod
 from apps.finance.constants import MONTH_REQUIRED_MSG
-from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer
+from ..models import FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer, CurrencyExchange
 from ..services import (
     FinancePeriodService,
     IncomeEntryService,
     IncomePlanService,
     IncomeSummaryService,
     TransferService,
+    CurrencyExchangeService,
     assert_month_open,
 )
-from ..serializers import FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer, IncomePlanSerializer, IncomeSummarySerializer, TransferSerializer
-from ..permissions import FinancePeriodPermission, IncomeEntryPermission, IncomeSourcePermission, IncomePlanPermission, TransferPermission
+from ..serializers import (
+    FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer,
+    IncomePlanSerializer, IncomeSummarySerializer, TransferSerializer,
+    CurrencyExchangeSerializer,
+)
+from ..permissions import (
+    FinancePeriodPermission, IncomeEntryPermission, IncomeSourcePermission,
+    IncomePlanPermission, TransferPermission, CurrencyExchangePermission,
+)
 from ..filters import IncomeEntryFilter
 
 
@@ -452,7 +460,7 @@ class TransferViewSet(viewsets.ModelViewSet):
     serializer_class = TransferSerializer
     permission_classes = [TransferPermission]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ['source_account', 'destination_account']
+    filterset_fields = ['source_account', 'destination_account', 'currency']
     ordering_fields = ['transferred_at', 'created_at', 'amount']
     ordering = ['-transferred_at', '-created_at']
 
@@ -492,6 +500,62 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         TransferService.delete(
+            instance,
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+        )
+
+
+class CurrencyExchangeViewSet(viewsets.ModelViewSet):
+    """ViewSet for CurrencyExchange (cross-currency). Not income, not expense."""
+
+    queryset = CurrencyExchange.objects.all()
+    serializer_class = CurrencyExchangeSerializer
+    permission_classes = [CurrencyExchangePermission]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = [
+        'source_account', 'source_currency',
+        'destination_account', 'destination_currency',
+    ]
+    ordering_fields = ['exchanged_at', 'created_at', 'source_amount', 'destination_amount']
+    ordering = ['-exchanged_at', '-created_at']
+
+    def get_queryset(self):
+        qs = CurrencyExchange.objects.select_related('created_by')
+        month = self.request.query_params.get('month')
+        if month:
+            try:
+                year_int = int(month[:4])
+                month_int = int(month[5:7])
+                if 1 <= month_int <= 12:
+                    from datetime import date
+                    from calendar import monthrange
+                    first = date(year_int, month_int, 1)
+                    last_day = monthrange(year_int, month_int)[1]
+                    last = date(year_int, month_int, last_day)
+                    qs = qs.filter(exchanged_at__gte=first, exchanged_at__lte=last)
+            except (ValueError, IndexError):
+                pass
+        return qs
+
+    def perform_create(self, serializer):
+        exchange = CurrencyExchangeService.create(
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+            **serializer.validated_data,
+        )
+        serializer.instance = exchange
+
+    def perform_update(self, serializer):
+        CurrencyExchangeService.update(
+            serializer.instance,
+            user=self.request.user,
+            audit_reason=optional_audit_reason(self.request),
+            **serializer.validated_data,
+        )
+
+    def perform_destroy(self, instance):
+        CurrencyExchangeService.delete(
             instance,
             user=self.request.user,
             audit_reason=optional_audit_reason(self.request),

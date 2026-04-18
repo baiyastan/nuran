@@ -40,6 +40,7 @@ export function CreateActualExpenseModal({
   const [formData, setFormData] = useState({
     categoryId: null as number | null,
     account: 'CASH' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
     amount: '',
     spent_at: new Date().toISOString().split('T')[0],
     comment: '',
@@ -80,6 +81,7 @@ export function CreateActualExpenseModal({
       setFormData({
         categoryId: null,
         account: 'CASH',
+        currency: 'KGS',
         amount: '',
         spent_at: new Date().toISOString().split('T')[0],
         comment: '',
@@ -137,6 +139,7 @@ export function CreateActualExpenseModal({
         month,
         scope,
         account: formData.account,
+        currency: formData.currency,
         category: formData.categoryId ?? undefined,
         amount: parseFloat(formData.amount),
         spent_at: formData.spent_at,
@@ -191,6 +194,22 @@ export function CreateActualExpenseModal({
           >
             <option value="CASH">{t('expenses.form.accountCash')}</option>
             <option value="BANK">{t('expenses.form.accountBank')}</option>
+          </select>
+        </div>
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('expenses.form.currency')}
+          </label>
+          <select
+            className="input"
+            value={formData.currency}
+            onChange={(e) => {
+              setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })
+            }}
+          >
+            <option value="KGS">{t('expenses.form.currencyKgs')}</option>
+            <option value="USD">{t('expenses.form.currencyUsd')}</option>
           </select>
         </div>
 

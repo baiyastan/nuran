@@ -4,7 +4,7 @@ import { useListFinancePeriodsQuery, FinancePeriodListParams } from '@/shared/ap
 import { useGetMonthPeriodQuery } from '@/shared/api/monthPeriodsApi'
 import { useGetIncomePlansSummaryQuery } from '@/shared/api/incomePlansApi'
 import { useListIncomeEntriesQuery } from '@/shared/api/incomeEntriesApi'
-import { useGetMonthlyReportQuery } from '@/shared/api/reportsApi'
+import { useGetMonthlyReportQuery, type ReportCurrency } from '@/shared/api/reportsApi'
 import { useListActualExpensesQuery } from '@/shared/api/actualExpensesApi'
 import { ReportTab } from '../types/reports.types'
 
@@ -22,6 +22,7 @@ interface UseReportsDataParams {
   selectedTab: ReportTab
   selectedProjectId: number | null
   skipExpenseFacts?: boolean
+  currency?: ReportCurrency
 }
 
 export function useReportsData({
@@ -29,6 +30,7 @@ export function useReportsData({
   selectedTab,
   selectedProjectId,
   skipExpenseFacts = false,
+  currency,
 }: UseReportsDataParams) {
   const { t } = useTranslation('reports')
 
@@ -96,14 +98,16 @@ export function useReportsData({
     isLoading: loadingIncomeActual,
     error: incomeActualError,
   } = useListIncomeEntriesQuery(
-    financePeriodId ? { finance_period: financePeriodId } : undefined,
+    financePeriodId
+      ? { finance_period: financePeriodId, ...(currency ? { currency } : {}) }
+      : undefined,
     { skip: !isIncomeTab || !financePeriodId }
   )
 
   // Step 5: Expense monthly report (only on expense tabs: office / project / charity)
-  const monthlyReportParams: { month: string; scope: 'OFFICE' | 'PROJECT' | 'CHARITY' } = scope
-    ? { month: selectedMonth, scope }
-    : { month: selectedMonth, scope: 'OFFICE' }
+  const monthlyReportParams: { month: string; scope: 'OFFICE' | 'PROJECT' | 'CHARITY'; currency?: ReportCurrency } = scope
+    ? { month: selectedMonth, scope, ...(currency ? { currency } : {}) }
+    : { month: selectedMonth, scope: 'OFFICE', ...(currency ? { currency } : {}) }
   const {
     data: monthlyReportData,
     isLoading: loadingMonthlyReport,
@@ -118,7 +122,7 @@ export function useReportsData({
     isLoading: loadingExpenseFacts,
     error: expenseFactsError,
   } = useListActualExpensesQuery(
-    scope ? { month: selectedMonth, scope } : undefined,
+    scope ? { month: selectedMonth, scope, ...(currency ? { currency } : {}) } : undefined,
     { skip: !isExpenseTab || !scope || skipExpenseFacts }
   )
 

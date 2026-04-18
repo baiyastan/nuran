@@ -12,6 +12,12 @@ ACCOUNT_CHOICES = [
     ('BANK', 'Bank'),   # Банк
 ]
 
+# Supported currencies.
+CURRENCY_CHOICES = [
+    ('KGS', 'KGS'),  # Сом
+    ('USD', 'USD'),  # Доллар
+]
+
 
 class AccountLedgerLock(models.Model):
     """
@@ -209,6 +215,12 @@ class IncomeEntry(models.Model):
         choices=ACCOUNT_CHOICES,
         help_text='Destination account: Cash (кассага келди) or Bank (банкка келди)'
     )
+    currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        default='KGS',
+        help_text='Currency of the income amount (KGS or USD)',
+    )
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -238,8 +250,10 @@ class IncomeEntry(models.Model):
             models.Index(fields=['source']),
             models.Index(fields=['account']),
             models.Index(fields=['account', 'received_at']),
+            models.Index(fields=['currency']),
+            models.Index(fields=['account', 'currency', 'received_at']),
         ]
-    
+
     def clean(self):
         """Validate income entry."""
         # Comment is required and cannot be empty
@@ -253,6 +267,10 @@ class IncomeEntry(models.Model):
         # Destination account is required (касса or банк)
         if self.account not in dict(ACCOUNT_CHOICES):
             raise ValidationError("Account must be CASH or BANK.")
+
+        # Currency must be valid
+        if self.currency not in dict(CURRENCY_CHOICES):
+            raise ValidationError("Currency must be KGS or USD.")
     
     def save(self, *args, **kwargs):
         """Override save to call clean()."""
@@ -279,6 +297,12 @@ class Transfer(models.Model):
         choices=ACCOUNT_CHOICES,
         help_text='Destination account: Cash or Bank (where money arrives)',
     )
+    currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        default='KGS',
+        help_text='Currency of the transfer (KGS or USD)',
+    )
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -303,6 +327,7 @@ class Transfer(models.Model):
             models.Index(fields=['source_account', 'destination_account']),
             models.Index(fields=['source_account', 'transferred_at']),
             models.Index(fields=['destination_account', 'transferred_at']),
+            models.Index(fields=['currency']),
         ]
 
     def clean(self):
@@ -312,6 +337,8 @@ class Transfer(models.Model):
             raise ValidationError("Source and destination accounts must be different.")
         if self.source_account not in dict(ACCOUNT_CHOICES) or self.destination_account not in dict(ACCOUNT_CHOICES):
             raise ValidationError("Both accounts must be CASH or BANK.")
+        if self.currency not in dict(CURRENCY_CHOICES):
+            raise ValidationError("Currency must be KGS or USD.")
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -320,3 +347,81 @@ class Transfer(models.Model):
     def __str__(self):
         return f"{self.source_account} → {self.destination_account} {self.amount} on {self.transferred_at}"
 
+
+class CurrencyExchange(models.Model):
+    """
+    Cross-currency exchange — admin physically takes one currency from an account
+    and deposits the other currency into an account. Not income, not expense —
+    only shifts money between (account, currency) buckets.
+    """
+    source_account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Account the source currency leaves',
+    )
+    source_currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        help_text='Currency leaving the source account',
+    )
+    source_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='Amount removed from the source account in source currency',
+    )
+    destination_account = models.CharField(
+        max_length=10,
+        choices=ACCOUNT_CHOICES,
+        help_text='Account the destination currency arrives in',
+    )
+    destination_currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        help_text='Currency arriving in the destination account',
+    )
+    destination_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='Amount credited to the destination account in destination currency',
+    )
+    exchanged_at = models.DateField(help_text='Date of exchange')
+    comment = models.TextField(blank=True, help_text='Optional comment')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_currency_exchanges',
+        help_text='User who created this exchange',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-exchanged_at', '-created_at']
+        indexes = [
+            models.Index(fields=['exchanged_at']),
+            models.Index(fields=['source_account', 'source_currency', 'exchanged_at']),
+            models.Index(fields=['destination_account', 'destination_currency', 'exchanged_at']),
+        ]
+
+    def clean(self):
+        if self.source_amount is None or self.source_amount <= 0:
+            raise ValidationError("Source amount must be greater than zero.")
+        if self.destination_amount is None or self.destination_amount <= 0:
+            raise ValidationError("Destination amount must be greater than zero.")
+        if self.source_currency == self.destination_currency:
+            raise ValidationError("Source and destination currencies must differ.")
+        if self.source_account not in dict(ACCOUNT_CHOICES) or self.destination_account not in dict(ACCOUNT_CHOICES):
+            raise ValidationError("Both accounts must be CASH or BANK.")
+        if self.source_currency not in dict(CURRENCY_CHOICES) or self.destination_currency not in dict(CURRENCY_CHOICES):
+            raise ValidationError("Currencies must be KGS or USD.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f"{self.source_amount} {self.source_currency} "
+            f"→ {self.destination_amount} {self.destination_currency} on {self.exchanged_at}"
+        )

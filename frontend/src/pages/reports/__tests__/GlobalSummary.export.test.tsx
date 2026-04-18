@@ -9,6 +9,7 @@ import {
   useExportExpenseCategoryDetailPdfMutation,
   useExportIncomeSourceDetailPdfMutation,
   useExportSectionPdfMutation,
+  useGetCurrencyExchangeDetailsQuery,
   useGetDashboardExpenseCategoriesQuery,
   useGetDashboardIncomeSourcesQuery,
   useGetDashboardKpiQuery,
@@ -31,6 +32,7 @@ vi.mock('@/shared/api/reportsApi', async () => {
     useGetDashboardIncomeSourcesQuery: vi.fn(),
     useExportSectionPdfMutation: vi.fn(),
     useGetTransferDetailsQuery: vi.fn(),
+    useGetCurrencyExchangeDetailsQuery: vi.fn(),
     useExportCashMovementPdfMutation: vi.fn(),
   }
 })
@@ -134,6 +136,12 @@ describe('GlobalSummary section PDF export', () => {
       error: null,
     } as never)
 
+    vi.mocked(useGetCurrencyExchangeDetailsQuery).mockReturnValue({
+      data: { month: '2026-03', results: [] },
+      isLoading: false,
+      error: null,
+    } as never)
+
     vi.mocked(useListIncomeEntriesQuery).mockReturnValue({
       data: {
         count: 1,
@@ -206,7 +214,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('shows the export action only for the opened section', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     expect(screen.queryByRole('button', { name: /Скачать PDF/i })).not.toBeInTheDocument()
 
@@ -246,7 +254,7 @@ describe('GlobalSummary section PDF export', () => {
       error: null,
     } as never)
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     const balanceToggle = screen.getByRole('button', {
       name: /Показать детализацию остатков по счетам/i,
@@ -276,7 +284,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => exportPromise,
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
@@ -286,6 +294,7 @@ describe('GlobalSummary section PDF export', () => {
     expect(exportTrigger).toHaveBeenCalledWith({
       month: '2026-03',
       sectionType: 'income_sources',
+      currency: 'KGS',
     })
     const loadingButton = screen.getByRole('button', {
       name: /Итоги по источникам доходов Скачать PDF/i,
@@ -330,7 +339,7 @@ describe('GlobalSummary section PDF export', () => {
       error: null,
     } as never)
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     expect(
       screen.getByText(/Внутренние переводы между кассой и банком/i)
@@ -394,7 +403,7 @@ describe('GlobalSummary section PDF export', () => {
       error: null,
     } as never)
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     const transfersSection = screen.getByText(/Переводы между счетами/i).closest('.global-summary-transfers')
     expect(transfersSection).toBeTruthy()
@@ -451,7 +460,7 @@ describe('GlobalSummary section PDF export', () => {
       error: null,
     } as never)
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     // Label renamed to "Остаток на счетах" and value is sum of cash + bank closing
     expect(screen.getByText(/Остаток на счетах:/i)).toBeInTheDocument()
@@ -463,7 +472,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
@@ -474,6 +483,7 @@ describe('GlobalSummary section PDF export', () => {
       expect(exportTrigger).toHaveBeenCalledWith({
         month: '2026-03',
         sectionType: 'expense_categories',
+        currency: 'KGS',
       })
     })
   })
@@ -483,7 +493,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
@@ -506,6 +516,7 @@ describe('GlobalSummary section PDF export', () => {
       expect(exportTrigger).toHaveBeenCalledWith({
         month: '2026-03',
         sectionType: 'income_sources',
+        currency: 'KGS',
         account: 'CASH',
         start_date: '2026-03-01',
         end_date: '2026-03-15',
@@ -518,7 +529,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
@@ -529,6 +540,7 @@ describe('GlobalSummary section PDF export', () => {
     await waitFor(() => {
       expect(exportIncomeDetailTrigger).toHaveBeenCalledWith({
         month: '2026-03',
+        currency: 'KGS',
         sourceId: 1,
       })
     })
@@ -539,7 +551,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию доходов по источникам/i })
@@ -572,6 +584,7 @@ describe('GlobalSummary section PDF export', () => {
     await waitFor(() => {
       expect(exportIncomeDetailTrigger).toHaveBeenCalledWith({
         month: '2026-03',
+        currency: 'KGS',
         sourceId: 1,
         account: 'CASH',
         start_date: '2026-03-10',
@@ -585,7 +598,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
@@ -596,6 +609,7 @@ describe('GlobalSummary section PDF export', () => {
     await waitFor(() => {
       expect(exportExpenseDetailTrigger).toHaveBeenCalledWith({
         month: '2026-03',
+        currency: 'KGS',
         categoryId: 10,
       })
     })
@@ -606,7 +620,7 @@ describe('GlobalSummary section PDF export', () => {
       unwrap: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
     })
 
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
@@ -631,6 +645,7 @@ describe('GlobalSummary section PDF export', () => {
     await waitFor(() => {
       expect(exportExpenseDetailTrigger).toHaveBeenCalledWith({
         month: '2026-03',
+        currency: 'KGS',
         categoryId: 10,
         account: 'BANK',
         start_date: '2026-03-01',
@@ -640,7 +655,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('shows date range inputs only in expanded income/expense panels', () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     // Account statement block is always visible and includes a date range.
     expect(screen.getByLabelText(/Дата с/i)).toBeInTheDocument()
@@ -656,7 +671,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('applies and resets date range in detail queries', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
 
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
@@ -670,25 +685,33 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(within(expenseBreakdown as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     await waitFor(() => {
-      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith({
-        month: '2026-03',
-        start_date: '2026-03-10',
-        end_date: '2026-03-20',
-      })
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith(
+        {
+          month: '2026-03',
+          currency: 'KGS',
+          start_date: '2026-03-10',
+          end_date: '2026-03-20',
+        },
+        { skip: false },
+      )
       expect(screen.getByText(/Период: 2026-03-10/i)).toBeInTheDocument()
       expect(screen.getByText(/План и разница рассчитаны относительно месячного плана/i)).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Сбросить/i }))
     await waitFor(() => {
-      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith({
-        month: '2026-03',
-      })
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenLastCalledWith(
+        {
+          month: '2026-03',
+          currency: 'KGS',
+        },
+        { skip: false },
+      )
     })
   })
 
   it('shows invalid range message and disables apply button', () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
@@ -703,7 +726,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('detail filter defaults from parent filter values', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
@@ -725,7 +748,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('detail apply overrides only detail rows query', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
@@ -745,11 +768,15 @@ describe('GlobalSummary section PDF export', () => {
     fireEvent.click(within(expenseDetails as HTMLElement).getByRole('button', { name: /Применить/i }))
 
     await waitFor(() => {
-      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenCalledWith({
-        month: '2026-03',
-        start_date: '2026-03-01',
-        end_date: '2026-03-30',
-      })
+      expect(useGetDashboardExpenseCategoriesQuery).toHaveBeenCalledWith(
+        {
+          month: '2026-03',
+          currency: 'KGS',
+          start_date: '2026-03-01',
+          end_date: '2026-03-30',
+        },
+        { skip: false },
+      )
       expect(useListActualExpensesQuery).toHaveBeenCalledWith(
         expect.objectContaining({
           category: 10,
@@ -763,7 +790,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('passes local detail account filter to expense detail query args', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )
@@ -787,7 +814,7 @@ describe('GlobalSummary section PDF export', () => {
   })
 
   it('detail range outside parent range shows validation error', async () => {
-    renderWithProviders(<GlobalSummary month="2026-03" />)
+    renderWithProviders(<GlobalSummary month="2026-03" currency="KGS" />)
     fireEvent.click(
       screen.getByRole('button', { name: /Показать детализацию расходов по категориям/i })
     )

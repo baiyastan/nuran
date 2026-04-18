@@ -2,6 +2,7 @@ export interface Transfer {
   id: number
   source_account: 'CASH' | 'BANK'
   destination_account: 'CASH' | 'BANK'
+  currency: 'KGS' | 'USD'
   amount: string
   transferred_at: string
   comment: string

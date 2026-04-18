@@ -25,8 +25,32 @@
   vertical-align: top;
 }
 
+.table--zebra tbody tr:nth-child(even) > td {
+  background-color: #fafbfc;
+}
+
 .table tbody tr:hover {
   background-color: #f8f9fa;
+}
+
+.table--zebra tbody tr:hover > td,
+.table--zebra tbody tr:nth-child(even):hover > td {
+  background-color: #f1f5f9;
+}
+
+.table th.table-cell--right,
+.table td.table-cell--right {
+  text-align: right;
+}
+
+.table th.table-cell--center,
+.table td.table-cell--center {
+  text-align: center;
+}
+
+.table td.table-cell--numeric,
+.table th.table-cell--numeric {
+  font-variant-numeric: tabular-nums;
 }
 
 .table-empty {

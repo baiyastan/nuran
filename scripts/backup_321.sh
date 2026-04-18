@@ -17,8 +17,6 @@ ENCRYPTED_FILE="${RAW_DUMP_FILE}.gpg"
 CHECKSUM_FILE="${ENCRYPTED_FILE}.sha256"
 ERROR_LOG="${BACKUP_DIR}/${BACKUP_ID}.stderr.log"
 
-S3_BUCKET="30dd63ad-b8ad-48a9-9fb7-c545973fac8d"
-S3_ENDPOINT="https://s3.twcstorage.ru"
 S3_ROOT_PREFIX="nuran/db"
 
 # 1 MiB default lower bound to detect obviously broken dumps.
@@ -51,6 +49,11 @@ if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
   exit 1
 fi
 
+if [ -z "${S3_BUCKET:-}" ] || [ -z "${S3_ENDPOINT:-}" ]; then
+  echo "Error: S3_BUCKET and S3_ENDPOINT must be set in .env." >&2
+  exit 1
+fi
+
 send_telegram() {
   local message="$1"
 
@@ -60,8 +63,8 @@ send_telegram() {
   fi
 
   curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "text=${message}" >/dev/null || true
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${message}" >/dev/null || true
 }
 
 run_aws() {
@@ -165,16 +168,15 @@ SHA256_HEX="$(cut -d' ' -f1 "${CHECKSUM_FILE}")"
 FILE_SIZE_BYTES="$(stat -c%s "${ENCRYPTED_FILE}")"
 FILE_SIZE_MB="$(awk -v size="${FILE_SIZE_BYTES}" 'BEGIN { printf "%.2f", size/1024/1024 }')"
 
-# Temporary debug signal for env-specific AWS CLI parsing errors.
-run_aws --version
-
 echo "Uploading encrypted backup to s3://${S3_BUCKET}/${S3_KEY_BACKUP}"
 run_aws s3 cp "${ENCRYPTED_FILE}" "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" \
-  --endpoint-url "${S3_ENDPOINT}"
+  --endpoint-url "${S3_ENDPOINT}" \
+  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},gfs_tier=${GFS_TIER}"
 
 echo "Uploading checksum to s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}"
 run_aws s3 cp "${CHECKSUM_FILE}" "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" \
-  --endpoint-url "${S3_ENDPOINT}"
+  --endpoint-url "${S3_ENDPOINT}" \
+  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},related_object=${S3_KEY_BACKUP}"
 
 # Verification step for remote object presence after upload.
 run_aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" --endpoint-url "${S3_ENDPOINT}" >/dev/null

@@ -33,9 +33,15 @@ export function TransferModal({
     { value: 'BANK', label: t('transfers:bank') },
   ]
 
+  const currencyOptions: { value: 'KGS' | 'USD'; label: string }[] = [
+    { value: 'KGS', label: t('transfers:currencyKgs') },
+    { value: 'USD', label: t('transfers:currencyUsd') },
+  ]
+
   const [formData, setFormData] = useState({
     source_account: 'CASH' as 'CASH' | 'BANK',
     destination_account: 'BANK' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
     amount: '',
     transferred_at: '',
     comment: '',
@@ -54,6 +60,7 @@ export function TransferModal({
       setFormData({
         source_account: transfer.source_account,
         destination_account: transfer.destination_account,
+        currency: transfer.currency ?? 'KGS',
         amount: transfer.amount,
         transferred_at: dateStr,
         comment: transfer.comment || '',
@@ -62,6 +69,7 @@ export function TransferModal({
       setFormData({
         source_account: 'CASH',
         destination_account: 'BANK',
+        currency: 'KGS',
         amount: '',
         transferred_at: '',
         comment: '',
@@ -95,6 +103,7 @@ export function TransferModal({
           data: {
             source_account: formData.source_account,
             destination_account: formData.destination_account,
+            currency: formData.currency,
             amount: amountNum,
             transferred_at: formData.transferred_at,
             comment: formData.comment.trim() || undefined,
@@ -104,6 +113,7 @@ export function TransferModal({
         await createTransfer({
           source_account: formData.source_account,
           destination_account: formData.destination_account,
+          currency: formData.currency,
           amount: amountNum,
           transferred_at: formData.transferred_at,
           comment: formData.comment.trim() || undefined,
@@ -119,6 +129,7 @@ export function TransferModal({
     setFormData({
       source_account: 'CASH',
       destination_account: 'BANK',
+      currency: 'KGS',
       amount: '',
       transferred_at: '',
       comment: '',
@@ -158,6 +169,14 @@ export function TransferModal({
           value={formData.destination_account}
           onChange={(e) =>
             setFormData({ ...formData, destination_account: e.target.value as 'CASH' | 'BANK' })
+          }
+        />
+        <Select
+          label={t('transfers:currency')}
+          options={currencyOptions}
+          value={formData.currency}
+          onChange={(e) =>
+            setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })
           }
         />
         <Input

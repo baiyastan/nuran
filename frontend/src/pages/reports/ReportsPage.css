@@ -17,16 +17,65 @@
 
 .reports-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
+  flex-direction: column;
+  gap: 1rem;
   margin-bottom: 2rem;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   background: #f8f9fa;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .reports-filters > * {
   min-width: 0;
+}
+
+.reports-filters__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reports-currency-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+.reports-currency-toggle__label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.reports-currency-toggle__button {
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.reports-currency-toggle__button:hover {
+  background: #f3f4f6;
+}
+
+.reports-currency-toggle__button--active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.reports-currency-toggle__button--active:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .scope-selector {
@@ -106,6 +155,23 @@
     gap: 0.75rem;
     padding: 0.75rem;
     margin-bottom: 1.25rem;
+  }
+
+  .reports-filters__controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .reports-currency-toggle {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .reports-currency-toggle__button {
+    flex: 1 1 auto;
+    min-height: 40px;
+    font-size: 0.9rem;
   }
 
   .reports-page {

@@ -27,6 +27,11 @@ vi.mock('@/shared/api/reportsApi', () => ({
   useGetDashboardIncomeSourcesQuery: vi.fn(),
   useGetDashboardExpenseCategoriesQuery: vi.fn(),
   useGetTransferDetailsQuery: vi.fn(),
+  useGetCurrencyExchangeDetailsQuery: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    error: undefined,
+  })),
   useExportCashMovementPdfMutation: () => [vi.fn(), {}],
   // Export mutations as no-op tuples to satisfy GlobalSummary
   useExportSectionPdfMutation: () => [vi.fn(), {}],
@@ -93,6 +98,10 @@ describe('ReportsPage – dashboard KPIs', () => {
         month: '2026-02',
         income_fact: '1000.00',
         expense_fact: '400.00',
+        income_fact_kgs: '1000.00',
+        expense_fact_kgs: '400.00',
+        income_fact_usd: '0.00',
+        expense_fact_usd: '0.00',
         planning_actual_expense_total: '0.00',
         net: '600.00',
         income_plan: '0.00',

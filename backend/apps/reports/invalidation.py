@@ -30,19 +30,24 @@ def invalidate_all_dashboard_kpi_caches() -> None:
         cache.delete(dashboard_kpi_cache_key(month, mp_id))
 
 
+_MONTHLY_CACHE_CURRENCY_VARIANTS = (None, 'KGS', 'USD')
+
+
 def invalidate_monthly_report_for_scope(month_period, scope: str | None) -> None:
-    """Drop cached monthly report for one (month_period, scope)."""
+    """Drop cached monthly report for one (month_period, scope) across every currency variant."""
     if not month_period or not scope:
         return
-    cache.delete(monthly_report_cache_key(month_period.month, scope, month_period.pk))
+    for currency in _MONTHLY_CACHE_CURRENCY_VARIANTS:
+        cache.delete(monthly_report_cache_key(month_period.month, scope, month_period.pk, currency))
 
 
 def invalidate_monthly_report_all_scopes(month_period) -> None:
-    """Drop cached monthly reports for OFFICE, PROJECT, CHARITY for this period."""
+    """Drop cached monthly reports for OFFICE, PROJECT, CHARITY for this period (all currency variants)."""
     if not month_period:
         return
     for scope in ('OFFICE', 'PROJECT', 'CHARITY'):
-        cache.delete(monthly_report_cache_key(month_period.month, scope, month_period.pk))
+        for currency in _MONTHLY_CACHE_CURRENCY_VARIANTS:
+            cache.delete(monthly_report_cache_key(month_period.month, scope, month_period.pk, currency))
 
 
 def invalidate_for_budget_plan(plan) -> None:

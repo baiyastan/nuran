@@ -11,6 +11,22 @@ export function formatMoneyKGS(amount: number | string): string {
   return formatKGS(amount)
 }
 
+/** Format amount with a KGS/USD currency suffix. */
+export function formatMoneyWithCurrency(
+  amount: number | string | null | undefined,
+  currency: 'KGS' | 'USD' | null | undefined,
+): string {
+  if (amount === null || amount === undefined) return '—'
+  const numValue = typeof amount === 'string' ? parseFloat(amount) : amount
+  if (Number.isNaN(numValue)) return '—'
+  const formatted = new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(numValue)
+  const suffix = currency === 'USD' ? ' $' : ' сом'
+  return formatted + suffix
+}
+
 /**
  * Display-only amount formatter for editable/readable numeric fields.
  * - empty input => empty string

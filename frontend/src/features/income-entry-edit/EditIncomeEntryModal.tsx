@@ -24,6 +24,8 @@ export function EditIncomeEntryModal({
     amount: '',
     received_at: '',
     comment: '',
+    account: 'CASH' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
@@ -36,6 +38,8 @@ export function EditIncomeEntryModal({
         amount: incomeEntry.amount,
         received_at: incomeEntry.received_at.split('T')[0],
         comment: incomeEntry.comment || '',
+        account: incomeEntry.account ?? 'CASH',
+        currency: incomeEntry.currency ?? 'KGS',
       })
       setErrors({})
       setApiError('')
@@ -44,6 +48,8 @@ export function EditIncomeEntryModal({
         amount: '',
         received_at: '',
         comment: '',
+        account: 'CASH',
+        currency: 'KGS',
       })
       setErrors({})
       setApiError('')
@@ -92,10 +98,14 @@ export function EditIncomeEntryModal({
         amount: number
         received_at: string
         comment: string
+        account: 'CASH' | 'BANK'
+        currency: 'KGS' | 'USD'
       } = {
         amount: parseFloat(formData.amount),
         received_at: formData.received_at,
         comment: formData.comment.trim(),
+        account: formData.account,
+        currency: formData.currency,
       }
 
       await updateIncomeEntry({ id: incomeEntry.id, data: payload }).unwrap()
@@ -130,6 +140,40 @@ export function EditIncomeEntryModal({
           autoFocus
           disabled={isLoading}
         />
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('incomeEntries.form.account')}
+          </label>
+          <select
+            className="input"
+            value={formData.account}
+            onChange={(e) =>
+              setFormData({ ...formData, account: e.target.value as 'CASH' | 'BANK' })
+            }
+            disabled={isLoading}
+          >
+            <option value="CASH">{t('incomeEntries.form.accountCash')}</option>
+            <option value="BANK">{t('incomeEntries.form.accountBank')}</option>
+          </select>
+        </div>
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('incomeEntries.form.currency')}
+          </label>
+          <select
+            className="input"
+            value={formData.currency}
+            onChange={(e) =>
+              setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })
+            }
+            disabled={isLoading}
+          >
+            <option value="KGS">{t('incomeEntries.form.currencyKgs')}</option>
+            <option value="USD">{t('incomeEntries.form.currencyUsd')}</option>
+          </select>
+        </div>
 
         <Input
           label={t('incomeEntries.form.receivedAt')}

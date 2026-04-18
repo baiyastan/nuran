@@ -36,13 +36,13 @@ DETAIL_CONFIG = {
     "income_source": {
         "report_title": "Детализация по источнику дохода",
         "item_label": "Источник",
-        "columns": ["Дата", "Контрагент", "Счёт", "Сумма", "Комментарий"],
+        "columns": ["Дата", "Контрагент", "Счёт", "Валюта", "Сумма", "Комментарий"],
         "empty_label": "Нет данных",
     },
     "expense_category": {
         "report_title": "Детализация по категории расходов",
         "item_label": "Категория",
-        "columns": ["Дата", "Категория", "Счёт", "Сумма", "Комментарий"],
+        "columns": ["Дата", "Категория", "Счёт", "Валюта", "Сумма", "Комментарий"],
         "empty_label": "Нет данных",
     },
 }
@@ -154,12 +154,22 @@ def build_report_section_pdf(section_type: str, section_data: dict) -> bytes:
                 body_style,
             )
         )
-    story.extend(
-        [
+    if section_data.get("currency_filter_label"):
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Валюта:</font> {section_data["currency_filter_label"]}',
+                body_style,
+            )
+        )
+    if not section_data.get("hide_plan_cols"):
+        story.append(
             Paragraph(
                 f'<font name="{FONT_BOLD}">План:</font> {format_pdf_amount(section_data["totals"]["plan"])}',
                 body_style,
-            ),
+            )
+        )
+    story.extend(
+        [
             Paragraph(
                 f'<font name="{FONT_BOLD}">Факт:</font> {format_pdf_amount(section_data["totals"]["fact"])}',
                 body_style,
@@ -168,23 +178,38 @@ def build_report_section_pdf(section_type: str, section_data: dict) -> bytes:
         ]
     )
 
-    table_data = [[config["name_label"], "План", "Факт", "Разница", "Кол-во", "%"]]
-    for row in rows:
-        table_data.append(
-            [
-                _display_name(row.get("source_name") or row.get("category_name")),
-                format_pdf_amount(row["plan"]),
-                format_pdf_amount(row["fact"]),
-                format_pdf_amount(row["diff"]),
-                str(row["count"]),
-                f"{row['sharePercent']:.1f}%" if row["sharePercent"] is not None else "—",
-            ]
-        )
+    hide_plan_cols = bool(section_data.get("hide_plan_cols"))
+
+    if hide_plan_cols:
+        table_data = [[config["name_label"], "Факт", "Кол-во"]]
+        for row in rows:
+            table_data.append(
+                [
+                    _display_name(row.get("source_name") or row.get("category_name")),
+                    format_pdf_amount(row["fact"]),
+                    str(row["count"]),
+                ]
+            )
+        col_widths = [110 * mm, 40 * mm, 28 * mm]
+    else:
+        table_data = [[config["name_label"], "План", "Факт", "Разница", "Кол-во", "%"]]
+        for row in rows:
+            table_data.append(
+                [
+                    _display_name(row.get("source_name") or row.get("category_name")),
+                    format_pdf_amount(row["plan"]),
+                    format_pdf_amount(row["fact"]),
+                    format_pdf_amount(row["diff"]),
+                    str(row["count"]),
+                    f"{row['sharePercent']:.1f}%" if row["sharePercent"] is not None else "—",
+                ]
+            )
+        col_widths = [58 * mm, 24 * mm, 24 * mm, 24 * mm, 18 * mm, 22 * mm]
 
     table = Table(
         table_data,
         repeatRows=1,
-        colWidths=[58 * mm, 24 * mm, 24 * mm, 24 * mm, 18 * mm, 22 * mm],
+        colWidths=col_widths,
     )
     table.setStyle(
         TableStyle(
@@ -249,6 +274,13 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
                 body_style,
             )
         )
+    if detail_data.get("currency_filter_label"):
+        story.append(
+            Paragraph(
+                f'<font name="{FONT_BOLD}">Валюта:</font> {detail_data["currency_filter_label"]}',
+                body_style,
+            )
+        )
     story.extend(
         [
             Paragraph(
@@ -277,25 +309,29 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
         else:
             account_label = "—"
 
+        currency_raw = row.get("currency")
+        currency_label = currency_raw if currency_raw in ("KGS", "USD") else "—"
+
         table_data.append(
             [
                 row["date"],
                 _display_name(row["name"]),
                 account_label,
+                currency_label,
                 format_pdf_amount(row["amount"]),
                 row["comment"] or "—",
             ]
         )
 
     if len(table_data) == 1:
-        table_data.append([config["empty_label"], "—", "—", "—"])
+        table_data.append([config["empty_label"], "—", "—", "—", "—", "—"])
 
     table = Table(
         table_data,
         repeatRows=1,
-        # 5 columns: Дата, Контрагент/Категория, Счёт, Сумма, Комментарий
+        # 6 columns: Дата, Контрагент/Категория, Счёт, Валюта, Сумма, Комментарий
         # Total width ~= 178 mm (210 - 2*16 margins)
-        colWidths=[22 * mm, 42 * mm, 22 * mm, 32 * mm, 60 * mm],
+        colWidths=[22 * mm, 40 * mm, 20 * mm, 16 * mm, 28 * mm, 52 * mm],
     )
     table.setStyle(
         TableStyle(
@@ -304,7 +340,7 @@ def build_report_detail_pdf(detail_type: str, detail_data: dict) -> bytes:
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
                 ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
                 ("FONTNAME", (0, 1), (-1, -1), FONT_REGULAR),
-                # Slightly smaller font to keep 5-column table readable
+                # Slightly smaller font to keep 6-column table readable
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
                 ("ALIGN", (0, 0), (0, -1), "LEFT"),
@@ -328,6 +364,7 @@ def build_transfer_direction_pdf(
     direction_label: str,
     total_amount: Decimal,
     detail_rows: list[dict],
+    currency_label: str | None = None,
 ) -> bytes:
     """
     Build a standalone PDF for transfers in a single direction for a given month.
@@ -344,8 +381,12 @@ def build_transfer_direction_pdf(
         Paragraph(f"Переводы между счетами: {direction_label}", heading_style),
         Spacer(1, 6),
         Paragraph(f"Месяц: {month}", body_style),
-        Spacer(1, 10),
     ]
+    if currency_label:
+        story.append(
+            Paragraph(f'<font name="{FONT_BOLD}">Валюта:</font> {currency_label}', body_style)
+        )
+    story.append(Spacer(1, 10))
 
     # Detail section (no summary table for direction-specific export)
     story.append(Paragraph("Детализация переводов", heading_style))
@@ -358,10 +399,11 @@ def build_transfer_direction_pdf(
             )
         )
     else:
-        detail_table_data = [["Дата", "Откуда", "Куда", "Сумма", "Комментарий"]]
+        detail_table_data = [["Дата", "Откуда", "Куда", "Валюта", "Сумма", "Комментарий"]]
         for row in detail_rows:
             source_raw = row.get("source_account")
             dest_raw = row.get("destination_account")
+            currency_raw = row.get("currency")
 
             if source_raw == "CASH":
                 source_label = "Касса"
@@ -377,11 +419,14 @@ def build_transfer_direction_pdf(
             else:
                 dest_label = "—"
 
+            row_currency_label = currency_raw if currency_raw in ("KGS", "USD") else "—"
+
             detail_table_data.append(
                 [
                     row.get("transferred_at") or "",
                     source_label,
                     dest_label,
+                    row_currency_label,
                     format_pdf_amount(row.get("amount") or "0"),
                     Paragraph(str(row.get("comment") or ""), body_style),
                 ]
@@ -390,7 +435,7 @@ def build_transfer_direction_pdf(
         detail_table = Table(
             detail_table_data,
             repeatRows=1,
-            colWidths=[22 * mm, 32 * mm, 32 * mm, 24 * mm, 70 * mm],
+            colWidths=[22 * mm, 28 * mm, 28 * mm, 16 * mm, 24 * mm, 60 * mm],
         )
         detail_table.setStyle(
             TableStyle(
@@ -400,10 +445,10 @@ def build_transfer_direction_pdf(
                     ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
                     ("FONTNAME", (0, 1), (-1, -1), FONT_REGULAR),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+                    ("ALIGN", (4, 0), (4, -1), "RIGHT"),
                     ("ALIGN", (0, 0), (0, -1), "LEFT"),
-                    ("ALIGN", (1, 0), (2, -1), "LEFT"),
-                    ("ALIGN", (4, 0), (4, -1), "LEFT"),
+                    ("ALIGN", (1, 0), (3, -1), "LEFT"),
+                    ("ALIGN", (5, 0), (5, -1), "LEFT"),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
                     ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
@@ -468,6 +513,9 @@ def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
     if isinstance(custom_labels, dict):
         labels.update({k: v for k, v in custom_labels.items() if isinstance(v, str) and v.strip()})
 
+    currency_raw = filters.get("currency") or data.get("currency") or "KGS"
+    currency_label = currency_raw if currency_raw in ("KGS", "USD") else "KGS"
+
     story = [
         Paragraph("Отчёты", title_style),
         Spacer(1, 6),
@@ -475,6 +523,7 @@ def build_cash_movement_pdf(data: dict, filters: dict) -> bytes:
         Spacer(1, 8),
         Paragraph(f'<font name="{FONT_BOLD}">Период:</font> {period_label}', body_style),
         Paragraph(f'<font name="{FONT_BOLD}">Счёт:</font> {account_label}', body_style),
+        Paragraph(f'<font name="{FONT_BOLD}">Валюта:</font> {currency_label}', body_style),
         Spacer(1, 10),
         Paragraph(f'<font name="{FONT_BOLD}">{labels["opening_balance"]}:</font> {opening}', body_style),
         Paragraph(f'<font name="{FONT_BOLD}">{labels["period_income"]}:</font> {income}', body_style),

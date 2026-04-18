@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
-from apps.finance.models import ACCOUNT_CHOICES
+from apps.finance.models import ACCOUNT_CHOICES, CURRENCY_CHOICES
 
 
 class ActualExpense(models.Model):
@@ -44,11 +44,17 @@ class ActualExpense(models.Model):
         choices=ACCOUNT_CHOICES,
         help_text='Source account: Cash (кассадан кетти) or Bank (банктан кетти)',
     )
+    currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        default='KGS',
+        help_text='Currency of the expense amount (KGS or USD)',
+    )
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
-        help_text='Amount spent in KGS',
+        help_text='Amount spent',
     )
     spent_at = models.DateField(help_text='Date when money was spent')
     comment = models.TextField(help_text='Required comment for every expense')
@@ -70,6 +76,8 @@ class ActualExpense(models.Model):
             models.Index(fields=['spent_at']),
             models.Index(fields=['account']),
             models.Index(fields=['account', 'spent_at']),
+            models.Index(fields=['currency']),
+            models.Index(fields=['account', 'currency', 'spent_at']),
         ]
 
     def clean(self):
@@ -85,6 +93,8 @@ class ActualExpense(models.Model):
             validate_expense_category(self.category, plan_scope=None)
         if self.account and self.account not in dict(ACCOUNT_CHOICES):
             raise ValidationError("Account must be CASH or BANK.")
+        if self.currency and self.currency not in dict(CURRENCY_CHOICES):
+            raise ValidationError("Currency must be KGS or USD.")
 
     def save(self, *args, **kwargs):
         self.full_clean()

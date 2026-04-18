@@ -45,6 +45,7 @@ export function EditActualExpenseModal({
   const [formData, setFormData] = useState({
     categoryId: null as number | null,
     account: 'CASH' as 'CASH' | 'BANK',
+    currency: 'KGS' as 'KGS' | 'USD',
     amount: '',
     spent_at: '',
     comment: '',
@@ -75,6 +76,7 @@ export function EditActualExpenseModal({
       setFormData({
         categoryId: currentCategoryId,
         account: expense.account ?? 'CASH',
+        currency: expense.currency ?? 'KGS',
         amount: expense.amount ?? '',
         spent_at: expense.spent_at ? expense.spent_at.split('T')[0] : '',
         comment: expense.comment ?? '',
@@ -85,6 +87,7 @@ export function EditActualExpenseModal({
       setFormData({
         categoryId: null,
         account: 'CASH',
+        currency: 'KGS',
         amount: '',
         spent_at: '',
         comment: '',
@@ -144,6 +147,7 @@ export function EditActualExpenseModal({
           comment: formData.comment.trim(),
           category: formData.categoryId ?? undefined,
           account: formData.account,
+          currency: formData.currency,
         },
       }).unwrap()
       onSuccess?.()
@@ -178,6 +182,21 @@ export function EditActualExpenseModal({
           >
             <option value="CASH">{t('expenses.form.accountCash')}</option>
             <option value="BANK">{t('expenses.form.accountBank')}</option>
+          </select>
+        </div>
+
+        <div className="form-field">
+          <label className="input-label">
+            {t('expenses.form.currency')}
+          </label>
+          <select
+            className="input"
+            value={formData.currency}
+            onChange={(e) => setFormData({ ...formData, currency: e.target.value as 'KGS' | 'USD' })}
+            disabled={isLoading}
+          >
+            <option value="KGS">{t('expenses.form.currencyKgs')}</option>
+            <option value="USD">{t('expenses.form.currencyUsd')}</option>
           </select>
         </div>
 

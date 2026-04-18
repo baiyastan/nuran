@@ -36,6 +36,12 @@ from apps.reports.services import transfers as transfers_service
 from .serializers import BudgetPlanReportSerializer, ForemanProjectSummaryDataSerializer
 
 
+def _get_validated_currency(request):
+    """Return 'KGS' | 'USD' | None. Unknown or missing values → None (no currency filter)."""
+    raw = (request.query_params.get('currency') or '').strip().upper()
+    return raw if raw in ('KGS', 'USD') else None
+
+
 def _get_validated_optional_date_range(request):
     start_raw = request.query_params.get('start_date')
     end_raw = request.query_params.get('end_date')
@@ -78,10 +84,13 @@ class BudgetPlanReportView(views.APIView):
             total=Sum('amount_planned')
         )['total'] or Decimal('0.00')
 
+        currency = _get_validated_currency(request)
         actual_expenses_qs = ExpenseActualExpense.objects.filter(
             month_period=budget_plan.period,
             scope=budget_plan.scope,
         ).select_related('category', 'created_by').order_by('-spent_at', '-created_at')
+        if currency in ('KGS', 'USD'):
+            actual_expenses_qs = actual_expenses_qs.filter(currency=currency)
 
         actual_expenses_list = list(actual_expenses_qs)
         actual_by_cat = {}
@@ -206,14 +215,15 @@ class MonthlyReportView(views.APIView):
         except MonthPeriod.DoesNotExist:
             return Response({'month': MONTH_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
 
+        currency = _get_validated_currency(request)
         if reports_cache_enabled():
-            cache_key = monthly_report_cache_key(month, scope, month_period.pk)
+            cache_key = monthly_report_cache_key(month, scope, month_period.pk, currency)
             payload = get_cached_report(cache_key)
             if payload is not None:
                 return Response(payload, status=status.HTTP_200_OK)
-        payload = monthly_service.build_monthly_report_payload(month, scope, month_period)
+        payload = monthly_service.build_monthly_report_payload(month, scope, month_period, currency=currency)
         if reports_cache_enabled():
-            set_cached_report(monthly_report_cache_key(month, scope, month_period.pk), payload)
+            set_cached_report(monthly_report_cache_key(month, scope, month_period.pk, currency), payload)
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -243,10 +253,12 @@ class DashboardExpenseCategoriesView(views.APIView):
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
+        currency = _get_validated_currency(request)
         response_data = dashboard_service.build_dashboard_expense_categories_data(
             month,
             month_period,
             account=account,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -283,10 +295,12 @@ class DashboardIncomeSourcesView(views.APIView):
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
+        currency = _get_validated_currency(request)
         response_data = dashboard_service.build_dashboard_income_sources_data(
             month,
             month_period,
             account=account,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -328,11 +342,13 @@ class ExportSectionPdfView(views.APIView):
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
+        currency = _get_validated_currency(request)
         pdf_content, filename = pdf_exports.run_export_section_pdf(
             month,
             month_period,
             section_type,
             account,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -366,6 +382,7 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
+        currency = _get_validated_currency(request)
         source_id, is_uncategorized = parsed_target
         pdf_content, filename = pdf_exports.run_export_income_source_detail_pdf(
             month,
@@ -373,6 +390,7 @@ class ExportIncomeSourceDetailPdfView(views.APIView):
             source_id,
             is_uncategorized,
             account,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -406,6 +424,7 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
         month, month_period = validated
         account_param = (request.query_params.get('account') or '').strip().upper()
         account = account_param if account_param in ('CASH', 'BANK') else None
+        currency = _get_validated_currency(request)
         category_id, is_uncategorized = parsed_target
         pdf_content, filename = pdf_exports.run_export_expense_category_detail_pdf(
             month,
@@ -413,6 +432,7 @@ class ExportExpenseCategoryDetailPdfView(views.APIView):
             category_id,
             is_uncategorized,
             account,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -460,6 +480,34 @@ class DashboardKpiView(views.APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+class CurrencyExchangeDetailsView(views.APIView):
+    """
+    List cross-currency exchanges for a calendar month. Not P&L-affecting, but audit-visible.
+
+    GET /api/v1/reports/currency-exchange-details/?month=YYYY-MM
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ensure_owner_dashboard_access(request)
+        validated, error_response = get_validated_month_period(request.query_params.get('month'))
+        if error_response:
+            return error_response
+
+        month, _month_period = validated
+        payload = transfers_service.build_currency_exchange_details_payload(month)
+        if payload.get('_parse_error'):
+            return Response(
+                {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {'month': payload['month'], 'results': payload['results']},
+            status=status.HTTP_200_OK,
+        )
+
+
 class TransferDetailsView(views.APIView):
     """
     List internal transfers between CASH and BANK for a given month, grouped by direction.
@@ -478,7 +526,8 @@ class TransferDetailsView(views.APIView):
             return error_response
 
         month, _month_period = validated
-        payload = transfers_service.build_transfer_details_payload(month)
+        currency = _get_validated_currency(request)
+        payload = transfers_service.build_transfer_details_payload(month, currency=currency)
         if payload.get('_parse_error'):
             return Response(
                 {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
@@ -519,7 +568,8 @@ class ExportTransfersDirectionPdfView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        built = pdf_exports.run_export_transfer_direction_pdf(month, raw_direction)
+        currency = _get_validated_currency(request)
+        built = pdf_exports.run_export_transfer_direction_pdf(month, raw_direction, currency=currency)
         if built is None:
             return Response(
                 {'month': 'Invalid format. Month must match YYYY-MM (e.g. 2026-02).'},
@@ -558,10 +608,12 @@ class CashMovementPdfView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        currency = _get_validated_currency(request) or 'KGS'
         pdf_bytes, filename = pdf_exports.run_export_cash_movement_pdf(
             account=account,
             start_date=start_date,
             end_date=end_date,
+            currency=currency,
         )
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -594,8 +646,9 @@ class ForemanProjectSummaryView(views.APIView):
             return error_response
         month, month_period = validated
 
+        currency = _get_validated_currency(request)
         data_payload = foreman_service.build_foreman_project_summary_data_payload(
-            month, month_period, request.user
+            month, month_period, request.user, currency=currency,
         )
         serializer = ForemanProjectSummaryDataSerializer(data=data_payload)
         serializer.is_valid(raise_exception=True)

@@ -25,6 +25,7 @@ const minimalIncomeEntry: IncomeEntry = {
   finance_period_month: '2026-02',
   project_name: null,
   account: 'CASH',
+  currency: 'KGS',
   amount: '200.00',
   received_at: '2026-02-10T00:00:00Z',
   comment: 'Initial comment',
@@ -73,6 +74,8 @@ describe('EditIncomeEntryModal', () => {
         amount: 350,
         received_at: '2026-02-10',
         comment: 'Updated comment',
+        account: 'CASH',
+        currency: 'KGS',
       },
     })
     expect(onClose).toHaveBeenCalledTimes(1)

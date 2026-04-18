@@ -63,24 +63,33 @@ def _account_filter_label(account: str | None) -> str:
     return 'Касса' if account == 'CASH' else 'Банк' if account == 'BANK' else 'Все'
 
 
+def _currency_filter_label(currency: str | None) -> str:
+    return 'USD' if currency == 'USD' else 'KGS' if currency == 'KGS' else 'Все'
+
+
 def run_export_section_pdf(
     month: str,
     month_period: MonthPeriod,
     section_type: str,
     account: str | None,
+    currency: str | None = None,
     start_date=None,
     end_date=None,
 ) -> tuple[bytes, str]:
     """Build dashboard section PDF (income_sources or expense_categories)."""
     if section_type == 'income_sources':
         section_data = dashboard_service.build_dashboard_income_sources_data(
-            month, month_period, account=account, start_date=start_date, end_date=end_date
+            month, month_period, account=account, currency=currency,
+            start_date=start_date, end_date=end_date,
         )
     else:
         section_data = dashboard_service.build_dashboard_expense_categories_data(
-            month, month_period, account=account, start_date=start_date, end_date=end_date
+            month, month_period, account=account, currency=currency,
+            start_date=start_date, end_date=end_date,
         )
     section_data['account_filter_label'] = _account_filter_label(account)
+    section_data['currency_filter_label'] = _currency_filter_label(currency)
+    section_data['hide_plan_cols'] = currency == 'USD'
     section_data['period_label'] = f'{start_date.isoformat()} — {end_date.isoformat()}' if start_date and end_date else None
     pdf_content = build_report_section_pdf(section_type, section_data)
     filename = f'{month}_{section_type}_report.pdf'
@@ -93,6 +102,7 @@ def run_export_income_source_detail_pdf(
     source_id: int | None,
     is_uncategorized: bool,
     account: str | None,
+    currency: str | None = None,
     start_date=None,
     end_date=None,
 ) -> tuple[bytes, str]:
@@ -102,10 +112,12 @@ def run_export_income_source_detail_pdf(
         source_id,
         is_uncategorized,
         account=account,
+        currency=currency,
         start_date=start_date,
         end_date=end_date,
     )
     detail_data['account_filter_label'] = _account_filter_label(account)
+    detail_data['currency_filter_label'] = _currency_filter_label(currency)
     pdf_content = build_report_detail_pdf('income_source', detail_data)
     filename_target = 'uncategorized' if is_uncategorized else str(source_id)
     filename = f'{month}_income_source_{filename_target}_detail_report.pdf'
@@ -118,6 +130,7 @@ def run_export_expense_category_detail_pdf(
     category_id: int | None,
     is_uncategorized: bool,
     account: str | None,
+    currency: str | None = None,
     start_date=None,
     end_date=None,
 ) -> tuple[bytes, str]:
@@ -127,10 +140,12 @@ def run_export_expense_category_detail_pdf(
         category_id,
         is_uncategorized,
         account=account,
+        currency=currency,
         start_date=start_date,
         end_date=end_date,
     )
     detail_data['account_filter_label'] = _account_filter_label(account)
+    detail_data['currency_filter_label'] = _currency_filter_label(currency)
     pdf_content = build_report_detail_pdf('expense_category', detail_data)
     filename_target = 'uncategorized' if is_uncategorized else str(category_id)
     filename = f'{month}_expense_category_{filename_target}_detail_report.pdf'
@@ -140,6 +155,7 @@ def run_export_expense_category_detail_pdf(
 def run_export_transfer_direction_pdf(
     month: str,
     direction: str,
+    currency: str | None = None,
 ) -> tuple[bytes, str] | None:
     """
     direction: BANK_TO_CASH | CASH_TO_BANK
@@ -157,7 +173,7 @@ def run_export_transfer_direction_pdf(
         filename_direction = 'cash_to_bank'
 
     result = transfers_service.query_transfers_for_direction_pdf(
-        month, source_account, destination_account
+        month, source_account, destination_account, currency=currency,
     )
     if result is None:
         return None
@@ -167,6 +183,7 @@ def run_export_transfer_direction_pdf(
         direction_label=direction_label,
         total_amount=total_amount,
         detail_rows=detail_rows,
+        currency_label=_currency_filter_label(currency),
     )
     filename = f'transfers_{filename_direction}_{month}.pdf'
     return pdf_bytes, filename
@@ -176,19 +193,23 @@ def run_export_cash_movement_pdf(
     account: str,
     start_date,
     end_date,
+    currency: str | None = None,
 ) -> tuple[bytes, str]:
     data = cash_movement_service.build_cash_movement_data(
         account=account,
         start_date=start_date,
         end_date=end_date,
+        currency=currency,
     )
+    resolved_currency = currency if currency in ('KGS', 'USD') else 'KGS'
     pdf_bytes = build_cash_movement_pdf(
         data=data,
         filters={
             "account": account,
+            "currency": resolved_currency,
             "start_date": start_date,
             "end_date": end_date,
         },
     )
-    filename = f"cash_movement_{account.lower()}_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
+    filename = f"cash_movement_{account.lower()}_{resolved_currency.lower()}_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
     return pdf_bytes, filename
