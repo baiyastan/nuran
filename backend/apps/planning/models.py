@@ -65,7 +65,8 @@ class PlanPeriod(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        help_text='Monthly limit amount for this period'
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text='Monthly limit amount for this period (informational, not a hard cap)'
     )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -142,7 +143,11 @@ class PlanItem(models.Model):
     )
     qty = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField(max_length=50, null=True, blank=True)
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
     note = models.TextField(blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -238,6 +243,7 @@ class ProrabPlanItem(models.Model):
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
         help_text='Amount in KGS'
     )
     created_by = models.ForeignKey(
@@ -308,6 +314,7 @@ class ActualExpense(models.Model):
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
         help_text='Amount spent in KGS'
     )
     spent_at = models.DateField(

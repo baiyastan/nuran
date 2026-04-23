@@ -193,15 +193,15 @@ class PlanPeriodViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def unlock(self, request, pk=None):
-        """Unlock a plan period."""
-        # Fetch object directly to avoid queryset filtering issues
+        """Unlock a plan period (admin only). Writes an audit entry — per planning-lifecycle §1."""
         plan_period = get_object_or_404(PlanPeriod.objects.all(), pk=pk)
-        # Explicitly check object permissions to enforce RBAC
         self.check_object_permissions(request, plan_period)
-        
-        assert_month_open_for_planning(plan_period.month_period)
-        plan_period.status = 'draft'
-        plan_period.save(update_fields=['status'])
+        service = PlanPeriodService()
+
+        try:
+            plan_period = service.unlock(plan_period, request.user)
+        except DjangoValidationError as e:
+            raise DRFValidationError({'detail': str(e)})
         serializer = self.get_serializer(plan_period)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

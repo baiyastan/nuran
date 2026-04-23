@@ -178,18 +178,40 @@ class PlanPeriodService:
         assert_month_open_for_planning(plan_period.month_period)
         if plan_period.status != 'approved':
             raise ValidationError("Only approved plan periods can be locked")
-        
+
         if user.role != 'admin':
             raise ValidationError("Only admin can lock plan periods")
-        
+
         before_state = {'status': plan_period.status}
         plan_period.status = 'locked'
         plan_period.locked_at = timezone.now()
         plan_period.save()
-        
+
         # Audit log
         AuditLogService.log(user, 'lock', plan_period, before=before_state, after={'status': 'locked'})
-        
+
+        return plan_period
+
+    @staticmethod
+    def unlock(plan_period, user):
+        """Unlock a plan period back to draft. Admin only.
+
+        per planning-lifecycle §1: unlock MUST write an AuditLog entry.
+        """
+        assert_month_open_for_planning(plan_period.month_period)
+        if plan_period.status != 'locked':
+            raise ValidationError("Only locked plan periods can be unlocked")
+
+        if user.role != 'admin':
+            raise ValidationError("Only admin can unlock plan periods")
+
+        before_state = {'status': plan_period.status}
+        plan_period.status = 'draft'
+        plan_period.locked_at = None
+        plan_period.save()
+
+        AuditLogService.log(user, 'update', plan_period, before=before_state, after={'status': 'draft'})
+
         return plan_period
 
 
@@ -478,14 +500,11 @@ class ActualExpenseService:
         comment = data.get('comment', '').strip()
         if not comment:
             raise ValidationError("Comment is required and cannot be empty.")
-        
-        # Auto-assign category if not provided
+
+        # per plan-fact-linking §6: category must be explicit — no silent fallback to "Башка".
         if not data.get('category'):
-            expense_name = data.get('name', '').strip()
-            if not expense_name:
-                raise ValidationError("Name is required for category auto-assignment.")
-            data['category'] = ActualExpenseService._get_or_assign_category(expense_name, finance_period)
-        
+            raise ValidationError({'category': 'Категория тандалсын (автомат "Башка"\'га түшпөйт).'})
+
         data['created_by'] = user
         expense = ActualExpense.objects.create(**data)
         

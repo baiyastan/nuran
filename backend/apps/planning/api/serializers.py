@@ -61,7 +61,13 @@ class PlanItemSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_username', 'created_at'
         ]
         read_only_fields = ['created_by', 'created_at']
-    
+
+    def validate_amount(self, value):
+        # per plan-fact-linking §2
+        if value is None or value <= 0:
+            raise serializers.ValidationError('Сумма 0\'дон чоң болушу керек.')
+        return value
+
     def validate(self, attrs):
         """Validate category scope matches plan_period.fund_kind."""
         category = attrs.get('category')
