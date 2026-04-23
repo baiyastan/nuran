@@ -18,6 +18,7 @@ const IncomeSourcesPage = lazy(() => import('@/pages/admin/IncomeSourcesPage'))
 const BudgetReportPage = lazy(() => import('@/pages/admin/BudgetReportPage'))
 const SubmittedProjectPlansPage = lazy(() => import('@/pages/admin/SubmittedProjectPlansPage'))
 const MonthManagementPage = lazy(() => import('@/pages/admin/MonthManagementPage'))
+const BarterCarsPage = lazy(() => import('@/pages/admin/BarterCarsPage'))
 const PlanSetupPage = lazy(() => import('@/pages/planSetup/PlanSetupPage'))
 const FinancePage = lazy(() => import('@/pages/finance/FinancePage'))
 const ExpensesPage = lazy(() => import('@/pages/expenses/ExpensesPage'))
@@ -125,6 +126,10 @@ export const router = createBrowserRouter([
               {
                 path: 'months',
                 element: <MonthManagementPage />,
+              },
+              {
+                path: 'barter-cars',
+                element: <BarterCarsPage />,
               },
             ],
           },

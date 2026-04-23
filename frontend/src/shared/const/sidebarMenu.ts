@@ -52,6 +52,12 @@ export const SIDEBAR_MENU_ITEMS: MenuItem[] = [
     roles: ['admin'],
     icon: '💰',
   },
+  {
+    label: 'nav.barterCars',
+    path: '/admin/barter-cars',
+    roles: ['admin'],
+    icon: '🚗',
+  },
 ]
 
 /**

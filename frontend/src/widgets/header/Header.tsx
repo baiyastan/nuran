@@ -32,6 +32,9 @@ function Header() {
     if (pathname === '/admin/users' || pathname.startsWith('/admin/users')) {
       return t('pages.users.title')
     }
+    if (pathname.startsWith('/admin/barter-cars')) {
+      return t('pages.barterCars.title')
+    }
     if (pathname.startsWith('/admin')) {
       return t('pages.admin.title')
     }

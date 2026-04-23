@@ -1,0 +1,195 @@
+.barter-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.barter-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.barter-kpi {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.barter-kpi__tile {
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border: 1px solid #e3e7ef;
+}
+
+.barter-kpi__tile--success { background: #e9f8ee; border-color: #b7e4c7; }
+.barter-kpi__tile--info    { background: #e7f1ff; border-color: #b6d4fe; }
+.barter-kpi__tile--warn    { background: #fff4e5; border-color: #f9d5a7; }
+
+.barter-kpi__label {
+  font-size: 12px;
+  color: #5a6775;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.barter-kpi__value {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.barter-kpi__margin-row {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.barter-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.barter-filters .select-wrapper,
+.barter-filters .input-wrapper {
+  min-width: 200px;
+}
+
+.barter-empty,
+.barter-error {
+  padding: 24px;
+  text-align: center;
+  color: #5a6775;
+  background: #f8f9fb;
+  border-radius: 8px;
+}
+
+.barter-error { color: #b42318; background: #fee4e2; }
+
+.barter-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.barter-badge--received { background: #e3e7ef; color: #334155; }
+.barter-badge--sold     { background: #c6f0d2; color: #14532d; }
+
+.barter-margin--pos { color: #137333; font-weight: 500; }
+.barter-margin--neg { color: #b42318; font-weight: 500; }
+
+.barter-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Widen the shared Modal card when it hosts our form (:has() is modern-browser supported). */
+.modal-card:has(.barter-form) {
+  max-width: 860px;
+}
+
+.barter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.barter-form fieldset {
+  border: 1px solid #e3e7ef;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 0;
+  min-width: 0;
+}
+
+.barter-form fieldset legend {
+  padding: 0 6px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.barter-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.barter-form__row:last-child { margin-bottom: 0; }
+
+/* Let grid children shrink instead of overflowing the track. */
+.barter-form__row > * { min-width: 0; }
+.barter-form .input,
+.barter-form .select,
+.barter-form .input-wrapper,
+.barter-form .select-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.barter-form__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  padding-top: 22px; /* align with input boxes in the same row */
+}
+
+.barter-form__textarea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.barter-form__textarea textarea {
+  border: 1px solid #d2d8e1;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.barter-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .modal-card:has(.barter-form) {
+    max-width: 100%;
+  }
+  .barter-form__check {
+    padding-top: 0;
+  }
+}
+
+.barter-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #92400e;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+@media (max-width: 780px) {
+  .barter-kpi { grid-template-columns: repeat(2, 1fr); }
+  .barter-form__row { grid-template-columns: 1fr; }
+}
