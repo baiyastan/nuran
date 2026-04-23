@@ -292,15 +292,23 @@ class PlanItemViewSet(viewsets.ModelViewSet):
 
 
 class ProrabProjectsViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for listing projects in prorab context (all active projects; assignment not required for planning)."""
-    
+    """ViewSet for listing projects assigned to the current foreman.
+
+    Per planning-lifecycle §4: foreman sees only projects they are
+    explicitly assigned to via ProjectAssignment.
+    """
+
     serializer_class = ProrabProjectSerializer
     permission_classes = [ProrabPlanPermission]
-    
+
     def get_queryset(self):
-        """Active projects (PROJECT scope); `assigned_at` in serializer is optional per row."""
+        """Active projects assigned to request.user through ProjectAssignment."""
+        from apps.projects.models import ProjectAssignment
+        assigned_ids = ProjectAssignment.objects.filter(
+            prorab=self.request.user
+        ).values_list('project_id', flat=True)
         return (
-            Project.objects.filter(status='active')
+            Project.objects.filter(status='active', id__in=assigned_ids)
             .select_related('created_by')
             .prefetch_related('assignments')
             .exclude(name__iexact='office')

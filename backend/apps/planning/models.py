@@ -343,10 +343,10 @@ class ActualExpense(models.Model):
         ]
     
     def clean(self):
-        """Validate category if provided."""
+        """Validate category + spent_at inside finance_period month."""
         from django.core.exceptions import ValidationError
         from apps.expenses.base import validate_expense_category
-        
+
         # Validate category if provided (category is nullable)
         if self.category:
             try:
@@ -364,10 +364,20 @@ class ActualExpense(models.Model):
                         errors['category'] = e.messages
                     else:
                         errors['category'] = [str(e)]
-                
+
                 if errors:
                     raise ValidationError(errors)
-    
+
+        # per plan-fact-linking §3: spent_at must be inside finance_period.month_period.month
+        if self.spent_at and self.finance_period_id:
+            fp_month = self.finance_period.month_period.month if self.finance_period.month_period else None
+            if fp_month and self.spent_at.strftime('%Y-%m') != fp_month:
+                raise ValidationError({
+                    'spent_at': (
+                        f'Дата {self.spent_at.isoformat()} ай {fp_month} ичине кирбейт.'
+                    )
+                })
+
     def __str__(self):
         project_name = self.finance_period.project.name if self.finance_period and self.finance_period.project else "-"
         return f"{self.name} - {self.amount} ({project_name})"
@@ -437,7 +447,26 @@ class Expense(models.Model):
             models.Index(fields=['spent_at']),
             models.Index(fields=['category']),
         ]
-    
+
+    def clean(self):
+        """Validate spent_at ∈ plan_period month, and plan_item belongs to plan_period.
+
+        per plan-fact-linking §3 and §7.
+        """
+        from django.core.exceptions import ValidationError
+
+        errors = {}
+        if self.plan_item_id and self.plan_period_id and self.plan_item.plan_period_id != self.plan_period_id:
+            errors['plan_item'] = 'plan_item плана мезгилине (plan_period) тиешелүү эмес.'
+
+        if self.spent_at and self.plan_period_id:
+            pp_month = self.plan_period.period
+            if pp_month and self.spent_at.strftime('%Y-%m') != pp_month:
+                errors['spent_at'] = f'Дата {self.spent_at.isoformat()} ай {pp_month} ичине кирбейт.'
+
+        if errors:
+            raise ValidationError(errors)
+
     def __str__(self):
         return f"Expense - {self.amount} ({self.spent_at})"
 

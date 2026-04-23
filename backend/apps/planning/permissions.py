@@ -36,11 +36,19 @@ def _is_foreman(user):
 
 
 def _foreman_can_see_actual_expense(user, actual_expense):
-    """Foreman may read planning actuals tied to project finance periods only."""
-    return (
-        actual_expense.finance_period is not None
-        and actual_expense.finance_period.fund_kind == 'project'
-    )
+    """Foreman may read planning actuals tied to project finance periods on their assigned projects.
+
+    per planning-lifecycle §4.
+    """
+    from apps.projects.models import ProjectAssignment
+    if actual_expense.finance_period is None:
+        return False
+    if actual_expense.finance_period.fund_kind != 'project':
+        return False
+    project_id = actual_expense.finance_period.project_id
+    if not project_id:
+        return False
+    return ProjectAssignment.objects.filter(prorab=user, project_id=project_id).exists()
 
 
 class ActualExpensePermission(permissions.BasePermission):
