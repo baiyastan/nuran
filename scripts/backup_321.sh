@@ -168,15 +168,16 @@ SHA256_HEX="$(cut -d' ' -f1 "${CHECKSUM_FILE}")"
 FILE_SIZE_BYTES="$(stat -c%s "${ENCRYPTED_FILE}")"
 FILE_SIZE_MB="$(awk -v size="${FILE_SIZE_BYTES}" 'BEGIN { printf "%.2f", size/1024/1024 }')"
 
+# Timeweb Cloud S3 rejects `--metadata` (AWS CLI surfaces it as a confusing
+# "NoneType is not iterable"). The sha256 lives next to each object as a
+# separate .sha256 file, so the per-object metadata is redundant.
 echo "Uploading encrypted backup to s3://${S3_BUCKET}/${S3_KEY_BACKUP}"
 run_aws s3 cp "${ENCRYPTED_FILE}" "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},gfs_tier=${GFS_TIER}"
+  --endpoint-url "${S3_ENDPOINT}"
 
 echo "Uploading checksum to s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}"
 run_aws s3 cp "${CHECKSUM_FILE}" "s3://${S3_BUCKET}/${S3_KEY_CHECKSUM}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --metadata "sha256=${SHA256_HEX},backup_id=${BACKUP_ID},related_object=${S3_KEY_BACKUP}"
+  --endpoint-url "${S3_ENDPOINT}"
 
 # Verification step for remote object presence after upload.
 run_aws s3 ls "s3://${S3_BUCKET}/${S3_KEY_BACKUP}" --endpoint-url "${S3_ENDPOINT}" >/dev/null

@@ -151,9 +151,10 @@ Debug чыгаруунун ичиндеги `<Code>...</Code>` чыныгы ка
 | Чыныгы ката | Себеби | Оңдоо |
 |---|---|---|
 | `InvalidAccessKeyId` | Ачкыч Timeweb тарабынан билинбейт (балким ротация) | §3.4 — ачкычты жаңыртуу |
-| `SignatureDoesNotMatch` | Secret ачкыч туура эмес (копиялаганда ката) | §3.4 — secret'ти кайра көчүрүү |
+| `SignatureDoesNotMatch` | Secret ачкыч туура эмес, же регион мисматч | §3.4 / §3.5 |
 | `AccessDenied` | Ачкыч туура, бирок уруксат жетпейт | Timeweb панелинде bucket permissions |
 | `InvalidRequest` / `InvalidBucketName` | Регион же bucket ID туура эмес | §3.5 |
+| `<Error>` жок, бирок `--metadata` менен гана чыгат | Timeweb `--metadata`'ны колдобойт | §3.6 |
 
 Эгер `--debug` жыйынтыгында `<Error>` жок болсо — башка маселе (тармак, DNS, SSL). Андан кийин `curl -v https://s3.twcstorage.ru` менен тактаңыз.
 
@@ -189,7 +190,24 @@ Debug чыгаруунун ичиндеги `<Code>...</Code>` чыныгы ка
 sed -i 's|^AWS_DEFAULT_REGION=.*|AWS_DEFAULT_REGION="ru-1"|' /var/www/nuran/.env
 ```
 
-### 3.6 `.env`те ачкыч бар көрүнөт, бирок чындыгында бош
+### 3.6 `--metadata` Timeweb S3 тарабынан колдоого алынбайт
+
+**Симптом:** `aws s3 cp` `NoneType is not iterable` — бирок `--metadata` флагы кошулганда гана. Метадатасыз upload иштейт.
+
+**Тест:**
+```bash
+# Метадатасыз — иштейт
+aws s3 cp /tmp/test.txt s3://$S3_BUCKET/test.txt --endpoint-url $S3_ENDPOINT
+# Метадата менен — катa
+aws s3 cp /tmp/test.txt s3://$S3_BUCKET/test.txt --endpoint-url $S3_ENDPOINT \
+  --metadata "key=value"
+```
+
+**Себеби:** Timeweb Cloud'дун S3 API'си `x-amz-meta-*` header'лерин туура кайтарбайт, AWS CLI жооптун талданышында бош `<Message>` тапса жыгылат (§3.3).
+
+**Оңдоо:** `scripts/backup_321.sh`'тан `--metadata` флагын алып салуу. `sha256` мурда `_BACKUP_PATH.sha256` өзүнчө файл катары жөнөтүлөт — маалымат жоголбойт.
+
+### 3.7 `.env`те ачкыч бар көрүнөт, бирок чындыгында бош
 
 **Симптом:** `grep AWS_ACCESS_KEY_ID .env` "бир нерсе бар" деп көрсөтөт, бирок маскалоо `""` берет.
 
