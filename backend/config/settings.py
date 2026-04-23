@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'apps.budgeting.apps.BudgetingConfig',
     'apps.finance.apps.FinanceConfig',
     'apps.expenses.apps.ExpensesConfig',
+    'apps.barter_cars.apps.BarterCarsConfig',
 ]
 
 MIDDLEWARE = [

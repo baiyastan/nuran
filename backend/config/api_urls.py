@@ -14,4 +14,5 @@ urlpatterns = [
     path('foreman/', include('apps.reports.api.foreman_urls')),
     path('', include('apps.audit.api.urls')),
     path('', include('apps.finance.api.urls')),
+    path('', include('apps.barter_cars.api.urls')),
 ]
