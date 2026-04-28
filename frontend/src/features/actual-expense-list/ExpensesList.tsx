@@ -11,7 +11,7 @@ import { Button } from '@/shared/ui/Button/Button'
 import { Modal } from '@/shared/ui/Modal/Modal'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { toast } from '@/shared/ui/Toast/toast'
-import { formatMoneyKGS } from '@/shared/utils/formatMoney'
+import { formatMoneyWithCurrency } from '@/shared/utils/formatMoney'
 import { CreateActualExpenseModal } from '@/features/actual-expense-create/CreateActualExpenseModal'
 import { EditActualExpenseModal } from '@/features/actual-expense-edit/EditActualExpenseModal'
 import { FinancePeriod } from '@/entities/finance-period/model'
@@ -88,12 +88,16 @@ export function ExpensesList({ financePeriodId: _financePeriodId, financePeriod,
     return Array.isArray(data) ? data : data.results || []
   }, [data])
 
-  // Calculate total amount
-  const totalAmount = useMemo(() => {
-    return expenses.reduce((sum, expense) => {
-      const amount = parseFloat(expense.amount || '0')
-      return sum + (isNaN(amount) ? 0 : amount)
-    }, 0)
+  // Calculate total amount per currency (KGS and USD must NOT be summed together)
+  const totalsByCurrency = useMemo(() => {
+    const totals: Record<'KGS' | 'USD', number> = { KGS: 0, USD: 0 }
+    for (const expense of expenses) {
+      const n = parseFloat(expense.amount || '0')
+      if (isNaN(n)) continue
+      const cur = expense.currency === 'USD' ? 'USD' : 'KGS'
+      totals[cur] += n
+    }
+    return totals
   }, [expenses])
 
   const tableData = useMemo(() => {
@@ -101,7 +105,7 @@ export function ExpensesList({ financePeriodId: _financePeriodId, financePeriod,
       ...expense,
       spent_at: formatDate(expense.spent_at),
       category_name: expense.category_name || '-',
-      amount: formatMoneyKGS(expense.amount || '0'),
+      amount: formatMoneyWithCurrency(expense.amount || '0', expense.currency),
       comment: expense.comment || '-',
       created_by_username: expense.created_by_username || '-',
       created_at: formatDate(expense.created_at),
@@ -160,7 +164,16 @@ export function ExpensesList({ financePeriodId: _financePeriodId, financePeriod,
               fontWeight: 'bold',
               fontSize: '1.1em',
             }}>
-              <span>{t('expenses.total')} {formatMoneyKGS(totalAmount)}</span>
+              <span>
+                {t('expenses.total')}{' '}
+                {totalsByCurrency.KGS > 0 || totalsByCurrency.USD === 0
+                  ? formatMoneyWithCurrency(totalsByCurrency.KGS, 'KGS')
+                  : null}
+                {totalsByCurrency.KGS > 0 && totalsByCurrency.USD > 0 ? ' · ' : ''}
+                {totalsByCurrency.USD > 0
+                  ? formatMoneyWithCurrency(totalsByCurrency.USD, 'USD')
+                  : null}
+              </span>
             </div>
           )}
         </>

@@ -14,7 +14,7 @@ import { CreateActualExpenseModal } from '@/features/actual-expense-create/Creat
 import { EditActualExpenseModal } from '@/features/actual-expense-edit/EditActualExpenseModal'
 import { MonthGateBanner } from '@/features/month-gate/MonthGateBanner'
 import { formatDate } from '@/shared/lib/utils'
-import { formatMoneyKGS } from '@/shared/utils/formatMoney'
+import { formatMoneyWithCurrency } from '@/shared/utils/formatMoney'
 import './ExpensesPage.css'
 
 type ScopeUI = 'OFFICE' | 'PROJECT' | 'CHARITY'
@@ -61,8 +61,15 @@ function ExpensesPage() {
 
   const [deleteExpense, { isLoading: isDeleting }] = useDeleteActualExpenseMutation()
 
-  const totalAmount = useMemo(() => {
-    return expenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
+  const totalsByCurrency = useMemo(() => {
+    const totals: Record<'KGS' | 'USD', number> = { KGS: 0, USD: 0 }
+    for (const exp of expenses) {
+      const n = Number(exp.amount)
+      if (Number.isNaN(n)) continue
+      const cur = exp.currency === 'USD' ? 'USD' : 'KGS'
+      totals[cur] += n
+    }
+    return totals
   }, [expenses])
 
   const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,7 +124,7 @@ function ExpensesPage() {
     return expenses.map((expense) => ({
       ...expense,
       spent_at: formatDate(expense.spent_at),
-      amount: formatMoneyKGS(expense.amount),
+      amount: formatMoneyWithCurrency(expense.amount, expense.currency),
       category_name: expense.category_name ?? '-',
       comment: expense.comment || '-',
       actions: canManageExpenses ? (
@@ -205,7 +212,14 @@ function ExpensesPage() {
             <Table columns={tableColumns} data={tableData} />
             <div className="expenses-total">
               <strong>
-                {t('expensesPage.total.label')}: {formatMoneyKGS(totalAmount)}
+                {t('expensesPage.total.label')}:{' '}
+                {totalsByCurrency.KGS > 0 || totalsByCurrency.USD === 0
+                  ? formatMoneyWithCurrency(totalsByCurrency.KGS, 'KGS')
+                  : null}
+                {totalsByCurrency.KGS > 0 && totalsByCurrency.USD > 0 ? ' · ' : ''}
+                {totalsByCurrency.USD > 0
+                  ? formatMoneyWithCurrency(totalsByCurrency.USD, 'USD')
+                  : null}
               </strong>
             </div>
           </>
