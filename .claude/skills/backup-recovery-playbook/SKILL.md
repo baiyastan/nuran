@@ -154,6 +154,7 @@ Debug чыгаруунун ичиндеги `<Code>...</Code>` чыныгы ка
 | `SignatureDoesNotMatch` | Secret ачкыч туура эмес, же регион мисматч | §3.4 / §3.5 |
 | `AccessDenied` | Ачкыч туура, бирок уруксат жетпейт | Timeweb панелинде bucket permissions |
 | `InvalidRequest` / `InvalidBucketName` | Регион же bucket ID туура эмес | §3.5 |
+| `UserSuspended` | Timeweb аккаунту токтотулган (көп учурда төлөнбөгөн эсеп) | §3.8 |
 | `<Error>` жок, бирок `--metadata` менен гана чыгат | Timeweb `--metadata`'ны колдобойт | §3.6 |
 
 Эгер `--debug` жыйынтыгында `<Error>` жок болсо — башка маселе (тармак, DNS, SSL). Андан кийин `curl -v https://s3.twcstorage.ru` менен тактаңыз.
@@ -217,6 +218,40 @@ awk -F= '/^AWS_ACCESS_KEY_ID=/ {gsub(/"/,"",$2); print length($2)}' /var/www/nur
 awk -F= '/^AWS_SECRET_ACCESS_KEY=/ {gsub(/"/,"",$2); print length($2)}' /var/www/nuran/.env
 ```
 Туура: `20` жана `40`. Эгер `0-4` болсо — nano'да туура сакталбаган, кайра орнотуу керек.
+
+### 3.8 `UserSuspended` — Timeweb аккаунт токтотулган
+
+**Симптом:** `--debug` чыгаруудан `<Code>UserSuspended</Code>` (көп учурда `<Message></Message>` бош). Скрипт жагында кадимки `NoneType is not iterable` көрүнөт. LIST да, PUT да фейл — экөө тең суспензияга кабылат.
+
+**Себеби (мүмкүндүгү боюнча):**
+1. Төлөнбөгөн эсеп — Timeweb автомат суспензия кылат
+2. Карта мөөнөтү бүткөн → autopay иштебейт
+3. ToS бузулду деген кол менен токтотуу
+4. Trial / promo тариф бүткөн
+
+**Маанилүү:** ачкычтар жана код бузулган ЭМЕС. Ротация кылбаңыз — баары туура иштейт, аккаунт иштесе жетиштүү.
+
+**Оңдоо:**
+1. https://timeweb.cloud/ панелине кириңиз
+2. "Финансы" / "Баланс" / "Уведомления" — суспензиянын себеби көрүнөт
+3. Эсепти төлөңүз / картаны жаңыртыңыз
+4. Себеп көрүнбөсө — `support@timeweb.cloud`'ка `RequestId`'ди көрсөтүп жазыңыз
+
+**Аккаунт кайра иштегенде** — cron эртеси таңда автомат улантат. Жоголгон күндөрдүн локалдык бэкаптарын кол менен жүктөө керек:
+```bash
+cd /var/www/nuran && set -a && source .env && set +a
+for f in nuran_YYYYMMDD_HHMMSS; do
+  aws s3 cp /var/backups/nuran/${f}.sql.gz.gpg \
+    "s3://${S3_BUCKET}/nuran/db/production/daily/${f}.sql.gz.gpg" \
+    --endpoint-url "$S3_ENDPOINT" --region "$AWS_DEFAULT_REGION"
+  cd /var/backups/nuran && sha256sum ${f}.sql.gz.gpg > ${f}.sql.gz.gpg.sha256
+  aws s3 cp ${f}.sql.gz.gpg.sha256 \
+    "s3://${S3_BUCKET}/nuran/db/production/daily/${f}.sql.gz.gpg.sha256" \
+    --endpoint-url "$S3_ENDPOINT" --region "$AWS_DEFAULT_REGION"
+done
+```
+
+**Алдын алуу:** Timeweb dashboard'та email эскертүү жөндөңүз — баланс кайсы бир чектен төмөн түшсө кабарлайт. Бул эки күн бэкапсыз калууну кайра кайталанбайт.
 
 ## 4. Кол менен бэкап жасоо (проверка үчүн)
 
