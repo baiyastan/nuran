@@ -10,7 +10,6 @@ from rest_framework import viewsets
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
-from django.contrib.auth import authenticate
 from core.permissions import IsAdmin
 from apps.audit.services import AuditLogService
 from ..models import User

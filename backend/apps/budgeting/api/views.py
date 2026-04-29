@@ -5,12 +5,11 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import transaction
-from core.permissions import IsAdmin, IsDirector
-from apps.projects.models import ProjectAssignment
+from core.permissions import IsDirector
 from apps.audit.services import AuditLogService, optional_audit_reason
 from apps.reports.invalidation import invalidate_for_budget_plan
 from apps.finance.services import assert_month_open_for_plans, FinancePeriodService

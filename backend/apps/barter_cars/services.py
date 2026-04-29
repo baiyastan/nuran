@@ -9,7 +9,6 @@ scripts/check_barter_isolation.py.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
 
 from django.core.exceptions import ValidationError
 from django.db import transaction

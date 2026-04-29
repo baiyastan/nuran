@@ -12,7 +12,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from core.exceptions import (
-    InvalidApprovalStage, ForbiddenError, NotEditableError,
+    ForbiddenError, NotEditableError,
     PeriodClosedError, LimitExceededError
 )
 from apps.finance.constants import MONTH_REQUIRED_MSG
@@ -30,7 +30,7 @@ from ..services import (
 from apps.finance.services import assert_month_open_for_planning, assert_planning_allowed
 from .serializers import (
     PlanPeriodSerializer, PlanItemSerializer,
-    ProjectAssignmentSerializer, ProrabPlanPeriodSerializer,
+    ProrabPlanPeriodSerializer,
     ProrabPlanSerializer, ProrabPlanItemSerializer,
     ActualExpenseSerializer, ProrabPlanSummarySerializer, ProrabPlanExpenseSerializer,
     ProrabProjectSerializer, ExpenseSerializer,
@@ -38,7 +38,6 @@ from .serializers import (
 from ..permissions import PlanPeriodPermission, PlanItemPermission, ProrabPlanPermission, ActualExpensePermission, ExpensePermission
 from ..filters import PlanItemFilter
 from apps.projects.models import Project
-from apps.projects.api.serializers import ProjectSerializer
 
 
 class PlanPeriodViewSet(viewsets.ModelViewSet):

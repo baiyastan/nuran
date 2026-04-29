@@ -2,7 +2,6 @@
 Reports API serializers.
 """
 from rest_framework import serializers
-from decimal import Decimal
 
 
 class CategorySummarySerializer(serializers.Serializer):

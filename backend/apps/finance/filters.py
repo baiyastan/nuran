@@ -2,7 +2,6 @@
 Finance API filters.
 """
 import django_filters
-from django.core.exceptions import ValidationError
 from .models import IncomeEntry, ACCOUNT_CHOICES, CURRENCY_CHOICES
 
 

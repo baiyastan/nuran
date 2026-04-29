@@ -3,14 +3,13 @@ Planning services - business logic layer.
 """
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.db.models import Sum
 from decimal import Decimal
 import logging
 from apps.audit.services import AuditLogService
 from apps.reports.invalidation import invalidate_dashboard_kpi_for_month_period
 from apps.finance.services import (
-    FinancePeriodService,
     assert_month_open_for_planning,
     assert_month_open_for_posted_facts,
     assert_planning_allowed,

@@ -9,7 +9,7 @@ from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 
@@ -28,7 +28,7 @@ from ..services import (
 )
 from ..serializers import (
     FinancePeriodSerializer, IncomeEntrySerializer, IncomeSourceSerializer,
-    IncomePlanSerializer, IncomeSummarySerializer, TransferSerializer,
+    IncomePlanSerializer, TransferSerializer,
     CurrencyExchangeSerializer,
 )
 from ..permissions import (

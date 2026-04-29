@@ -412,24 +412,15 @@ export const budgetingApi = baseApi.injectEndpoints({
 })
 
 export const {
-  useGetProjectBudgetPlanQuery,
   useListBudgetPlansQuery,
-  useGetBudgetPlanQuery,
   useCreateBudgetPlanMutation,
-  useUpdateBudgetPlanMutation,
-  useSubmitBudgetPlanMutation,
   useApproveBudgetPlanMutation,
   useListExpenseCategoriesQuery,
   useListBudgetLinesQuery,
   useCreateBudgetLineMutation,
-  useUpdateBudgetLineMutation,
-  useDeleteBudgetLineMutation,
   useBulkUpsertBudgetLinesMutation,
-  useListBudgetExpensesQuery,
-  useGetBudgetExpenseQuery,
   useCreateBudgetExpenseMutation,
   useUpdateBudgetExpenseMutation,
-  useDeleteBudgetExpenseMutation,
   useGetBudgetPlanReportQuery,
 } = budgetingApi
 

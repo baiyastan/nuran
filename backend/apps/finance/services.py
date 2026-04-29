@@ -4,7 +4,7 @@ Finance services - business logic layer.
 from datetime import date
 from decimal import Decimal
 from django.db import IntegrityError, transaction
-from django.db.models import Sum, Count, Q, Value, DecimalField
+from django.db.models import Sum, Count, Value, DecimalField
 from django.db.models.functions import Coalesce
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.audit.services import AuditLogService
@@ -23,7 +23,7 @@ from .models import (
     AccountLedgerLock,
     ACCOUNT_CHOICES,
 )
-from .constants import MONTH_LOCKED_MSG, MONTH_REQUIRED_MSG, ADMIN_ONLY_MSG
+from .constants import MONTH_LOCKED_MSG, MONTH_REQUIRED_MSG
 
 
 def assert_month_open(month_period):

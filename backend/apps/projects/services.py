@@ -93,15 +93,3 @@ class ProjectService:
         
         # Audit log
         AuditLogService.log_delete(user, project, before_state)
-    
-    @staticmethod
-    def ensure_office_project():
-        """Ensure Office project exists (for office expenses)."""
-        office_project, created = Project.objects.get_or_create(
-            name='Office',
-            defaults={
-                'description': 'Office expenses project',
-                'status': 'active',
-            }
-        )
-        return office_project

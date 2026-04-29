@@ -47,7 +47,6 @@ INSTALLED_APPS = [
     'django_filters',
     'apps.users.apps.UsersConfig',
     'apps.projects.apps.ProjectsConfig',
-    'apps.plans.apps.PlansConfig',
     'apps.planning.apps.PlanningConfig',
     'apps.audit.apps.AuditConfig',
     'apps.reports.apps.ReportsConfig',

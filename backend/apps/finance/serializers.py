@@ -3,9 +3,6 @@ Finance API serializers.
 """
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
-from decimal import Decimal
-from datetime import date
-from django.shortcuts import get_object_or_404
 from .models import (
     FinancePeriod, IncomeEntry, IncomeSource, IncomePlan, Transfer,
     CurrencyExchange, ACCOUNT_CHOICES, CURRENCY_CHOICES,
@@ -237,15 +234,6 @@ class IncomeSummaryRowSerializer(serializers.Serializer):
     diff = serializers.CharField()
     plans_count = serializers.IntegerField()
     entries_count = serializers.IntegerField()
-
-
-class IncomeSummarySerializer(serializers.Serializer):
-    """Serializer for income summary response."""
-    
-    rows = IncomeSummaryRowSerializer(many=True)
-    planned_total = serializers.CharField()
-    actual_total = serializers.CharField()
-    diff_total = serializers.CharField()
 
 
 class TransferSerializer(serializers.ModelSerializer):

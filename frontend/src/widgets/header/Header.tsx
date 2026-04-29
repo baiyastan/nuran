@@ -23,12 +23,6 @@ function Header() {
     if (pathname === '/projects') {
       return t('pages.projects.title')
     }
-    if (pathname === '/plan-periods') {
-      return t('pages.planPeriods.title')
-    }
-    if (pathname.startsWith('/plan-periods/')) {
-      return t('pages.planPeriodDetails.title')
-    }
     if (pathname === '/admin/users' || pathname.startsWith('/admin/users')) {
       return t('pages.users.title')
     }

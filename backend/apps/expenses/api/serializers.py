@@ -5,7 +5,7 @@ import re
 from rest_framework import serializers
 from apps.expenses.models import ActualExpense
 from apps.finance.models import ACCOUNT_CHOICES, CURRENCY_CHOICES
-from apps.budgeting.models import ExpenseCategory, MonthPeriod
+from apps.budgeting.models import MonthPeriod
 from apps.finance.services import assert_month_open_for_posted_facts
 from apps.expenses.services import assert_sufficient_balance
 

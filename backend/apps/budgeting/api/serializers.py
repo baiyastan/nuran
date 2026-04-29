@@ -5,7 +5,7 @@ import re
 from rest_framework import serializers
 from apps.finance.constants import MONTH_REQUIRED_MSG
 from apps.finance.services import assert_month_open_for_plans
-from ..models import BudgetPlan, BudgetPlanSummaryComment, ExpenseCategory, MonthPeriod, BudgetLine, BudgetExpense
+from ..models import BudgetPlan, ExpenseCategory, MonthPeriod, BudgetLine, BudgetExpense
 
 
 class MonthPeriodField(serializers.Field):
@@ -65,20 +65,6 @@ class MonthPeriodSerializer(serializers.ModelSerializer):
         if normalized == 'LOCKED':
             return 'LOCKED'
         raise serializers.ValidationError("Status must be 'OPEN' or 'LOCKED'")
-
-
-class BudgetPlanSummaryCommentSerializer(serializers.ModelSerializer):
-    """Serializer for BudgetPlanSummaryComment."""
-    
-    updated_by_username = serializers.CharField(source='updated_by.username', read_only=True, allow_null=True)
-    
-    class Meta:
-        model = BudgetPlanSummaryComment
-        fields = [
-            'id', 'plan', 'comment_text', 'updated_by', 'updated_by_username',
-            'updated_at', 'created_at'
-        ]
-        read_only_fields = ['updated_by', 'updated_at', 'created_at']
 
 
 class BudgetPlanSummaryCommentUpdateSerializer(serializers.Serializer):
