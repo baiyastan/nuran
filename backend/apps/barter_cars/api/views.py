@@ -79,6 +79,7 @@ class BarterCarViewSet(viewsets.ModelViewSet):
         if notes:
             car.notes = (car.notes + '\n' if car.notes else '') + f'[sold] {notes}'
             car.save(update_fields=['notes', 'updated_at'])
+        car.refresh_from_db()
         return Response(
             BarterCarSerializer(car).data, status=status.HTTP_200_OK
         )

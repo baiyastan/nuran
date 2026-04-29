@@ -211,6 +211,26 @@ class TestMarkSoldEndpoint:
         )
         assert r.status_code == 400
 
+    def test_list_shows_sold_after_mark_sold(self, admin_client, car_payload):
+        """After mark-sold the list endpoint must return status=SOLD."""
+        r = admin_client.post('/api/v1/barter-cars/', car_payload, format='json')
+        car_id = r.json()['id']
+        admin_client.post(
+            f'/api/v1/barter-cars/{car_id}/mark-sold/',
+            {
+                'sold_price': '11200.00', 'sold_currency': 'USD',
+                'sold_at': '2026-04-20', 'sold_to_name': 'Max Auto',
+            },
+            format='json',
+        )
+        # Re-fetch list — the car must appear as SOLD
+        r = admin_client.get('/api/v1/barter-cars/')
+        body = r.json()
+        results = body['results'] if isinstance(body, dict) and 'results' in body else body
+        car_row = next(row for row in results if row['id'] == car_id)
+        assert car_row['status'] == 'SOLD'
+        assert car_row['sold_price'] == '11200.00'
+
 
 @pytest.mark.django_db
 class TestStatsEndpoint:

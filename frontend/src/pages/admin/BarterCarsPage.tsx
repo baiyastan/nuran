@@ -234,10 +234,11 @@ export default function BarterCarsPage() {
           onClose={() => setSellCar(null)}
           onSubmit={async (payload) => {
             try {
-              await barterCarApi.markSold(sellCar.id, payload)
+              const updated = await barterCarApi.markSold(sellCar.id, payload)
+              setCars(prev => prev.map(c => c.id === updated.id ? updated : c))
               toast.showSuccess(t('barterCars.toast.sold'))
               setSellCar(null)
-              await load()
+              load()
             } catch (err) {
               toast.showError(extractError(err))
             }
