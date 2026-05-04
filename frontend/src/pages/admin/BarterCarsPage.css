@@ -85,6 +85,19 @@
 .barter-margin--pos { color: #137333; font-weight: 500; }
 .barter-margin--neg { color: #b42318; font-weight: 500; }
 
+.barter-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.barter-pagination__info {
+  font-size: 14px;
+  color: #5a6775;
+  font-variant-numeric: tabular-nums;
+}
+
 .barter-actions {
   display: flex;
   gap: 6px;

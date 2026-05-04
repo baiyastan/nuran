@@ -50,6 +50,8 @@ export default function BarterCarsPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editCar, setEditCar] = useState<BarterCar | null>(null)
@@ -60,7 +62,7 @@ export default function BarterCarsPage() {
     setLoading(true)
     setError(null)
     try {
-      const params: Record<string, string> = {}
+      const params: Record<string, string> = { page: String(page) }
       if (statusFilter) params.status = statusFilter
       if (search) params.search = search
       const [listRes, statsRes] = await Promise.all([
@@ -68,6 +70,7 @@ export default function BarterCarsPage() {
         barterCarApi.stats(),
       ])
       setCars(listRes.results)
+      setTotalCount(listRes.count)
       setStats(statsRes)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Load failed'
@@ -75,7 +78,7 @@ export default function BarterCarsPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, search])
+  }, [statusFilter, search, page])
 
   useEffect(() => {
     load()
@@ -165,7 +168,7 @@ export default function BarterCarsPage() {
         <Select
           aria-label={t('barterCars.table.status')}
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setPage(1) }}
           options={[
             { value: '', label: t('barterCars.filters.allStatuses') },
             { value: 'RECEIVED', label: t('barterCars.status.RECEIVED') },
@@ -175,10 +178,10 @@ export default function BarterCarsPage() {
         <Input
           placeholder={t('common.search')}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
         />
         {(statusFilter || search) && (
-          <Button variant="secondary" size="small" onClick={() => { setStatusFilter(''); setSearch('') }}>
+          <Button variant="secondary" size="small" onClick={() => { setStatusFilter(''); setSearch(''); setPage(1) }}>
             {t('barterCars.filters.clear')}
           </Button>
         )}
@@ -190,7 +193,10 @@ export default function BarterCarsPage() {
         <div className="barter-empty">{t('barterCars.empty')}</div>
       )}
       {!loading && !error && rows.length > 0 && (
-        <Table columns={columns} data={rows} renderCell={renderCell} zebra />
+        <>
+          <Table columns={columns} data={rows} renderCell={renderCell} zebra />
+          <Pagination page={page} total={totalCount} pageSize={20} onPageChange={setPage} />
+        </>
       )}
 
       {createOpen && (
@@ -202,7 +208,7 @@ export default function BarterCarsPage() {
               await barterCarApi.create(payload)
               toast.showSuccess(t('barterCars.toast.created'))
               setCreateOpen(false)
-              await load()
+              if (page === 1) await load(); else setPage(1)
             } catch (err) {
               toast.showError(extractError(err))
             }
@@ -259,7 +265,7 @@ export default function BarterCarsPage() {
                 await barterCarApi.delete(confirmDeleteCar.id)
                 toast.showSuccess(t('barterCars.toast.deleted'))
                 setConfirmDeleteCar(null)
-                await load()
+                if (cars.length === 1 && page > 1) setPage(page - 1); else await load()
               } catch (err) {
                 toast.showError(extractError(err))
               }
@@ -269,6 +275,45 @@ export default function BarterCarsPage() {
           </div>
         </Modal>
       )}
+    </div>
+  )
+}
+
+function Pagination({
+  page,
+  total,
+  pageSize,
+  onPageChange,
+}: {
+  page: number
+  total: number
+  pageSize: number
+  onPageChange: (p: number) => void
+}) {
+  const { t } = useTranslation()
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  if (total <= pageSize) return null
+  return (
+    <div className="barter-pagination">
+      <Button
+        size="small"
+        variant="secondary"
+        disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}
+      >
+        {t('common.previous')}
+      </Button>
+      <span className="barter-pagination__info">
+        {page} / {totalPages} ({total})
+      </span>
+      <Button
+        size="small"
+        variant="secondary"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >
+        {t('common.next')}
+      </Button>
     </div>
   )
 }

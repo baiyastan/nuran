@@ -37,6 +37,8 @@ export default {
       closed: 'Жабылган',
     },
     notCreated: 'Ачыла элек',
+    previous: 'Мурунку',
+    next: 'Кийинки',
   },
   auth: {
     loginTitle: 'Кирүү',

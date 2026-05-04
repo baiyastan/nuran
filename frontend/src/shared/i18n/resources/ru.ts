@@ -37,6 +37,8 @@ export default {
       closed: 'Закрыт',
     },
     notCreated: 'Не открыт',
+    previous: 'Назад',
+    next: 'Вперёд',
   },
   auth: {
     loginTitle: 'Вход',
